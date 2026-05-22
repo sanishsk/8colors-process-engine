@@ -20,6 +20,10 @@ double-margin gate, etc.) stay in the target project's docs.
 - tdd-guide writes tests first
 - User codes with Claude Code as developer
 - code-reviewer, database-reviewer, security-reviewer invoked per AGENT_INVOCATION_RULES
+- **Before any slot commit:** invoke `code-reviewer` agent (MANDATORY).
+  CRITICAL findings block commit. HIGH findings addressed before commit
+  unless an explicit `Code-skip-reason:` trailer is logged on the commit
+  message. See `docs/AGENT_INVOCATION_RULES.md` for the full gate spec.
 
 ## Friday — Deploy + Retro
 - Morning — staging deploy, user validates (20 min)
