@@ -1,0 +1,10 @@
+{
+  "name": "8colors-process-engine",
+  "version": "0.1.0",
+  "description": "Portable Claude Code process engine — brief-writer, researcher, ceo agents + brainstorm/lock-backlog/weekly-retro commands. OSS-first doctrine baked in.",
+  "author": "8Colors",
+  "license": "MIT",
+  "homepage": "https://github.com/sanishsk/8colors-process-engine",
+  "agents_dir": "agents",
+  "commands_dir": "commands"
+}
