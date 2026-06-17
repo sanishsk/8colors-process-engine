@@ -1,7 +1,7 @@
 {
   "name": "8colors-process-engine",
-  "version": "0.3.0",
-  "description": "Portable Claude Code process engine — 9 agents + 2 session skills + 4 commands + launchd templates + RAG over docs/research/. OSS-first doctrine baked in.",
+  "version": "0.4.0",
+  "description": "Portable Claude Code process engine — 9 agents + 2 session skills + 4 commands + launchd templates + RAG over docs/research/ + unified pe CLI. OSS-first doctrine baked in.",
   "author": "8Colors",
   "license": "MIT",
   "homepage": "https://github.com/sanishsk/8colors-process-engine",
@@ -15,6 +15,7 @@
     "core": "scripts/install.sh",
     "launchd": "scripts/install_launchd.sh"
   },
+  "cli": "scripts/pe",
   "rag": {
     "enabled": true,
     "script": "scripts/research_index.py",

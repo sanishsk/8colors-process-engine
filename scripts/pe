@@ -1,0 +1,365 @@
+#!/usr/bin/env bash
+# pe — 8colors-process-engine CLI (single entry point)
+#
+# Replaces direct invocation of install.sh / install_launchd.sh with a
+# unified surface. Self-locates the engine directory based on its own
+# location so it works whether you invoke it from the engine repo or
+# via a symlink in ~/.local/bin.
+#
+# Subcommands:
+#   pe install <project>      Install agents/commands/skills/scripts into project
+#   pe launchd <project>      Wire macOS launchd weekly retro (macOS only)
+#   pe upgrade                git pull the engine; symlinks auto-propagate to projects
+#   pe status                 Show engine version, last commit, install paths
+#   pe doctor [<project>]     Diagnose engine install (broken symlinks, missing deps)
+#   pe version                Print engine version
+#   pe help [<subcommand>]    Show help
+
+set -euo pipefail
+
+# ─── self-locate ────────────────────────────────────────────────────────────
+SELF="${BASH_SOURCE[0]}"
+# Resolve symlinks
+while [ -h "$SELF" ]; do
+    DIR=$(cd -P "$(dirname "$SELF")" && pwd)
+    SELF=$(readlink "$SELF")
+    [[ $SELF != /* ]] && SELF="$DIR/$SELF"
+done
+ENGINE_DIR=$(cd -P "$(dirname "$SELF")/.." && pwd)
+
+if [ ! -f "$ENGINE_DIR/VERSION" ]; then
+    echo "ERROR: cannot locate engine directory. Expected VERSION at $ENGINE_DIR/VERSION." >&2
+    exit 2
+fi
+
+VERSION=$(cat "$ENGINE_DIR/VERSION")
+
+# ─── usage ──────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+pe — 8colors-process-engine CLI v$VERSION
+
+USAGE
+    pe <subcommand> [args]
+
+SUBCOMMANDS
+    install <project>     Install agents/commands/skills/scripts into a project
+    launchd <project>     Wire macOS launchd weekly CEO retro (macOS only)
+    upgrade               git pull the engine; symlinks auto-propagate
+    status                Show engine version, last commit, install paths
+    doctor [<project>]    Diagnose install (broken symlinks, missing deps)
+    version               Print engine version
+    help [<subcommand>]   Show help
+
+EXAMPLES
+    pe install ~/code/myproject
+    pe launchd ~/code/myproject
+    pe upgrade
+    pe status
+    pe doctor ~/code/myproject
+
+LEARN MORE
+    Engine repo: https://github.com/sanishsk/8colors-process-engine
+    Doctrine:    $ENGINE_DIR/docs/RHYTHM.md
+EOF
+}
+
+help_subcommand() {
+    case "${1:-}" in
+        install)
+            cat <<EOF
+pe install <project>
+
+Symlinks all engine agents, commands, skills, and scripts into the
+target project. Idempotent — re-run after engine upgrades or after
+adding new files.
+
+What gets installed:
+  - Agents (9)    → <project>/.claude/agents/        (symlinked)
+  - Commands (4) → <project>/.claude/commands/      (symlinked)
+  - Skills (2)   → ~/.claude/skills/                 (symlinked, user-global)
+  - research_index.py → <project>/scripts/           (symlinked)
+  - .process-engine.yaml → <project>/                (copied if absent)
+  - Templates    → <project>/docs/templates/         (copied)
+  - Engine docs  → <project>/docs/process-engine/    (copied)
+
+The script also appends *.research-index.sqlite +
+.process-engine.local.yaml to <project>/.gitignore if not present.
+
+Restart Claude Code in the target project after install.
+EOF
+            ;;
+        launchd)
+            cat <<EOF
+pe launchd <project>
+
+Renders launchd template plists from <project>/.process-engine.yaml
+and places them in ~/Library/LaunchAgents/ + wrapper scripts in
+~/.local/bin/<org>-ceo/. Result: CEO weekly retro auto-fires every
+Friday 17:00 local time.
+
+Prerequisites:
+  - macOS (launchd is macOS-only)
+  - <project>/.process-engine.yaml with project.org_tag + project.root set
+  - Python 3.x on PATH (for minimal YAML parsing)
+  - 'claude' CLI on PATH (captured at install time)
+
+After this command, you still need to bootstrap the plists into
+launchd manually (the installer prints the commands). This is by
+design — loading LaunchAgents touches the user's account state.
+
+For Linux: use cron with the rendered run_weekly.sh wrapper.
+For Windows: use Task Scheduler with the same wrapper (WSL or
+adapted to PowerShell).
+EOF
+            ;;
+        upgrade)
+            cat <<EOF
+pe upgrade
+
+Runs 'git pull' in the engine directory. Because agents, commands,
+skills, and scripts are symlinked from target projects to this repo,
+the upgrade propagates to all installed projects automatically.
+
+Cases where you should ALSO re-run 'pe install <project>' after upgrade:
+  - New commands or skills were added in the new version
+  - New scripts were added (e.g. research_index.py in v0.3)
+  - .gitignore patterns changed
+
+'pe upgrade' will tell you when this is needed by reporting any
+new files in <engine>/agents/, /commands/, /skills/, /scripts/ since
+the last upgrade.
+EOF
+            ;;
+        status)
+            cat <<EOF
+pe status
+
+Reports:
+  - Engine version (from VERSION file)
+  - Engine directory + git HEAD
+  - Last commit date + author
+  - Count of agents, commands, skills, scripts, templates
+
+Use 'pe doctor <project>' to diagnose a specific install.
+EOF
+            ;;
+        doctor)
+            cat <<EOF
+pe doctor [<project>]
+
+Without arguments: checks the engine repo itself (no broken refs).
+With a project path: checks the symlinks in <project>/.claude/agents/,
+<project>/.claude/commands/, <project>/scripts/, and ~/.claude/skills/
+all resolve to live files in the engine.
+
+Reports:
+  - Broken symlinks (engine repo moved? files deleted?)
+  - Missing engine files
+  - Outdated symlinks (project has a file that's no longer in engine)
+  - Required deps for the RAG (numpy, google-generativeai, GEMINI_API_KEY)
+  - launchd job status (macOS only, if project has CEO weekly wired)
+EOF
+            ;;
+        *)
+            usage
+            ;;
+    esac
+}
+
+# ─── subcommand handlers ────────────────────────────────────────────────────
+
+cmd_install() {
+    local target="${1:?Usage: pe install <project>}"
+    exec "$ENGINE_DIR/scripts/install.sh" "$target"
+}
+
+cmd_launchd() {
+    local target="${1:?Usage: pe launchd <project>}"
+    exec "$ENGINE_DIR/scripts/install_launchd.sh" "$target"
+}
+
+cmd_upgrade() {
+    cd "$ENGINE_DIR"
+    local old_head new_head
+    old_head=$(git rev-parse HEAD 2>/dev/null || echo "?")
+    echo "→ git pull in $ENGINE_DIR"
+    git pull --ff-only 2>&1 || {
+        echo "ERROR: git pull failed. Resolve conflicts manually." >&2
+        exit 1
+    }
+    new_head=$(git rev-parse HEAD)
+    if [ "$old_head" = "$new_head" ]; then
+        echo "✓ Already at $new_head — no upgrade needed."
+        return 0
+    fi
+    echo ""
+    echo "✓ Upgraded $old_head → $new_head"
+    echo ""
+    echo "Files changed in this upgrade:"
+    git diff --name-only "$old_head" "$new_head" | sed 's/^/    /'
+    echo ""
+
+    # Detect new files that warrant re-running install
+    local new_files
+    new_files=$(git diff --name-only --diff-filter=A "$old_head" "$new_head" \
+        | grep -E '^(agents|commands|skills|scripts)/' || true)
+    if [ -n "$new_files" ]; then
+        echo "NEW files added — re-run 'pe install <project>' for each project to pick them up:"
+        echo "$new_files" | sed 's/^/    /'
+    else
+        echo "No new files; symlinks have already propagated changes to your projects."
+    fi
+}
+
+cmd_status() {
+    cd "$ENGINE_DIR"
+    local head head_short head_date head_author
+    head=$(git rev-parse HEAD 2>/dev/null || echo "?")
+    head_short=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
+    head_date=$(git log -1 --format=%cd --date=short 2>/dev/null || echo "?")
+    head_author=$(git log -1 --format=%an 2>/dev/null || echo "?")
+
+    local n_agents n_commands n_skills n_scripts n_templates
+    n_agents=$(find "$ENGINE_DIR/agents" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+    n_commands=$(find "$ENGINE_DIR/commands" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+    n_skills=$(find "$ENGINE_DIR/skills" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    n_scripts=$(find "$ENGINE_DIR/scripts" -maxdepth 1 -type f -name '*' 2>/dev/null | wc -l | tr -d ' ')
+    n_templates=$(find "$ENGINE_DIR/templates" -maxdepth 2 -type f 2>/dev/null | wc -l | tr -d ' ')
+
+    cat <<EOF
+8colors-process-engine v$VERSION
+
+  Engine dir:   $ENGINE_DIR
+  HEAD:         $head_short ($head_date by $head_author)
+  Full SHA:     $head
+
+  Inventory:
+    Agents:     $n_agents
+    Commands:   $n_commands
+    Skills:     $n_skills
+    Scripts:    $n_scripts
+    Templates:  $n_templates
+
+  Useful next steps:
+    pe install <project>    install into another project
+    pe upgrade              git pull + diff changes
+    pe doctor <project>     diagnose a project's install
+EOF
+}
+
+cmd_doctor() {
+    local target="${1:-}"
+    local broken=0
+
+    if [ -z "$target" ]; then
+        echo "Engine self-check at $ENGINE_DIR"
+        for f in VERSION plugin.json scripts/install.sh scripts/install_launchd.sh \
+                 scripts/research_index.py; do
+            if [ ! -e "$ENGINE_DIR/$f" ]; then
+                echo "  ✗ MISSING: $f"
+                broken=$((broken+1))
+            fi
+        done
+        if [ $broken -eq 0 ]; then
+            echo "  ✓ Engine repo intact"
+        fi
+        return $broken
+    fi
+
+    if [ ! -d "$target" ]; then
+        echo "ERROR: $target does not exist" >&2
+        return 1
+    fi
+
+    echo "Checking project install at $target"
+    echo ""
+
+    # Check symlinks resolve
+    for link in "$target/.claude/agents"/*.md \
+                "$target/.claude/commands"/*.md \
+                "$target/scripts/research_index.py" \
+                "$HOME/.claude/skills/start-session/SKILL.md" \
+                "$HOME/.claude/skills/end-session/SKILL.md"; do
+        if [ -L "$link" ]; then
+            if [ ! -e "$link" ]; then
+                echo "  ✗ BROKEN symlink: $link"
+                broken=$((broken+1))
+            fi
+        elif [ ! -e "$link" ]; then
+            # Not a symlink and doesn't exist; may be intentional (project
+            # ejected this file). Don't flag.
+            :
+        fi
+    done
+
+    # Check .process-engine.yaml exists
+    if [ ! -f "$target/.process-engine.yaml" ]; then
+        echo "  ⚠ Missing .process-engine.yaml — re-run 'pe install' to create it"
+    fi
+
+    # Check RAG deps if research_index.py is installed
+    if [ -e "$target/scripts/research_index.py" ]; then
+        local py
+        if [ -x "$target/.venv/bin/python3" ]; then
+            py="$target/.venv/bin/python3"
+        else
+            py="python3"
+        fi
+        if ! $py -c "import numpy" 2>/dev/null; then
+            echo "  ⚠ RAG: numpy not installed in $py — pip install numpy"
+        fi
+        if ! $py -c "import google.generativeai" 2>/dev/null; then
+            echo "  ⚠ RAG: google-generativeai not installed in $py — pip install google-generativeai"
+        fi
+        if [ -z "${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}" ]; then
+            echo "  ⚠ RAG: GEMINI_API_KEY env var not set — get a free key at aistudio.google.com/apikey"
+        fi
+    fi
+
+    # launchd check (macOS only)
+    if [ "$(uname)" = "Darwin" ] && [ -f "$target/.process-engine.yaml" ]; then
+        local org_tag
+        org_tag=$(grep -E '^\s*org_tag:' "$target/.process-engine.yaml" 2>/dev/null \
+            | head -1 | sed -E 's/^\s*org_tag:\s*//; s/["'"'"']//g' | tr -d ' ')
+        if [ -n "$org_tag" ]; then
+            local plist="$HOME/Library/LaunchAgents/com.${org_tag}.ceo.weekly.plist"
+            if [ -f "$plist" ]; then
+                if launchctl list 2>/dev/null | grep -q "com.${org_tag}.ceo.weekly"; then
+                    echo "  ✓ launchd: com.${org_tag}.ceo.weekly is loaded"
+                else
+                    echo "  ⚠ launchd: plist exists at $plist but not bootstrapped — run:"
+                    echo "      launchctl bootstrap gui/\$(id -u) $plist"
+                fi
+            fi
+        fi
+    fi
+
+    echo ""
+    if [ $broken -eq 0 ]; then
+        echo "✓ No broken symlinks. Project install is healthy."
+    else
+        echo "✗ $broken broken symlink(s). Run 'pe install $target' to repair."
+        return 1
+    fi
+}
+
+# ─── dispatch ───────────────────────────────────────────────────────────────
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+    install)    cmd_install "$@" ;;
+    launchd)    cmd_launchd "$@" ;;
+    upgrade)    cmd_upgrade "$@" ;;
+    status)     cmd_status "$@" ;;
+    doctor)     cmd_doctor "$@" ;;
+    version|-v|--version) echo "$VERSION" ;;
+    help|-h|--help) help_subcommand "$@" ;;
+    *)
+        echo "ERROR: unknown subcommand: $cmd" >&2
+        echo "Run 'pe help' for usage." >&2
+        exit 2
+        ;;
+esac

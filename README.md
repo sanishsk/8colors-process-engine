@@ -1,118 +1,201 @@
 # 8colors-process-engine
 
-Portable Claude Code process engine. Agents, skills, commands, and
-launchd templates that force brief-before-code discipline, async OSS
-scouting, mandatory code review, write-tests-first TDD, and weekly retro
-cadence into any project.
+> **Process discipline for Claude Code, made portable.**
+> Opinionated agents, skills, commands, and automation that force
+> brief-before-code, async OSS scouting, mandatory code review, TDD,
+> semantic search over prior research, and a weekly retro cadence —
+> into any project, in one install.
 
-## What's in the box (v0.3.0)
+[![version](https://img.shields.io/badge/version-0.4.0-blue)](VERSION)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
-**Agents (9):**
+---
+
+## Why this exists
+
+You start a feature on Monday. By Wednesday Claude has implemented
+something solid. By Friday you realize the brief locked in `Workbox`
+on Tuesday and Claude hand-rolled an equivalent on Wednesday because
+the planner doc never mentioned it.
+
+That's the "Workbox-miss class" — and it's just one of a half-dozen
+process gaps that compound when you ship features with AI agents
+across multiple sessions.
+
+This engine is **the accumulated workflow patterns of one production
+project** (`8CStudio`, a videography invoice + production system with
+75+ tables, 18 modules, a year of shipped slots), extracted into a
+plugin any Claude Code project can install in 30 seconds.
+
+It's opinionated. It assumes you want:
+
+- **Brief before code.** Every non-trivial feature passes through a
+  one-page brief with alternatives + market check.
+- **OSS-first.** Search before building. Document the search.
+- **Code review at every commit.** Mandatory, not optional. CRITICAL
+  blocks, HIGH addressed unless skip-reason logged.
+- **TDD when applicable.** Tests first. 80%+ coverage. Verified.
+- **Weekly retro.** Friday 17:00, automatic, every week. CEO agent
+  reads dev-log, Sentry, backlog. Writes next week's plan.
+- **Semantic memory.** Prior briefs, architect docs, and planner
+  artifacts are searchable. Slot pickups don't re-derive decisions.
+
+If you'd rather have a flexible toolkit and decide-per-feature, this
+isn't for you. If you'd rather have rails that fail loud when
+skipped, read on.
+
+---
+
+## Install in 30 seconds
+
+```bash
+git clone https://github.com/sanishsk/8colors-process-engine.git ~/Documents/8colors-process-engine
+ln -s ~/Documents/8colors-process-engine/scripts/pe ~/.local/bin/pe   # add ~/.local/bin to PATH if needed
+
+pe install ~/code/your-project
+```
+
+Restart Claude Code in `your-project`. You now have:
+
+- 9 specialist agents
+- 4 slash commands
+- 2 session skills (`/start-session`, `/end-session`)
+- Semantic search over `docs/research/`
+- An opinionated set of templates
+
+**Optional one-liner extras:**
+
+```bash
+pe launchd ~/code/your-project   # macOS only — Friday 17:00 auto-retro
+```
+
+That wires a Friday 17:00 launchd job that runs the CEO agent
+headless and writes `docs/dev-log/weekly-plan-YYYY-W<NN>.md` to your
+project. Forever. With a 3-day heartbeat watchdog that notifies you
+if the cadence breaks.
+
+---
+
+## What you get
+
+### Agents (9)
 
 | Agent | Model | When |
 |---|---|---|
-| `architect` | Opus | System design, scalability, architectural decisions |
-| `brief-writer` | Sonnet | 1-page briefs with alternatives + market check |
-| `ceo` | Opus | Weekly retro + next-week plan |
-| `code-reviewer` | Haiku | MANDATORY review before commit |
-| `doc-updater` | Haiku | Documentation + codemap maintenance |
-| `planner` | Opus | Complex features, refactoring, multi-step implementation plans |
-| `researcher` | Haiku | OSS/MCP scout — runs async, parallel with impl |
-| `security-reviewer` | Sonnet | Auth, user input, secrets, OWASP top 10 |
-| `tdd-guide` | Sonnet | Write-tests-first methodology, 80%+ coverage |
+| `architect` | Opus | System design, scalability, architectural decisions. Consults `docs/research/` first. |
+| `brief-writer` | Sonnet | 1-page briefs with alternatives + market check. Consults `docs/research/` first. |
+| `ceo` | Opus | Weekly retro + next-week plan. Auto-fires Fridays via launchd. |
+| `code-reviewer` | Haiku | MANDATORY review before commit. CRITICAL blocks. |
+| `doc-updater` | Haiku | Documentation + codemap maintenance. |
+| `planner` | Opus | Complex features, refactoring, multi-step implementation plans. |
+| `researcher` | Haiku | OSS/MCP scout. Runs async, parallel with implementation. |
+| `security-reviewer` | Sonnet | Auth, user input, secrets, OWASP top 10. |
+| `tdd-guide` | Sonnet | Write-tests-first methodology. 80%+ coverage. |
 
-**Skills (2):**
+### Skills (2, user-global)
 
-- `/start-session` — orient at session start (reads CLAUDE.md, MEMORY, weekly plan, quality calendar); waits for operator decision
-- `/end-session` — close-out (git status, sync check, MEMORY banner update, deliverables ledger, next-session pickup)
+- **`/start-session`** — at session start, reads CLAUDE.md, MEMORY,
+  weekly plan, quality calendar. Surfaces active focus, stale plans,
+  overdue tasks, blockers. Recommends the first task. Waits for your
+  decision.
+- **`/end-session`** — at session end, surfaces git status, sync
+  state, MEMORY banner updates, commits ledger, next-session pickup
+  pointer. Never auto-commits or auto-edits MEMORY.
 
-Both are project-agnostic — they discover files at runtime and degrade
-gracefully when optional context is absent. Per-project tweaks via
-`.claude/session.yaml`.
+Both project-agnostic; tweak via `.claude/session.yaml` per project.
 
-**Commands (4):**
+### Commands (4)
 
-- `/brainstorm [topic]` — capture brainstorm → brief
-- `/lock-backlog [phase]` — lock a phase backlog (read-only audit trail)
-- `/research-search [query]` — semantic search over `docs/research/*` (v0.3)
-- `/weekly-retro` — Friday retro + next-week plan
+- **`/brainstorm [topic]`** — capture brainstorm → produce 1-page brief
+- **`/lock-backlog [phase]`** — lock a phase backlog (read-only audit trail)
+- **`/research-search [query]`** — semantic search over `docs/research/`
+- **`/weekly-retro`** — Friday retro + next-week plan
 
-**RAG (v0.3):**
+### RAG over `docs/research/`
 
-- `scripts/research_index.py` — local SQLite + Gemini-embedding index over
-  `docs/research/*`. Solves the "Workbox-miss class" where slot pickup
-  misses an OSS contract locked in a prior brief.
-- `brief-writer` + `architect` agents call the index in their Step 0 to
-  surface relevant prior decisions before drafting.
-- Full doctrine: `docs/RAG.md`.
+`scripts/research_index.py` — local SQLite + Gemini-embedding index.
+Solves the "Workbox-miss class" by surfacing relevant prior briefs,
+architect docs, planner artifacts before drafting. `brief-writer` +
+`architect` agents consult it in their Step 0.
 
-**Launchd templates (macOS):**
+- Zero infra (SQLite).
+- Free embeddings via Gemini's free tier.
+- Sub-second query on ≤100k chunks.
+- Sha256-incremental rebuild.
 
-- `templates/launchd/com.<org>.ceo.weekly.plist.template` — Friday 17:00 trigger
-- `templates/launchd/com.<org>.ceo.heartbeat.plist.template` — staleness watchdog
-- `templates/launchd/run_weekly.sh.template` — TCC-safe wrapper for headless `claude -p /weekly-retro --force`
-- `templates/launchd/check_heartbeat.sh.template` — writes `docs/dev-log/CEO_STALE.md` if `last_run > 8 days`
+Full doctrine: [`docs/RAG.md`](docs/RAG.md).
 
-**Doctrine:**
+### Launchd templates (macOS)
 
-- OSS-first search order (`docs/OSS_SEARCH_ORDER.md` — 5 rules, non-negotiable)
-- Weekly rhythm (`docs/RHYTHM.md` — Mon brainstorm, Fri retro)
-- Agent invocation rules per slot type (`docs/AGENT_INVOCATION_RULES.md`)
+`templates/launchd/` — plist + wrapper templates for the CEO weekly
+retro. TCC-safe wrappers in `~/.local/bin/<org>-ceo/`. Rendered from
+`.process-engine.yaml` at install time.
 
-## Install
+Linux/Windows: use cron / systemd / Task Scheduler with the wrapper
+scripts. See [`docs/RHYTHM.md`](docs/RHYTHM.md).
+
+### Doctrine docs
+
+- [`docs/OSS_SEARCH_ORDER.md`](docs/OSS_SEARCH_ORDER.md) — the 5 rules of OSS-first
+- [`docs/RHYTHM.md`](docs/RHYTHM.md) — weekly cadence (Mon brainstorm, Fri retro)
+- [`docs/AGENT_INVOCATION_RULES.md`](docs/AGENT_INVOCATION_RULES.md) — slot-type → agent-chain matrix
+- [`docs/RAG.md`](docs/RAG.md) — semantic search architecture + tradeoffs
+
+---
+
+## Before / after — a concrete example
+
+### Before the engine
+
+> *Sanish picks up Wave 1M.3 on Monday. Reads the planner doc — it
+> says "build offline write queue + per-entity appliers". Spends 3
+> days hand-rolling a sync solution. On Friday during code review,
+> Claude notices the Wave 1M.3 brief from 3 weeks ago had locked in
+> `Workbox 7.4.1`. Sanish reverts 600 lines of code. (Real incident,
+> 2026-05-28.)*
+
+### After the engine
+
+> *Sanish picks up Wave 1M.3 on Monday. Types `/start-session`. The
+> orientation surfaces "next task: Wave 1M.3 — pickup protocol says
+> read brief → architect → planner in this order." Sanish opens the
+> brief and immediately sees `Workbox 7.4.1`. Or — Sanish invokes
+> `brief-writer` for a new wave; its Step 0 runs
+> `/research-search "workbox dexie offline"` and finds the prior
+> brief automatically. The Workbox-miss class is structurally
+> closed.*
+
+---
+
+## CLI reference
 
 ```bash
-git clone https://github.com/sanishsk/8colors-process-engine.git
-cd 8colors-process-engine
-./scripts/install.sh /path/to/your-project
+pe install <project>     # Install agents/commands/skills/scripts into project
+pe launchd <project>     # Wire macOS launchd weekly retro (macOS only)
+pe upgrade               # git pull the engine; symlinks auto-propagate
+pe status                # Show engine version, last commit, inventory
+pe doctor [<project>]    # Diagnose install (broken symlinks, missing deps)
+pe version               # Print engine version
+pe help [<subcommand>]   # Show help
 ```
 
-What gets installed:
-- 9 agents symlinked → `<project>/.claude/agents/`
-- 3 commands symlinked → `<project>/.claude/commands/`
-- 2 skills symlinked → `~/.claude/skills/` (user-global)
-- Templates copied → `<project>/docs/templates/`
-- `.process-engine.yaml` template copied to project root (edit before launchd install)
-- Engine docs copied → `<project>/docs/process-engine/`
+`pe install` is idempotent — re-run after upgrades or after adding
+new files. `pe upgrade` will tell you when re-install is needed.
 
-Restart Claude Code in the target project. Agents, skills, and commands
-load on next session.
+---
 
-## Optional: wire CEO weekly retro to launchd (macOS)
+## Configuration
 
-```bash
-# Edit project's .process-engine.yaml — set project.org_tag and project.root
-$EDITOR /path/to/project/.process-engine.yaml
+### `.process-engine.yaml` (per-project)
 
-# Render + place launchd plists
-./scripts/install_launchd.sh /path/to/your-project
-
-# Load the agents (operator runs these — installer does not auto-bootstrap)
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.<org>.ceo.weekly.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.<org>.ceo.heartbeat.plist
-
-# Dry-run to verify (bypasses Friday gate)
-~/.local/bin/<org>-ceo/run_weekly.sh --force
-```
-
-Result: every Friday 17:00, the CEO agent writes
-`docs/dev-log/weekly-plan-YYYY-W<NN>.md` + `retro-YYYY-W<NN>.md` to
-your project — no human required. Heartbeat watchdog flags + notifies
-if `last_run > 8 days`.
-
-Linux + Windows adopters: use cron / systemd / Task Scheduler with the
-wrapper scripts as-is. See `docs/RHYTHM.md` for cron equivalents.
-
-## Configuration: `.process-engine.yaml`
-
-Project-level config consumed by `install_launchd.sh` and (in future
-versions) other engine installers. Schema documented in
-`templates/process-engine.yaml.template`. Minimal:
+Created by `pe install` if absent. Controls launchd org tag, weekly
+retro schedule, Sentry MCP settings, skill install location. Minimal:
 
 ```yaml
 schema_version: 1
 project:
-  org_tag: acme              # ^[a-z][a-z0-9-]*$ — used in launchd labels
+  org_tag: acme              # used in launchd labels: com.acme.ceo.weekly
   display_name: "Acme Corp"
   root: "/Users/jane/code/acme"
   main_branch: master
@@ -124,35 +207,110 @@ session_skills:
   install_user_global: true
 ```
 
-## Update
+Full schema in [`templates/process-engine.yaml.template`](templates/process-engine.yaml.template).
+
+### `.claude/session.yaml` (per-project, optional)
+
+Customizes the `/start-session` and `/end-session` skills. Useful for
+adding project-specific orientation steps (e.g. a Sentry MCP check on
+the latest release SHA). Schema documented in the skill SKILL.md files.
+
+---
+
+## Platform support
+
+| Feature | macOS | Linux | Windows |
+|---|---|---|---|
+| Agents + commands + skills | ✅ | ✅ | ✅ |
+| `/research-search` (RAG) | ✅ | ✅ | ✅ |
+| `pe install` + `pe upgrade` | ✅ | ✅ | bash needed |
+| `pe launchd` (weekly retro) | ✅ | ⚠ cron equivalent | ⚠ Task Scheduler |
+| Session skills | ✅ | ✅ | ✅ |
+
+Linux + Windows scheduler templates land in v0.5.
+
+---
+
+## Adopting incrementally
+
+Don't have to flip everything at once.
+
+| Want only this | Run |
+|---|---|
+| Just session skills | `pe install <project>` then never invoke other agents |
+| Just RAG | `pe install <project>` + set `GEMINI_API_KEY` + `python3 scripts/research_index.py rebuild` |
+| Just weekly retro | `pe install <project>` + `pe launchd <project>` |
+| Just code-reviewer | `pe install <project>` then invoke `code-reviewer` agent before commits |
+
+Each piece works standalone. The full doctrine compounds when you use
+them together, but no piece is a hard dep of another.
+
+---
+
+## Updating
 
 ```bash
-cd 8colors-process-engine
-git pull origin master
-# Symlinks auto-pick up new agent definitions on next Claude Code session.
-# Re-run ./scripts/install.sh <target> if new skills or templates were added.
-# Re-run ./scripts/install_launchd.sh <target> if launchd templates changed.
+pe upgrade
 ```
+
+Symlinks auto-propagate engine changes to all installed projects. If
+new commands or skills were added, `pe upgrade` tells you and asks
+you to re-run `pe install <project>` for each project to pick them up.
+
+---
+
+## Uninstalling
+
+Manual for now (auto `pe eject` lands in v0.4+):
+
+```bash
+# Unload launchd (macOS)
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.<org>.ceo.weekly.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.<org>.ceo.heartbeat.plist
+rm -f ~/Library/LaunchAgents/com.<org>.ceo.*.plist
+rm -rf ~/.local/bin/<org>-ceo ~/Library/Logs/<org>-ceo
+
+# Remove project install
+rm -f <project>/.claude/agents/{architect,brief-writer,ceo,code-reviewer,doc-updater,planner,researcher,security-reviewer,tdd-guide}.md
+rm -f <project>/.claude/commands/{brainstorm,lock-backlog,research-search,weekly-retro}.md
+rm -f <project>/scripts/research_index.py
+rm -f <project>/.process-engine.yaml
+rm -rf <project>/docs/process-engine
+
+# Remove user-global skills
+rm -rf ~/.claude/skills/start-session ~/.claude/skills/end-session
+```
+
+See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
+
+---
 
 ## Roadmap
 
 - v0.1 — 3 agents (brief-writer, researcher, ceo), 3 commands, templates, docs ✅
-- v0.2 — 6 more agents (architect, code-reviewer, doc-updater, planner, security-reviewer, tdd-guide), start-session + end-session skills, launchd templates, `.process-engine.yaml` config schema ✅
-- **v0.3 (current)** — RAG over `docs/research/*` via SQLite + Gemini embeddings, `/research-search` command, brief-writer + architect Step-0 wiring, `docs/RAG.md` doctrine ✅
-- v0.4 — `hooks/` directory (pre-commit hooks generalized: design-review trailer, code-review trailer, docs-updated trailer, module-permissions block, `docs/research/` rebuild on staged change), `upgrade.sh`, `eject.sh`
-- v0.5 — Linux + Windows scheduler templates (systemd + Task Scheduler) for the weekly retro
-- v0.6 — Domain-specific agent extraction: data-model-auditor, database-reviewer, tenant-isolation-auditor (parameterized for the project's DB engine)
+- v0.2 — 6 more agents, start-session + end-session skills, launchd templates, `.process-engine.yaml` config ✅
+- v0.3 — RAG over `docs/research/*` via SQLite + Gemini embeddings, `/research-search`, brief-writer + architect Step-0 wiring ✅
+- **v0.4 (current)** — `pe` unified CLI, public-launch README, CHANGELOG, CONTRIBUTING ✅
+- v0.5 — `hooks/` directory (pre-commit hooks generalized) + `pe eject` + Linux + Windows scheduler templates
+- v0.6 — Domain-specific agent extraction (data-model-auditor, database-reviewer, tenant-isolation-auditor)
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
-## Project-level overrides
+---
 
-The engine ships opinions; projects bend them via:
+## Contributing
 
-- `.claude/session.yaml` — start/end-session skill customization (extra files to read, custom report sections, operating-mode defaults, skip-sections)
-- `.process-engine.yaml` — engine-installer customization (org tag, project paths, Sentry org/project, weekly retro schedule)
-- `.claude/agents/<agent>.md` — overwrite the symlink to ship a project-specific variant
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Short version:
+
+1. New agent → add `agents/<name>.md` with frontmatter (`name`, `description`, `model`, `tools`). Open a PR with the use case.
+2. New command → add `commands/<name>.md`. Same format.
+3. New skill → add `skills/<name>/SKILL.md`. Mark `install_user_global` semantics in the description.
+4. Doctrine doc → add to `docs/` and link from the README.
+
+Bug reports + adoption feedback welcome via GitHub issues.
+
+---
 
 ## License
 
-MIT. Originated at [8Colors](https://8cs.io) by Sanish, extracted from
-the 8CStudio invoice-system project's accumulated workflow patterns.
+MIT. Originated at [8Colors](https://8cs.io) by Sanish, extracted
+from the `8CStudio` project's accumulated workflow patterns.
