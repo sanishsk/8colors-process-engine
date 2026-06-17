@@ -1,0 +1,57 @@
+# {{ORG_TAG}} CEO weekly retro — runs via Windows Task Scheduler
+# Friday 17:00 local time.
+
+$ErrorActionPreference = "Stop"
+
+$OrgTag      = "{{ORG_TAG}}"
+$ProjectRoot = "{{PROJECT_ROOT}}"
+$ClaudeBin   = "{{CLAUDE_BIN}}"
+
+$StateDir = Join-Path $ProjectRoot "docs\dev-log"
+$StateFile = Join-Path $StateDir "ceo-state.json"
+$LogDir = Join-Path $env:LOCALAPPDATA "$OrgTag-ceo\logs"
+New-Item -ItemType Directory -Force $StateDir, $LogDir | Out-Null
+
+$RunLog = Join-Path $LogDir "run-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+
+# Friday check — bypass with -Force argument
+$dow = [int](Get-Date).DayOfWeek
+# .NET DayOfWeek: Sunday=0..Saturday=6; Friday=5
+$Force = $args -contains "-Force" -or $args -contains "--force"
+if ($dow -ne 5 -and -not $Force) {
+    "Not Friday (DayOfWeek=$dow), skipping. Use -Force to override." | Tee-Object -FilePath $RunLog
+    exit 0
+}
+
+Push-Location $ProjectRoot
+try {
+    "=== $OrgTag CEO weekly retro run: $(Get-Date -Format o) ===" | Tee-Object -FilePath $RunLog
+    "PROJECT_ROOT=$ProjectRoot" | Tee-Object -FilePath $RunLog -Append
+
+    & $ClaudeBin `
+        --print `
+        --permission-mode bypassPermissions `
+        --model claude-opus-4-7 `
+        "/weekly-retro --force" 2>&1 | Tee-Object -FilePath $RunLog -Append
+
+    "=== Exit: $LASTEXITCODE ===" | Tee-Object -FilePath $RunLog -Append
+}
+finally {
+    Pop-Location
+}
+
+# Update state file
+$state = @{}
+if (Test-Path $StateFile) {
+    try {
+        $state = Get-Content $StateFile -Raw | ConvertFrom-Json -AsHashtable
+    } catch {
+        $state = @{}
+    }
+}
+$state["last_run"] = (Get-Date -Format o)
+$state["last_run_log"] = $RunLog
+$state | ConvertTo-Json | Set-Content $StateFile
+
+"State updated: last_run=$($state.last_run)" | Tee-Object -FilePath $RunLog -Append
+exit 0

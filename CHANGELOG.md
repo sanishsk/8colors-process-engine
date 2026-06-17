@@ -7,6 +7,60 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.6.0] — 2026-06-17
+
+### Added
+
+- **`hooks/` directory** — five generalized pre-commit + commit-msg
+  hooks extracted from 8CStudio:
+  - `code-review-trailer` (commit-msg, blocks ≥5-file commits without
+    `Code-reviewed:` or `Code-skip-reason:` trailer)
+  - `docs-updated-trailer` (commit-msg, blocks structural-file commits
+    without `Docs-updated:` trailer)
+  - `design-review-trailer` (commit-msg, blocks UI-file commits without
+    `Design-reviewed:` trailer)
+  - `claude-md-size` (pre-commit, warns when CLAUDE.md > 40 KB)
+  - `research-index-rebuild` (pre-commit, re-embeds the semantic index
+    when `docs/research/*.md` is staged)
+  - All hooks read tuning env vars (`ENGINE_REVIEW_THRESHOLD`,
+    `ENGINE_STRUCTURAL_FILES`, `ENGINE_UI_FILES`,
+    `ENGINE_CLAUDE_MD_LIMIT`).
+  - Starter `.pre-commit-config.yaml.template` + `hooks/README.md`
+    documenting install / tuning / bypass.
+- **`pe eject <project>`** — removes engine-managed symlinks from a
+  project. Lists what will be removed (project-local), what will be
+  kept (.process-engine.yaml, templates), what you remove manually
+  (system-level skills + launchd / systemd / Task Scheduler jobs).
+  Asks confirmation. Reversible via `pe install`.
+- **Linux systemd templates** (`templates/systemd/`) — user-level
+  `.service` + `.timer` units for the weekly CEO retro. Friday 17:00
+  via `OnCalendar=Fri *-*-* 17:00:00`. notify-send heartbeat. Same
+  wrapper shell shape as macOS launchd.
+- **Cron alternative** (`templates/cron/`) — plain crontab entries
+  for adopters who prefer cron over systemd (Alpine, WSL2, older
+  distros without lingering).
+- **Windows Task Scheduler templates** (`templates/windows-task-scheduler/`)
+  — PowerShell `Run-Weekly.ps1`, `Check-Heartbeat.ps1`, and
+  `Install-Task.ps1` to register Weekly + Daily-every-3-days
+  scheduled tasks. Runs as current user, no admin required.
+
+### Changed
+
+- Roadmap bumps: v0.6 (this) ships hooks + eject + cross-platform
+  schedulers earlier than the original v0.6 target (domain agents),
+  which moves to v0.7.
+
+### Deferred (with rationale)
+
+- **Multi-project portfolio mode** — speculative without ≥2 real
+  multi-project adopters; would build the wrong abstraction.
+- **Adopter telemetry opt-in** — needs real adopters first; without
+  signal we'd be guessing at what to measure.
+
+Both stay on the roadmap but blocked-on-adoption.
+
+---
+
 ## [0.5.0] — 2026-06-17
 
 ### Added

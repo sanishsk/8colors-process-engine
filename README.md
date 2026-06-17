@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.5.0-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.6.0-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -237,10 +237,15 @@ the latest release SHA). Schema documented in the skill SKILL.md files.
 | Agents + commands + skills | ✅ | ✅ | ✅ |
 | `/research-search` (RAG) | ✅ | ✅ | ✅ |
 | `pe install` + `pe upgrade` | ✅ | ✅ | bash needed |
-| `pe launchd` (weekly retro) | ✅ | ⚠ cron equivalent | ⚠ Task Scheduler |
+| `pe launchd` (weekly retro) | ✅ launchd | ✅ systemd / cron | ✅ Task Scheduler |
 | Session skills | ✅ | ✅ | ✅ |
+| Pre-commit hooks (`hooks/`) | ✅ | ✅ | ✅ (Git Bash / WSL) |
+| `pe eject` (uninstall) | ✅ | ✅ | ✅ (Git Bash / WSL) |
 
-Linux + Windows scheduler templates land in v0.5.
+Cross-platform scheduler templates ship in `templates/systemd/`,
+`templates/cron/`, and `templates/windows-task-scheduler/`. macOS
+launchd is wired automatically via `pe launchd`; other platforms
+follow the README in each template directory.
 
 ---
 
@@ -304,9 +309,10 @@ See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
 - v0.2 — 6 more agents, start-session + end-session skills, launchd templates, `.process-engine.yaml` config ✅
 - v0.3 — RAG over `docs/research/*` via SQLite + Gemini embeddings, `/research-search`, brief-writer + architect Step-0 wiring ✅
 - v0.4 — `pe` unified CLI, public-launch README, CHANGELOG, CONTRIBUTING ✅
-- **v0.5 (current)** — Multi-provider embeddings (fastembed default + voyage / gemini / openai); zero-API-key adopter path ✅
-- v0.6 — `hooks/` directory (pre-commit hooks generalized) + `pe eject` + Linux + Windows scheduler templates
-- v0.7 — Domain-specific agent extraction (data-model-auditor, database-reviewer, tenant-isolation-auditor)
+- v0.5 — Multi-provider embeddings (fastembed default + voyage / gemini / openai); zero-API-key adopter path ✅
+- **v0.6 (current)** — `hooks/` directory (5 generalized pre-commit hooks) + `pe eject` + Linux systemd / cron / Windows Task Scheduler templates ✅
+- v0.7 — Domain agents (data-model-auditor, build-error-resolver, e2e-runner, retrospective-agent) + memory-consolidator agent + CI gate template + stacking-rule hook
+- v0.8 — Multi-project portfolio mode + adopter telemetry opt-in (blocked on ≥2 real adopters)
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
 ---

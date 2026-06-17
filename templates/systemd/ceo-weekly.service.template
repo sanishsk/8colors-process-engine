@@ -1,0 +1,11 @@
+[Unit]
+Description={{ORG_TAG}} CEO weekly retro
+Documentation=https://github.com/sanishsk/8colors-process-engine
+ConditionPathExists={{HOME}}/.local/bin/{{ORG_TAG}}-ceo/run_weekly.sh
+
+[Service]
+Type=oneshot
+ExecStart={{HOME}}/.local/bin/{{ORG_TAG}}-ceo/run_weekly.sh
+StandardOutput=append:{{HOME}}/.local/state/{{ORG_TAG}}-ceo/journal.log
+StandardError=append:{{HOME}}/.local/state/{{ORG_TAG}}-ceo/journal.error.log
+TimeoutStartSec=15min

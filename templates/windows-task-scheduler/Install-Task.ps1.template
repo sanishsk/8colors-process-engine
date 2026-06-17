@@ -1,0 +1,65 @@
+# Install-Task.ps1 — register the {{ORG_TAG}} CEO weekly retro + heartbeat
+# as Windows Scheduled Tasks. Run as the current user; no admin needed.
+#
+# Usage:
+#   .\Install-Task.ps1 -OrgTag <org> -ScriptDir <path>
+#
+# The script renders no placeholders itself — pass the values you've
+# already substituted in Run-Weekly.ps1 / Check-Heartbeat.ps1.
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)]
+    [string]$OrgTag,
+
+    [Parameter(Mandatory)]
+    [string]$ScriptDir
+)
+
+$ErrorActionPreference = "Stop"
+
+$RunWeekly      = Join-Path $ScriptDir "Run-Weekly.ps1"
+$CheckHeartbeat = Join-Path $ScriptDir "Check-Heartbeat.ps1"
+
+foreach ($f in @($RunWeekly, $CheckHeartbeat)) {
+    if (-not (Test-Path $f)) {
+        Write-Error "ERROR: $f not found. Render the templates first."
+        exit 1
+    }
+}
+
+# Weekly task — Fridays 17:00
+$weeklyTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Friday -At 5:00PM
+$weeklyAction = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$RunWeekly`""
+$weeklySettings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -DontStopOnIdleEnd `
+    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5)
+$weekly = New-ScheduledTask `
+    -Trigger $weeklyTrigger `
+    -Action $weeklyAction `
+    -Settings $weeklySettings `
+    -Description "$OrgTag CEO weekly retro"
+Register-ScheduledTask -TaskName "$OrgTag-ceo-weekly" -InputObject $weekly -Force | Out-Null
+
+# Heartbeat task — every 3 days at 09:30
+$heartbeatTrigger = New-ScheduledTaskTrigger -Daily -At 9:30AM `
+    -DaysInterval 3
+$heartbeatAction = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$CheckHeartbeat`""
+$heartbeatSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+$heartbeat = New-ScheduledTask `
+    -Trigger $heartbeatTrigger `
+    -Action $heartbeatAction `
+    -Settings $heartbeatSettings `
+    -Description "$OrgTag CEO weekly retro heartbeat watchdog"
+Register-ScheduledTask -TaskName "$OrgTag-ceo-heartbeat" -InputObject $heartbeat -Force | Out-Null
+
+Write-Host "✓ Registered scheduled tasks: $OrgTag-ceo-weekly, $OrgTag-ceo-heartbeat"
+Write-Host ""
+Write-Host "Dry-run now (bypasses Friday gate):"
+Write-Host "  & `"$RunWeekly`" -Force"
+Write-Host ""
+Write-Host "Verify:"
+Write-Host "  Get-ScheduledTask -TaskName '$OrgTag-ceo-*'"

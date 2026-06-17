@@ -1,0 +1,50 @@
+# Engine-supplied pre-commit hooks
+# Append these to your .pre-commit-config.yaml (or use as a starter).
+#
+# Install pre-commit if not already:
+#     pip install pre-commit
+#     pre-commit install --hook-type pre-commit --hook-type commit-msg
+
+repos:
+  - repo: local
+    hooks:
+      # Pre-commit (file content)
+      - id: claude-md-size
+        name: CLAUDE.md size guard (warns at 40 KB)
+        entry: hooks/claude-md-size.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: research-index-rebuild
+        name: Rebuild semantic index when docs/research/ changes
+        entry: hooks/research-index-rebuild.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^docs/research/.*\.md$
+
+      # Commit-msg (trailer enforcement)
+      - id: code-review-trailer
+        name: Code-reviewed trailer required on multi-file commits
+        entry: hooks/code-review-trailer.sh
+        language: script
+        stages: [commit-msg]
+
+      - id: docs-updated-trailer
+        name: Docs-updated trailer required on structural commits
+        entry: hooks/docs-updated-trailer.sh
+        language: script
+        stages: [commit-msg]
+
+      - id: design-review-trailer
+        name: Design-reviewed trailer required on UI commits
+        entry: hooks/design-review-trailer.sh
+        language: script
+        stages: [commit-msg]
+
+# Tuning env vars (set before running git commit):
+#   ENGINE_REVIEW_THRESHOLD=5      # min files before code-review trailer required
+#   ENGINE_STRUCTURAL_FILES=...    # regex of paths counted as "structural"
+#   ENGINE_UI_FILES=...            # regex of paths counted as "UI"
+#   ENGINE_CLAUDE_MD_LIMIT=40000   # CLAUDE.md warning threshold

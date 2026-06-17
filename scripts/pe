@@ -48,6 +48,7 @@ SUBCOMMANDS
     upgrade               git pull the engine; symlinks auto-propagate
     status                Show engine version, last commit, install paths
     doctor [<project>]    Diagnose install (broken symlinks, missing deps)
+    eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
     version               Print engine version
     help [<subcommand>]   Show help
 
@@ -57,6 +58,7 @@ EXAMPLES
     pe upgrade
     pe status
     pe doctor ~/code/myproject
+    pe eject ~/code/myproject
 
 LEARN MORE
     Engine repo: https://github.com/sanishsk/8colors-process-engine
@@ -142,6 +144,32 @@ Reports:
   - Count of agents, commands, skills, scripts, templates
 
 Use 'pe doctor <project>' to diagnose a specific install.
+EOF
+            ;;
+        eject)
+            cat <<EOF
+pe eject <project>
+
+Removes engine-managed symlinks from a project. Asks for confirmation
+before deleting anything.
+
+What gets removed:
+  - <project>/.claude/agents/*.md      (only symlinks pointing at this engine)
+  - <project>/.claude/commands/*.md    (same)
+  - <project>/scripts/research_index.py
+
+What gets kept:
+  - .process-engine.yaml (project-edited config)
+  - docs/templates/*     (copies the project may have customized)
+  - docs/process-engine/ (reference docs)
+
+What you remove manually (system-level, used by other projects):
+  - ~/.claude/skills/{start,end}-session/
+  - ~/Library/LaunchAgents/com.*.ceo.*.plist (macOS)
+  - ~/.config/systemd/user/*-ceo-weekly.*  (Linux)
+  - Windows scheduled tasks
+
+The eject is reversible: 'pe install <project>' restores the symlinks.
 EOF
             ;;
         doctor)
@@ -344,6 +372,68 @@ cmd_doctor() {
     fi
 }
 
+cmd_eject() {
+    local target="${1:?Usage: pe eject <project>}"
+    if [ ! -d "$target" ]; then
+        echo "ERROR: $target does not exist" >&2
+        return 1
+    fi
+
+    echo "About to eject 8colors-process-engine from $target"
+    echo ""
+    echo "WILL REMOVE (project-local):"
+    local removable=()
+    for f in "$target/.claude/agents"/*.md \
+             "$target/.claude/commands"/*.md \
+             "$target/scripts/research_index.py"; do
+        if [ -L "$f" ]; then
+            # Only count symlinks pointing at this engine
+            if readlink "$f" 2>/dev/null | grep -q "$ENGINE_DIR"; then
+                removable+=("$f")
+            fi
+        fi
+    done
+    if [ ${#removable[@]} -eq 0 ]; then
+        echo "  (no engine-managed symlinks found in $target)"
+    else
+        for f in "${removable[@]}"; do
+            echo "    $f → $(readlink "$f")"
+        done
+    fi
+    echo ""
+    echo "WILL KEEP (project may have edited):"
+    echo "    $target/.process-engine.yaml (if exists)"
+    echo "    $target/docs/templates/* (copies, not symlinks)"
+    echo "    $target/docs/process-engine/* (copies, not symlinks)"
+    echo ""
+    echo "WILL NOT TOUCH (system-level — operator removes via launchctl/systemctl):"
+    echo "    ~/.claude/skills/{start,end}-session/  (used by other projects too)"
+    echo "    ~/Library/LaunchAgents/com.*.ceo.*.plist (macOS launchd)"
+    echo "    ~/.config/systemd/user/*-ceo-weekly.* (Linux systemd)"
+    echo "    Windows scheduled tasks"
+    echo ""
+
+    read -r -p "Proceed with eject? [y/N] " confirm
+    if [ "${confirm,,}" != "y" ] && [ "${confirm,,}" != "yes" ]; then
+        echo "Cancelled."
+        return 1
+    fi
+
+    local removed=0
+    for f in "${removable[@]}"; do
+        rm "$f"
+        removed=$((removed+1))
+    done
+
+    echo "✓ Ejected $removed engine-managed symlinks from $target."
+    echo ""
+    echo "If you want to also remove ~/.claude/skills/{start,end}-session/ (user-global),"
+    echo "run: rm -rf ~/.claude/skills/start-session ~/.claude/skills/end-session"
+    echo ""
+    echo "If launchd / systemd / Task Scheduler jobs were installed, refer to"
+    echo "templates/<platform>/README.md for the uninstall commands."
+}
+
 # ─── dispatch ───────────────────────────────────────────────────────────────
 
 cmd="${1:-help}"
@@ -355,6 +445,7 @@ case "$cmd" in
     upgrade)    cmd_upgrade "$@" ;;
     status)     cmd_status "$@" ;;
     doctor)     cmd_doctor "$@" ;;
+    eject)      cmd_eject "$@" ;;
     version|-v|--version) echo "$VERSION" ;;
     help|-h|--help) help_subcommand "$@" ;;
     *)

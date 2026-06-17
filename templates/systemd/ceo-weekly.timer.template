@@ -1,0 +1,11 @@
+[Unit]
+Description={{ORG_TAG}} CEO weekly retro trigger (Friday 17:00)
+Documentation=https://github.com/sanishsk/8colors-process-engine
+
+[Timer]
+OnCalendar=Fri *-*-* 17:00:00
+Persistent=true
+Unit={{ORG_TAG}}-ceo-weekly.service
+
+[Install]
+WantedBy=timers.target

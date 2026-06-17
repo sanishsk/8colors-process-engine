@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# {{ORG_TAG}} CEO weekly retro launcher — fires Fridays 17:00 via systemd.
+# Identical shape to the macOS launchd wrapper.
+
+set -euo pipefail
+
+PROJECT_ROOT="{{PROJECT_ROOT}}"
+STATE_DIR="$PROJECT_ROOT/docs/dev-log"
+STATE_FILE="$STATE_DIR/ceo-state.json"
+LOG_DIR="$HOME/.local/state/{{ORG_TAG}}-ceo"
+RUN_LOG="$LOG_DIR/run-$(/bin/date +%Y%m%d-%H%M%S).log"
+
+mkdir -p "$LOG_DIR" "$STATE_DIR"
+
+CLAUDE_BIN="{{CLAUDE_BIN}}"
+
+DOW=$(/bin/date +%u)
+FORCE_FLAG="${1:-}"
+if [ "$DOW" != "5" ] && [ "$FORCE_FLAG" != "--force" ]; then
+    echo "Not Friday (dow=$DOW), skipping. Use --force to override." | tee -a "$RUN_LOG"
+    exit 0
+fi
+
+cd "$PROJECT_ROOT"
+
+{
+    echo "=== {{ORG_TAG}} CEO weekly retro run: $(/bin/date -Iseconds) ==="
+    echo "PROJECT_ROOT=$PROJECT_ROOT"
+    echo "---"
+    "$CLAUDE_BIN" \
+        --print \
+        --permission-mode bypassPermissions \
+        --model claude-opus-4-7 \
+        "/weekly-retro --force" 2>&1
+    echo "---"
+    echo "=== Exit: $? ==="
+} | tee -a "$RUN_LOG"
+
+LAST_RUN=$(/bin/date -Iseconds)
+/usr/bin/env python3 - <<PYEOF
+import json, os
+state_file = "$STATE_FILE"
+state = {}
+if os.path.exists(state_file):
+    try:
+        with open(state_file) as f:
+            state = json.load(f)
+    except Exception:
+        state = {}
+state["last_run"] = "$LAST_RUN"
+state["last_run_log"] = "$RUN_LOG"
+with open(state_file, "w") as f:
+    json.dump(state, f, indent=2)
+PYEOF
+
+echo "State updated: last_run=$LAST_RUN" | tee -a "$RUN_LOG"
+exit 0
