@@ -50,10 +50,10 @@ skipped, read on.
 ## Install in 30 seconds
 
 ```bash
-git clone https://github.com/sanishsk/8colors-process-engine.git ~/Documents/8colors-process-engine
-ln -s ~/Documents/8colors-process-engine/scripts/pe ~/.local/bin/pe   # add ~/.local/bin to PATH if needed
+git clone https://github.com/sanishsk/8colors-process-engine.git ~/.local/share/8colors-process-engine
+ln -s ~/.local/share/8colors-process-engine/scripts/pe ~/.local/bin/pe   # ensure ~/.local/bin is on $PATH
 
-pe install ~/code/your-project
+pe install /path/to/your/project
 ```
 
 Restart Claude Code in `your-project`. You now have:
@@ -67,7 +67,7 @@ Restart Claude Code in `your-project`. You now have:
 **Optional one-liner extras:**
 
 ```bash
-pe launchd ~/code/your-project   # macOS only — Friday 17:00 auto-retro
+pe launchd /path/to/your/project   # macOS only — Friday 17:00 auto-retro
 ```
 
 That wires a Friday 17:00 launchd job that runs the CEO agent

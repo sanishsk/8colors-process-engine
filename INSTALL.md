@@ -9,25 +9,30 @@
   one will be created)
 - Python 3.x (used by `install_launchd.sh` for minimal YAML parsing)
 
-## v0.2.0 Quick install
+## Quick install (v0.7+)
 
 ```bash
-# 1. Clone the engine
-cd ~/Documents
-git clone https://github.com/sanishsk/8colors-process-engine.git
+# 1. Clone the engine to a stable location (~/.local/share is XDG-standard)
+git clone https://github.com/sanishsk/8colors-process-engine.git \
+    ~/.local/share/8colors-process-engine
 
-# 2. Install core (agents + skills + commands + templates)
-cd 8colors-process-engine
-./scripts/install.sh /path/to/your-project
+# 2. Symlink the pe CLI onto your PATH
+ln -s ~/.local/share/8colors-process-engine/scripts/pe ~/.local/bin/pe
 
-# 3. Restart Claude Code in the target project.
+# 3. Install into a target project
+pe install /path/to/your-project
 
-# 4. Verify agents loaded
+# 4. Restart Claude Code in the target project.
+
+# 5. Verify agents loaded
 #    In Claude Code: > what agents are available?
-#    Expected: architect, brief-writer, ceo, code-reviewer, doc-updater,
-#              planner, researcher, security-reviewer, tdd-guide
+#    Expected (v0.7): architect, brief-writer, build-error-resolver, ceo,
+#                     code-reviewer, data-model-auditor, doc-updater,
+#                     e2e-runner, memory-consolidator, planner,
+#                     researcher, retrospective-agent, security-reviewer,
+#                     tdd-guide
 
-# 5. Verify skills loaded
+# 6. Verify skills loaded
 #    In Claude Code: > /start-session
 #    Should produce an orientation report.
 ```

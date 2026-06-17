@@ -15,8 +15,8 @@ project in one command. Defaults are zero-API-key. Friend-installable
 in 30 seconds. MIT-licensed.
 
 ```bash
-git clone https://github.com/sanishsk/8colors-process-engine.git ~/8c-engine
-ln -s ~/8c-engine/scripts/pe ~/.local/bin/pe
+git clone https://github.com/sanishsk/8colors-process-engine.git ~/.local/share/8c-engine
+ln -s ~/.local/share/8c-engine/scripts/pe ~/.local/bin/pe
 pe install ~/code/your-project
 ```
 
@@ -173,8 +173,8 @@ If you want rails that fail loud when skipped, this is for you.
 
 ```bash
 # Install
-git clone https://github.com/sanishsk/8colors-process-engine.git ~/8c-engine
-ln -s ~/8c-engine/scripts/pe ~/.local/bin/pe
+git clone https://github.com/sanishsk/8colors-process-engine.git ~/.local/share/8c-engine
+ln -s ~/.local/share/8c-engine/scripts/pe ~/.local/bin/pe
 pe install ~/code/your-project
 
 # Optional: wire the Friday weekly retro
