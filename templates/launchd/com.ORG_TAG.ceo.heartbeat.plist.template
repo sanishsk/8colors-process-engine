@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.{{ORG_TAG}}.ceo.heartbeat</string>
+
+    <!--
+        Independent watchdog for the weekly retro. Fires every 3 days at
+        ~09:30 — independent of the weekly job, so if the weekly fails
+        silently we still get a macOS notification + STALE marker file
+        within ~72h.
+    -->
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{HOME}}/.local/bin/{{ORG_TAG}}-ceo/check_heartbeat.sh</string>
+    </array>
+
+    <!-- StartInterval is seconds — 3 days = 259200 -->
+    <key>StartInterval</key>
+    <integer>259200</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>{{HOME}}/Library/Logs/{{ORG_TAG}}-ceo/heartbeat.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{HOME}}/Library/Logs/{{ORG_TAG}}-ceo/heartbeat.error.log</string>
+</dict>
+</plist>

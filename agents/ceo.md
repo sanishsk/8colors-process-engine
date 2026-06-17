@@ -27,7 +27,7 @@ week's lanes from the backlog and verifying last week's velocity.
 
 **Output two files:**
 
-1. `docs/dev-log/weekly-plan-YYYY-WW.md` with:
+1. `docs/dev-log/weekly-plan-YYYY-W<NN>.md` (literal `W` prefix on week number — e.g. `weekly-plan-2026-W25.md`, not `weekly-plan-2026-25.md`):
    - LAST WEEK shipped (what merged, what slipped, what blocked)
    - THIS WEEK plan (3–5 features in priority order, parallel lanes marked)
    - LANE 1 (Sanish active coding): feature + estimated slot size
@@ -35,7 +35,7 @@ week's lanes from the backlog and verifying last week's velocity.
    - BLOCKERS (anything Sanish must decide before Monday)
    - TRIGGER CHECK (any Process v2 trigger fired this week?)
 
-2. `docs/dev-log/retro-YYYY-WW.md` with:
+2. `docs/dev-log/retro-YYYY-W<NN>.md` (literal `W` prefix — same convention as above):
    - WHAT WENT WELL
    - WHAT BROKE
    - PROCESS ADJUSTMENTS for next week (if any)

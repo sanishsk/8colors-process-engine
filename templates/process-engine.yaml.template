@@ -1,0 +1,63 @@
+# .process-engine.yaml
+# Project-level configuration for 8colors-process-engine.
+# Place at the root of your target project. Used by install.sh and
+# install_launchd.sh to render templates.
+#
+# Schema version: 1
+
+schema_version: 1
+
+project:
+  # Short, lowercase, alphanumeric+dash. Used as the launchd label prefix
+  # (com.<org_tag>.ceo.weekly) and the wrapper directory name
+  # (~/.local/bin/<org_tag>-ceo/). Pattern: ^[a-z][a-z0-9-]*$
+  org_tag: acme
+
+  # Display name for reports and notifications.
+  display_name: "Acme Corp"
+
+  # Project root (absolute path). install.sh writes this from $1.
+  # Leave as a placeholder if you're hand-editing; it gets overwritten.
+  root: "/Users/you/code/acme"
+
+  # Primary git branch — usually `main` or `master`.
+  main_branch: master
+
+# Sentry MCP integration (optional — skip if not using Sentry)
+sentry:
+  enabled: false
+  organization_slug: ""
+  project_slug: ""
+  region_url: "https://us.sentry.io"   # or https://de.sentry.io for EU
+
+# Weekly CEO retro automation (optional — macOS only via launchd)
+ceo_weekly:
+  enabled: true
+  # Cron-like schedule: weekday + hour + minute.
+  # weekday: 1=Mon, 2=Tue, ..., 5=Fri, 7=Sun
+  schedule:
+    weekday: 5
+    hour: 17
+    minute: 0
+  # Watchdog freshness window in days (default 8 = weekly + 1 grace).
+  staleness_days: 8
+  # Headless model. Default: opus for strategic synthesis.
+  # Set to "sonnet" if you need faster/cheaper retros.
+  model: claude-opus-4-7
+
+# Session skills (start-session / end-session) installation
+session_skills:
+  # If true, install to ~/.claude/skills/ (user-global, applies to all projects).
+  # If false, install to <project>/.claude/skills/ (project-only).
+  install_user_global: true
+
+# Pre-commit hook integration (optional)
+hooks:
+  # If your project uses pre-commit (https://pre-commit.com/), the engine
+  # can append starter hook entries to .pre-commit-config.yaml.
+  pre_commit_enabled: false
+
+# Project-specific session.yaml (start-session / end-session customization)
+# Lives at <project>/.claude/session.yaml — engine doesn't manage it,
+# but documents the contract here so adopters know it exists.
+session_yaml_path: ".claude/session.yaml"

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.{{ORG_TAG}}.ceo.weekly</string>
+
+    <!--
+        Wrapper lives in ~/.local/bin so launchd's pre-exec setup doesn't
+        trigger macOS TCC on protected directories (~/Documents, ~/Desktop,
+        ~/Downloads). Once bash is running, cd into the project is fine —
+        TCC fires on process start, not on cd.
+
+        Pattern documented in docs/process-engine/RHYTHM.md.
+
+        Schedule: Fridays at 17:00 local time.
+        The wrapper has its own Friday check; running it any other day
+        is a no-op (unless --force is passed).
+
+        Runs `claude -p '/weekly-retro --force'` in headless mode with
+        bypassPermissions. The CEO agent produces:
+          {{PROJECT_ROOT}}/docs/dev-log/weekly-plan-YYYY-W<NN>.md
+          {{PROJECT_ROOT}}/docs/dev-log/retro-YYYY-W<NN>.md
+    -->
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{HOME}}/.local/bin/{{ORG_TAG}}-ceo/run_weekly.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>5</integer>
+        <key>Hour</key>
+        <integer>17</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>{{HOME}}/Library/Logs/{{ORG_TAG}}-ceo/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{HOME}}/Library/Logs/{{ORG_TAG}}-ceo/launchd.error.log</string>
+</dict>
+</plist>
