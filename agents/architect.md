@@ -20,6 +20,31 @@ You are a senior software architect specializing in scalable, maintainable syste
 
 ## Architecture Review Process
 
+### 0. Search prior research (MANDATORY when index exists)
+
+Before any analysis, query the local semantic index for prior briefs,
+architect docs, planner artifacts, and audits on the same or overlapping
+topic. Origin: 2026-05-28 root-cause audit of Wave 1M.3 Phase 1 — the
+brief had locked the OSS contract (Workbox + Dexie + hand-rolled Flask
+sync), but the planner-only read at session pickup missed it.
+
+```bash
+# Use the project's venv python3 if present, else system python3
+python3 scripts/research_index.py query "<topic keywords>" --top 8
+```
+
+Skip silently if `scripts/research_index.py` is absent (engine v0.2 or
+older) or if `docs/research/.research-index.sqlite` doesn't exist.
+
+If the search returns chunks with cosine ≥0.55, **Read the full source
+files** of the top 1–3 matches before designing. Cite them in your
+architect doc under a `## Prior work consulted` heading with file paths
++ "this design diverges/builds-on by …" notes for each.
+
+If a prior architect doc already locked the design and the user's
+question is about implementation detail, prefer pointing them at the
+existing doc over re-architecting.
+
 ### 1. Current State Analysis
 - Review existing architecture
 - Identify patterns and conventions

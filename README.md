@@ -5,7 +5,7 @@ launchd templates that force brief-before-code discipline, async OSS
 scouting, mandatory code review, write-tests-first TDD, and weekly retro
 cadence into any project.
 
-## What's in the box (v0.2.0)
+## What's in the box (v0.3.0)
 
 **Agents (9):**
 
@@ -30,11 +30,21 @@ Both are project-agnostic — they discover files at runtime and degrade
 gracefully when optional context is absent. Per-project tweaks via
 `.claude/session.yaml`.
 
-**Commands (3):**
+**Commands (4):**
 
 - `/brainstorm [topic]` — capture brainstorm → brief
 - `/lock-backlog [phase]` — lock a phase backlog (read-only audit trail)
+- `/research-search [query]` — semantic search over `docs/research/*` (v0.3)
 - `/weekly-retro` — Friday retro + next-week plan
+
+**RAG (v0.3):**
+
+- `scripts/research_index.py` — local SQLite + Gemini-embedding index over
+  `docs/research/*`. Solves the "Workbox-miss class" where slot pickup
+  misses an OSS contract locked in a prior brief.
+- `brief-writer` + `architect` agents call the index in their Step 0 to
+  surface relevant prior decisions before drafting.
+- Full doctrine: `docs/RAG.md`.
 
 **Launchd templates (macOS):**
 
@@ -127,9 +137,9 @@ git pull origin master
 ## Roadmap
 
 - v0.1 — 3 agents (brief-writer, researcher, ceo), 3 commands, templates, docs ✅
-- **v0.2 (current)** — 6 more agents (architect, code-reviewer, doc-updater, planner, security-reviewer, tdd-guide), start-session + end-session skills, launchd templates, `.process-engine.yaml` config schema ✅
-- v0.3 — RAG over `docs/research/*` (pgvector / Anthropic Files API), `upgrade.sh`, `eject.sh`
-- v0.4 — `hooks/` directory (pre-commit hooks generalized: design-review trailer, code-review trailer, docs-updated trailer, module-permissions block)
+- v0.2 — 6 more agents (architect, code-reviewer, doc-updater, planner, security-reviewer, tdd-guide), start-session + end-session skills, launchd templates, `.process-engine.yaml` config schema ✅
+- **v0.3 (current)** — RAG over `docs/research/*` via SQLite + Gemini embeddings, `/research-search` command, brief-writer + architect Step-0 wiring, `docs/RAG.md` doctrine ✅
+- v0.4 — `hooks/` directory (pre-commit hooks generalized: design-review trailer, code-review trailer, docs-updated trailer, module-permissions block, `docs/research/` rebuild on staged change), `upgrade.sh`, `eject.sh`
 - v0.5 — Linux + Windows scheduler templates (systemd + Task Scheduler) for the weekly retro
 - v0.6 — Domain-specific agent extraction: data-model-auditor, database-reviewer, tenant-isolation-auditor (parameterized for the project's DB engine)
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing

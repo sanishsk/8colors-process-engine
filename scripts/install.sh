@@ -7,6 +7,11 @@
 # - 2 new skills (start-session, end-session) — installed user-global to ~/.claude/skills
 # - launchd template bundle (run ./install_launchd.sh separately to wire CEO weekly)
 # - .process-engine.yaml template copied to project root if absent
+#
+# v0.3.0 changes:
+# - research_index.py (RAG over docs/research/) symlinked into project scripts/
+# - /research-search slash command
+# - brief-writer + architect agents now consult the index in their Step 0
 
 set -euo pipefail
 TARGET="${1:?Usage: ./install.sh /path/to/target-project}"
@@ -20,6 +25,7 @@ mkdir -p "$TARGET/.claude/agents"
 mkdir -p "$TARGET/.claude/commands"
 mkdir -p "$TARGET/docs/templates"
 mkdir -p "$TARGET/docs/process-engine"
+mkdir -p "$TARGET/scripts"
 mkdir -p "$HOME/.claude/skills"
 
 # Symlink agents (so engine upgrades propagate)
@@ -40,6 +46,25 @@ for skill_dir in "$ENGINE_DIR"/skills/*/; do
   mkdir -p "$HOME/.claude/skills/$skill_name"
   ln -sf "$skill_dir/SKILL.md" "$HOME/.claude/skills/$skill_name/SKILL.md"
 done
+
+# Symlink engine-owned scripts (currently just research_index.py for v0.3 RAG).
+# Symlinked so engine upgrades propagate without project edit. If the
+# project needs to fork it, replace the symlink with a real file.
+for f in "$ENGINE_DIR"/scripts/research_index.py; do
+  if [ -f "$f" ]; then
+    ln -sf "$f" "$TARGET/scripts/$(basename "$f")"
+  fi
+done
+
+# Append .gitignore entries for engine-managed paths if .gitignore exists
+# and doesn't already contain them.
+if [ -f "$TARGET/.gitignore" ]; then
+  for pattern in "*.research-index.sqlite" ".process-engine.local.yaml"; do
+    if ! grep -qF -- "$pattern" "$TARGET/.gitignore" 2>/dev/null; then
+      echo "$pattern" >> "$TARGET/.gitignore"
+    fi
+  done
+fi
 
 # Copy templates (project may edit freely — no symlink)
 for f in "$ENGINE_DIR"/templates/*.md; do
@@ -94,3 +119,8 @@ echo "  1. Restart Claude Code in $TARGET to load new agents + skills."
 echo "  2. (Optional) Edit $TARGET/.process-engine.yaml — set project.org_tag and project.root."
 echo "  3. (Optional, macOS) Run: $ENGINE_DIR/scripts/install_launchd.sh $TARGET"
 echo "     to wire the CEO weekly retro auto-fire (Fridays 17:00)."
+echo "  4. (Optional) Set up RAG over docs/research/:"
+echo "       export GEMINI_API_KEY=AIza...   # free key at aistudio.google.com/apikey"
+echo "       pip install numpy google-generativeai"
+echo "       python3 $TARGET/scripts/research_index.py rebuild"
+echo "     brief-writer + architect agents will consult the index in their Step 0."
