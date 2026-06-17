@@ -13,6 +13,7 @@ Project-agnostic; tune via env vars; install via the supplied
 | `design-review-trailer` | commit-msg | Blocks commits to UI files (templates, JS, CSS) without a `Design-reviewed:` or `Design-skip-reason:` trailer. |
 | `claude-md-size` | pre-commit | Warns (does not block) when CLAUDE.md exceeds 40,000 chars. |
 | `research-index-rebuild` | pre-commit | Re-embeds the semantic index when `docs/research/*.md` is staged. |
+| `stacking-rule-check` | pre-push | Blocks pushes that bundle ≥2 slot IDs with foundational changes (Process v2 rule). |
 
 ## Install
 

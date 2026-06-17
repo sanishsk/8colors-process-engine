@@ -43,8 +43,17 @@ repos:
         language: script
         stages: [commit-msg]
 
-# Tuning env vars (set before running git commit):
+      # Pre-push (push-time gates)
+      - id: stacking-rule-check
+        name: Block foundational changes inside a slot-stack
+        entry: hooks/stacking-rule-check.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-push]
+
+# Tuning env vars (set before running git commit/push):
 #   ENGINE_REVIEW_THRESHOLD=5      # min files before code-review trailer required
 #   ENGINE_STRUCTURAL_FILES=...    # regex of paths counted as "structural"
 #   ENGINE_UI_FILES=...            # regex of paths counted as "UI"
 #   ENGINE_CLAUDE_MD_LIMIT=40000   # CLAUDE.md warning threshold
+#   ENGINE_FOUNDATIONAL_REGEX=...  # regex of paths counted as "foundational"

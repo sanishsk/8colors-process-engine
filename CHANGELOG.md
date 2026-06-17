@@ -7,6 +7,55 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.7.0] — 2026-06-17
+
+### Added
+
+- **4 new agents extracted from 8CStudio's user-global library:**
+  - `build-error-resolver` (Haiku) — fix build/type errors with
+    minimal diffs; no architectural edits.
+  - `data-model-auditor` (Sonnet) — finds hardcoded business values
+    and recommends moving them to the data model or configuration.
+  - `e2e-runner` (Sonnet) — generates and runs E2E tests with
+    Playwright or browser MCPs; manages journeys + artifacts.
+  - `retrospective-agent` (Sonnet) — daily / weekly / monthly
+    self-improvement retros from dev-log digests; proposes process
+    improvements.
+- **`memory-consolidator` agent** (Sonnet, new) — quarterly memory
+  hygiene: archives historical RESUME HERE blocks, dedupes
+  pointer indexes, surfaces a diff for operator approval before
+  writing. Solves the MEMORY.md-bloat-to-30KB+ class.
+- **`/memory-consolidate` command** — convenience wrapper that
+  invokes the agent.
+- **`stacking-rule-check` pre-push hook** — detects pushes that
+  bundle ≥2 distinct slot IDs with foundational file changes (RLS,
+  auth, OIDC, `core/database*.py`, `Role.ALL_MODULES`, schema
+  ALTERs) and blocks. Implements Process v2's foundational-changes-
+  always-per-slot rule structurally.
+- **GitHub Actions CI gate template** (`templates/ci/engine-gate.yml.template`)
+  — soft mirror of the local trailer hooks for contributors who
+  haven't installed pre-commit. Gates PRs on Code-reviewed +
+  Docs-updated trailers.
+
+### Engine inventory after v0.7
+
+- **13 agents** (was 9): the 9 prior + build-error-resolver,
+  data-model-auditor, e2e-runner, memory-consolidator,
+  retrospective-agent
+- **5 commands** (was 4): the 4 prior + /memory-consolidate
+- **6 hooks** (was 5): the 5 prior + stacking-rule-check
+- Scheduler templates: macOS launchd + Linux systemd + Linux cron +
+  Windows Task Scheduler
+- CI gate template
+
+### Deferred (rationale unchanged from v0.6)
+
+- Multi-project portfolio mode — blocked on ≥2 multi-project
+  adopters.
+- Adopter telemetry opt-in — blocked on real adopters.
+
+---
+
 ## [0.6.0] — 2026-06-17
 
 ### Added

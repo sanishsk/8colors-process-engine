@@ -1,0 +1,88 @@
+# engine-gate.yml — GitHub Actions workflow that gates PRs on the
+# engine pipeline's trailer convention.
+#
+# Verifies that PR commits touching ≥N files include a Code-reviewed
+# trailer (or explicit Code-skip-reason), and that PRs touching
+# structural files (CLAUDE.md, schema, etc.) include a Docs-updated
+# trailer.
+#
+# Install:
+#   cp <engine>/templates/ci/engine-gate.yml.template .github/workflows/engine-gate.yml
+#   # Edit the threshold env vars if needed.
+#
+# This is a soft mirror of the local pre-commit hooks. The CI gate
+# catches PRs from contributors who haven't set up pre-commit locally.
+
+name: Engine pipeline gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  ENGINE_REVIEW_THRESHOLD: 5
+  ENGINE_STRUCTURAL_FILES: '^(CLAUDE\.md|README\.md|docs/architecture\.md|docs/schema.*\.md|schema\.sql)$'
+  ENGINE_UI_FILES: '^(templates/.*\.html|static/js/.*\.js|static/css/.*\.css|docs/design.*\.md)$'
+
+jobs:
+  trailer-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Count files changed in PR
+        id: count
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          n=$(git diff --name-only "$base..$head" | wc -l | tr -d ' ')
+          echo "n_files=$n" >> "$GITHUB_OUTPUT"
+          echo "PR touches $n file(s)"
+
+      - name: Verify Code-reviewed trailer (≥5 files)
+        if: steps.count.outputs.n_files >= env.ENGINE_REVIEW_THRESHOLD
+        run: |
+          msgs=$(gh pr view "${{ github.event.pull_request.number }}" --json commits --jq '.commits[].messageBody // ""')
+          if echo "$msgs" | grep -qE '^(Code-reviewed:|Code-skip-reason:)'; then
+            echo "✓ Code-reviewed trailer present"
+            exit 0
+          fi
+          echo "✗ This PR touches ${{ steps.count.outputs.n_files }} files (≥5 threshold)"
+          echo "  but lacks a Code-reviewed or Code-skip-reason trailer."
+          echo ""
+          echo "Add to one of your commit messages:"
+          echo "  Code-reviewed: code-reviewer"
+          echo "  Code-skip-reason: <short reason>"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect structural file changes
+        id: structural
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          hits=$(git diff --name-only "$base..$head" | grep -E "$ENGINE_STRUCTURAL_FILES" || true)
+          if [ -n "$hits" ]; then
+            echo "has_structural=true" >> "$GITHUB_OUTPUT"
+            echo "Structural files changed:"
+            echo "$hits" | sed 's/^/  /'
+          else
+            echo "has_structural=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify Docs-updated trailer
+        if: steps.structural.outputs.has_structural == 'true'
+        run: |
+          msgs=$(gh pr view "${{ github.event.pull_request.number }}" --json commits --jq '.commits[].messageBody // ""')
+          if echo "$msgs" | grep -qE '^(Docs-updated:|Docs-skip-reason:)'; then
+            echo "✓ Docs-updated trailer present"
+            exit 0
+          fi
+          echo "✗ This PR changes structural files but lacks a Docs-updated trailer."
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
