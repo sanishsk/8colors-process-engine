@@ -51,6 +51,29 @@ session_skills:
   # If false, install to <project>/.claude/skills/ (project-only).
   install_user_global: true
 
+# RAG over docs/research/ (optional — controlled by scripts/research_index.py)
+rag:
+  # Embedding provider. One of: fastembed | voyage | gemini | openai
+  #
+  #   fastembed — fully local, no API key, ~150 MB Python deps + ~33 MB model.
+  #               BAAI/bge-small-en-v1.5 (384 dims). Default — adopter "just works".
+  #   voyage    — Anthropic-recommended partner. voyage-3 (1024 dims).
+  #               Set VOYAGE_API_KEY (free credit at voyageai.com).
+  #   gemini    — Google text-embedding-004 (768 dims).
+  #               Set GEMINI_API_KEY (free tier at aistudio.google.com/apikey).
+  #   openai    — text-embedding-3-small (1536 dims). Paid but cheap.
+  #               Set OPENAI_API_KEY.
+  #
+  # Resolution order (when provider is unset here):
+  #   1. CLI --provider flag
+  #   2. This rag.provider value
+  #   3. Env detection (any of VOYAGE_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY)
+  #   4. fastembed default
+  provider: fastembed
+
+  # Optional model override. Provider-specific default if unset.
+  # model: BAAI/bge-small-en-v1.5
+
 # Pre-commit hook integration (optional)
 hooks:
   # If your project uses pre-commit (https://pre-commit.com/), the engine

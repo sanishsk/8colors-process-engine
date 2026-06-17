@@ -7,6 +7,82 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.5.0] — 2026-06-17
+
+### Added
+
+- **Multi-provider RAG embeddings.** `scripts/research_index.py`
+  refactored with an `Embedder` ABC and 4 concrete providers:
+  `fastembed` (default), `voyage`, `gemini`, `openai`.
+- **`fastembed` as the default provider** — fully local, zero API
+  keys, BAAI/bge-small-en-v1.5 (384 dims). Adopters get a working
+  RAG with `pip install fastembed` and nothing else. Validated on
+  the 8CStudio Wave 1M.3 corpus: Workbox brief surfaces at cosine
+  0.73 in ≤10s of CPU.
+- **Provider resolution chain:** CLI `--provider` flag →
+  `.process-engine.yaml` `rag.provider` → env detection (any of
+  `VOYAGE_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` set) →
+  fastembed default.
+- **Dim-mismatch detection.** The script tracks
+  `embedding_model` + `embedding_dim` in the SQLite `meta` table
+  and force-rebuilds if the configured provider doesn't match the
+  indexed one. No silent garbage scores.
+- **Query-time check.** `query` subcommand verifies the current
+  embedder's dim matches the indexed dim before running; errors
+  with a clear remediation hint if not.
+- **Key-safety section in `docs/RAG.md`.** Documents that keys are
+  read only from env vars, never written to config files or logs,
+  and that adopters should never paste keys into
+  `.process-engine.yaml`.
+
+### Changed
+
+- `docs/RAG.md` rewritten: provider matrix, cost comparison per
+  provider on the 8CStudio scale, when to upgrade off fastembed,
+  resolution-order documentation.
+- `templates/process-engine.yaml.template` gains a `rag:` block with
+  `provider` + `model` keys + provider-comparison docstring.
+- README: RAG section gains the 4-provider matrix; "adopt
+  incrementally" RAG row no longer requires a Gemini key.
+
+### Rationale
+
+Adopter feedback (raised by Sanish 2026-06-17) — most adopters
+already have an Anthropic relationship via Claude Code. Forcing a
+second API signup (Google AI Studio) just to use the RAG is
+friction. Anthropic doesn't ship embedding models directly, but
+fastembed runs fully local with competitive quality on the corpus
+sizes the engine targets. Voyage/Gemini/OpenAI stay as easy
+upgrades for larger corpora or higher recall.
+
+### Migration
+
+`v0.4 → v0.5` for **existing installs**:
+
+```bash
+pe upgrade
+pip install fastembed
+# Optional: edit .process-engine.yaml to set rag.provider explicitly
+python3 scripts/research_index.py rebuild --force
+```
+
+The `--force` is required because v0.4 indexes (Gemini, 768 dims)
+aren't compatible with v0.5's default fastembed (384 dims). The
+script will print a clear "model changed" message and force the
+rebuild even without the flag.
+
+If you want to **keep using Gemini**, add to
+`.process-engine.yaml`:
+
+```yaml
+rag:
+  provider: gemini
+```
+
+No re-index required.
+
+---
+
 ## [0.4.0] — 2026-06-17
 
 ### Added

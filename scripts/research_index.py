@@ -2,38 +2,52 @@
 """
 research_index.py — local semantic search over docs/research/*.
 
-Indexes markdown files into a SQLite store with Gemini-computed
-embeddings. Solves the "Workbox-miss class": when picking up a slot, an
-agent (or human) can query the index to surface relevant prior briefs,
-architect docs, planner artifacts, audits.
+Indexes markdown files into a SQLite store. Solves the "Workbox-miss
+class": when picking up a slot, an agent (or human) can query the index
+to surface relevant prior briefs, architect docs, planner artifacts,
+audits.
 
-Origin: 2026-06-17 retrospective on the 2026-05-28 Wave 1M.3 miss where
-the planner-only read at slot pickup missed the OSS contract locked in
-the brief.
+v0.5: multi-provider embeddings.
+
+  Provider     Cost            Quality   Setup
+  -----------  --------------  --------  -------------------------------
+  fastembed    free, local     good      pip install fastembed
+  voyage       free tier + paid better    pip install voyage + key
+  gemini       free tier + paid good      pip install google-generativeai + key
+  openai       paid (cheap)    good      pip install openai + key
+
+  Default: fastembed (no API key needed; the project should "just work"
+  after pip install).
 
 USAGE
 -----
-    # One-time setup (export the API key; free at aistudio.google.com/apikey)
-    export GEMINI_API_KEY=AIza...
-
-    # Build the index (incremental — re-runs only re-index changed files)
+    # Default — uses fastembed locally, no API key required
+    pip install fastembed numpy
     python3 scripts/research_index.py rebuild
+    python3 scripts/research_index.py query "workbox dexie offline"
 
-    # Query (top 8 results by default)
-    python3 scripts/research_index.py query "workbox dexie offline sync"
+    # Override provider via CLI
+    python3 scripts/research_index.py --provider voyage rebuild
 
-    # Query with custom K and corpus path
-    python3 scripts/research_index.py query "btw closed period" --top 5
-    python3 scripts/research_index.py query "..." --corpus docs/
+    # Or via .process-engine.yaml in project root:
+    # rag:
+    #   provider: voyage     # fastembed | voyage | gemini | openai
+    #   model:    voyage-3   # optional, defaults per provider
 
 DESIGN
 ------
 - Storage: SQLite at <corpus>/.research-index.sqlite (gitignored).
 - Chunking: ~800 char windows + 120 char overlap, paragraph-boundary
   preferred. Each chunk gets its own embedding row.
-- Embedding: Gemini text-embedding-004 (768 dims). Switchable provider
-  scaffolded but only Gemini is wired (it's already in the project venv
-  via google-generativeai).
+- Provider abstraction: see Embedder ABC + 4 concrete classes.
+- Provider resolution (in order):
+    1. --provider CLI flag
+    2. .process-engine.yaml rag.provider
+    3. Env detection (any of VOYAGE_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY set)
+    4. fastembed default
+- Dim-mismatch detection: if the stored embedding_dim doesn't match the
+  current provider's dim, rebuild is forced (would otherwise produce
+  garbage scores from incompatible vectors).
 - Similarity: cosine in numpy after L2 normalization. Fast enough for
   ≤100k chunks; sub-second on 8CStudio's ~1.5k chunks.
 - Incremental rebuild: stores sha256 per file; skips files where the
@@ -42,9 +56,9 @@ DESIGN
 REQUIREMENTS
 ------------
 - Python 3.10+
-- google-generativeai (already in 8CStudio venv)
-- numpy (lightweight install: pip install numpy)
-- GEMINI_API_KEY env var
+- numpy (`pip install numpy`)
+- One embedding provider (default fastembed; install with
+  `pip install fastembed`)
 """
 
 from __future__ import annotations
@@ -57,22 +71,19 @@ import sqlite3
 import struct
 import sys
 import time
+from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional
 
 # ─── chunking ────────────────────────────────────────────────────────────────
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
-MIN_CHUNK = 100  # don't emit chunks smaller than this
+MIN_CHUNK = 100
 
 
 def chunk_markdown(text: str) -> list[str]:
-    """Paragraph-aware chunking with overlap.
-
-    Splits on double-newline first, then greedy-packs paragraphs into
-    CHUNK_SIZE windows. Adds CHUNK_OVERLAP chars of tail from the prior
-    chunk to the next, preserving context across boundaries.
-    """
+    """Paragraph-aware chunking with overlap."""
     paras = re.split(r"\n\s*\n", text.strip())
     paras = [p.strip() for p in paras if p.strip()]
     if not paras:
@@ -87,40 +98,100 @@ def chunk_markdown(text: str) -> list[str]:
             current = f"{current}\n\n{para}"
         else:
             chunks.append(current)
-            # Carry the tail of the previous chunk into the next for context
             tail = current[-CHUNK_OVERLAP:] if len(current) > CHUNK_OVERLAP else current
             current = f"{tail}\n\n{para}" if tail else para
     if current and len(current) >= MIN_CHUNK:
         chunks.append(current)
     elif current and chunks:
-        # Fold tiny trailing chunk into the previous
         chunks[-1] = f"{chunks[-1]}\n\n{current}"
     return chunks
 
 
-# ─── embedding provider ──────────────────────────────────────────────────────
+# ─── embedder ABC + concrete providers ──────────────────────────────────────
 
 
-class GeminiEmbedder:
-    """Wraps google-generativeai's embed_content. text-embedding-004 → 768 dims."""
+class Embedder(ABC):
+    """Provider-agnostic embedding interface."""
 
+    NAME: str = "abstract"
+    MODEL: str = "abstract"
+    DIM: int = 0
+
+    @abstractmethod
+    def embed_doc(self, text: str) -> list[float]:
+        """Embed a document chunk (for indexing)."""
+
+    @abstractmethod
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a query string. Providers with asymmetric task_types use them here."""
+
+
+class FastEmbedEmbedder(Embedder):
+    """Fully local. Default. No API key required.
+
+    Uses BAAI/bge-small-en-v1.5 by default (384 dims, ~33 MB model).
+    First call downloads the model to ~/.cache/fastembed/.
+    """
+
+    NAME = "fastembed"
+    MODEL = "BAAI/bge-small-en-v1.5"
+    DIM = 384
+
+    def __init__(self, model: Optional[str] = None) -> None:
+        try:
+            from fastembed import TextEmbedding
+        except ImportError as exc:
+            raise RuntimeError(
+                "fastembed not installed. Run: pip install fastembed\n"
+                "        (Adds ~150 MB of ONNX runtime + downloads a ~33 MB "
+                "model on first use to ~/.cache/fastembed/.)"
+            ) from exc
+
+        self.MODEL = model or self.MODEL
+        self._embedding_model = TextEmbedding(model_name=self.MODEL)
+
+    def _embed(self, text: str) -> list[float]:
+        # fastembed yields a generator; take the first (only) result.
+        vecs = list(self._embedding_model.embed([text]))
+        return vecs[0].tolist()
+
+    def embed_doc(self, text: str) -> list[float]:
+        return self._embed(text)
+
+    def embed_query(self, text: str) -> list[float]:
+        # BGE benefits from a "query:" prefix on retrieval queries.
+        return self._embed(f"query: {text}")
+
+
+class GeminiEmbedder(Embedder):
+    """Google Gemini text-embedding-004 (768 dims). Free tier covers RAG."""
+
+    NAME = "gemini"
     MODEL = "models/text-embedding-004"
     DIM = 768
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, model: Optional[str] = None) -> None:
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY not set. Get a free key at "
+                "https://aistudio.google.com/apikey then "
+                "`export GEMINI_API_KEY=AIza...`."
+            )
+
         try:
-            import google.generativeai as genai  # noqa: F401
+            import google.generativeai as genai
         except ImportError as exc:
             raise RuntimeError(
-                "google-generativeai not installed. Run: pip install google-generativeai"
+                "google-generativeai not installed. "
+                "Run: pip install google-generativeai"
             ) from exc
-        import google.generativeai as genai
 
+        self.MODEL = model or self.MODEL
         genai.configure(api_key=api_key)
         self._genai = genai
 
     def embed_doc(self, text: str) -> list[float]:
-        """For indexing — task_type=RETRIEVAL_DOCUMENT."""
         result = self._genai.embed_content(
             model=self.MODEL,
             content=text,
@@ -129,7 +200,6 @@ class GeminiEmbedder:
         return result["embedding"]
 
     def embed_query(self, text: str) -> list[float]:
-        """For query — task_type=RETRIEVAL_QUERY (asymmetric, better recall)."""
         result = self._genai.embed_content(
             model=self.MODEL,
             content=text,
@@ -138,17 +208,169 @@ class GeminiEmbedder:
         return result["embedding"]
 
 
-def get_embedder() -> GeminiEmbedder:
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        print(
-            "ERROR: GEMINI_API_KEY env var not set.\n"
-            "       Get a free key at https://aistudio.google.com/apikey\n"
-            "       Then: export GEMINI_API_KEY=AIza...",
-            file=sys.stderr,
+class VoyageEmbedder(Embedder):
+    """Voyage AI voyage-3 (1024 dims). Anthropic-recommended partner."""
+
+    NAME = "voyage"
+    MODEL = "voyage-3"
+    DIM = 1024
+
+    def __init__(self, model: Optional[str] = None) -> None:
+        api_key = os.environ.get("VOYAGE_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "VOYAGE_API_KEY not set. Sign up at https://www.voyageai.com/ "
+                "(free credit available) then `export VOYAGE_API_KEY=...`."
+            )
+
+        try:
+            import voyageai
+        except ImportError as exc:
+            raise RuntimeError(
+                "voyageai not installed. Run: pip install voyageai"
+            ) from exc
+
+        self.MODEL = model or self.MODEL
+        self._client = voyageai.Client(api_key=api_key)
+
+    def embed_doc(self, text: str) -> list[float]:
+        result = self._client.embed(
+            [text], model=self.MODEL, input_type="document"
         )
-        sys.exit(1)
-    return GeminiEmbedder(api_key)
+        return result.embeddings[0]
+
+    def embed_query(self, text: str) -> list[float]:
+        result = self._client.embed(
+            [text], model=self.MODEL, input_type="query"
+        )
+        return result.embeddings[0]
+
+
+class OpenAIEmbedder(Embedder):
+    """OpenAI text-embedding-3-small (1536 dims). Paid but cheap."""
+
+    NAME = "openai"
+    MODEL = "text-embedding-3-small"
+    DIM = 1536
+
+    def __init__(self, model: Optional[str] = None) -> None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY not set. Get one at https://platform.openai.com/ "
+                "then `export OPENAI_API_KEY=sk-...`."
+            )
+
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "openai not installed. Run: pip install openai"
+            ) from exc
+
+        self.MODEL = model or self.MODEL
+        self._client = OpenAI(api_key=api_key)
+
+    def _embed(self, text: str) -> list[float]:
+        # OpenAI's embedding API has no document/query asymmetry.
+        result = self._client.embeddings.create(model=self.MODEL, input=text)
+        return result.data[0].embedding
+
+    def embed_doc(self, text: str) -> list[float]:
+        return self._embed(text)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed(text)
+
+
+PROVIDERS = {
+    "fastembed": FastEmbedEmbedder,
+    "gemini": GeminiEmbedder,
+    "voyage": VoyageEmbedder,
+    "openai": OpenAIEmbedder,
+}
+
+
+# ─── provider resolution ────────────────────────────────────────────────────
+
+
+def read_yaml_field(path: Path, *keys: str) -> Optional[str]:
+    """Minimal YAML reader — scalar values under nested keys only."""
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines()
+    indent = 0
+    i = 0
+    for part in keys:
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.lstrip(" ")
+            line_indent = len(line) - len(stripped)
+            if line_indent == indent and stripped.startswith(part + ":"):
+                rest = stripped[len(part) + 1 :].strip().strip('"').strip("'")
+                if rest and part == keys[-1]:
+                    return rest
+                indent += 2
+                i += 1
+                break
+            i += 1
+        else:
+            return None
+    return None
+
+
+def detect_provider_from_env() -> Optional[str]:
+    """Return the first provider whose API key env-var is set."""
+    if os.environ.get("VOYAGE_API_KEY"):
+        return "voyage"
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return "gemini"
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return None
+
+
+def resolve_provider(
+    cli_provider: Optional[str], project_root: Path
+) -> tuple[str, Optional[str]]:
+    """Return (provider_name, model_name_or_None).
+
+    Resolution order:
+        1. --provider CLI flag
+        2. .process-engine.yaml rag.provider
+        3. Env detection (VOYAGE/GEMINI/OPENAI key set)
+        4. fastembed default
+    """
+    if cli_provider:
+        if cli_provider not in PROVIDERS:
+            raise SystemExit(
+                f"ERROR: unknown provider {cli_provider!r}. "
+                f"Options: {', '.join(PROVIDERS)}"
+            )
+        return cli_provider, None
+
+    config = project_root / ".process-engine.yaml"
+    yaml_provider = read_yaml_field(config, "rag", "provider")
+    yaml_model = read_yaml_field(config, "rag", "model")
+    if yaml_provider:
+        if yaml_provider not in PROVIDERS:
+            raise SystemExit(
+                f"ERROR: unknown rag.provider {yaml_provider!r} in "
+                f"{config}. Options: {', '.join(PROVIDERS)}"
+            )
+        return yaml_provider, yaml_model
+
+    env_provider = detect_provider_from_env()
+    if env_provider:
+        return env_provider, None
+
+    return "fastembed", None
+
+
+def make_embedder(name: str, model: Optional[str]) -> Embedder:
+    cls = PROVIDERS[name]
+    return cls(model=model)
 
 
 # ─── storage ─────────────────────────────────────────────────────────────────
@@ -204,18 +426,56 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value)
+    )
+
+
 # ─── rebuild ─────────────────────────────────────────────────────────────────
 
 
-def cmd_rebuild(corpus: Path, db_path: Path, force: bool) -> int:
+def cmd_rebuild(
+    corpus: Path,
+    db_path: Path,
+    embedder: Embedder,
+    force: bool,
+) -> int:
     files = sorted(corpus.rglob("*.md"))
     if not files:
         print(f"No markdown files in {corpus}", file=sys.stderr)
         return 2
 
-    print(f"Scanning {len(files)} markdown files in {corpus}…")
+    print(
+        f"Scanning {len(files)} markdown files in {corpus} "
+        f"using {embedder.NAME}/{embedder.MODEL} ({embedder.DIM}d)…"
+    )
     conn = open_db(db_path)
-    embedder = get_embedder()
+
+    # Force-rebuild if the embedding model / dim changed since last index
+    prev_model = get_meta(conn, "embedding_model")
+    prev_dim = get_meta(conn, "embedding_dim")
+    dim_mismatch = prev_dim is not None and int(prev_dim) != embedder.DIM
+    model_mismatch = prev_model is not None and prev_model != embedder.MODEL
+
+    if (dim_mismatch or model_mismatch) and not force:
+        print(
+            f"  ⚠ Embedding model changed since last rebuild "
+            f"({prev_model} {prev_dim}d → {embedder.MODEL} {embedder.DIM}d). "
+            f"Forcing full re-embed.",
+            file=sys.stderr,
+        )
+        force = True
+
+    if force:
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM docs")
+        conn.commit()
 
     new_count = updated_count = skipped_count = 0
     chunks_total = 0
@@ -256,9 +516,6 @@ def cmd_rebuild(corpus: Path, db_path: Path, force: bool) -> int:
             doc_id = cur.lastrowid
             new_count += 1
 
-        # Embed each chunk. Gemini's per-call latency is ~80-150ms.
-        # For 70 docs * ~20 chunks = ~1400 calls = ~3-4 minutes on a cold rebuild.
-        # Incremental rebuilds skip unchanged files so day-to-day cost is much lower.
         for idx, chunk_text in enumerate(chunks):
             try:
                 vec = embedder.embed_doc(chunk_text)
@@ -275,18 +532,10 @@ def cmd_rebuild(corpus: Path, db_path: Path, force: bool) -> int:
         action = "updated" if row else "new    "
         print(f"  {action} {rel}  ({len(chunks)} chunks)")
 
-    conn.execute(
-        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-        ("last_rebuild", time.strftime("%Y-%m-%dT%H:%M:%S%z")),
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-        ("embedding_model", GeminiEmbedder.MODEL),
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-        ("embedding_dim", str(GeminiEmbedder.DIM)),
-    )
+    set_meta(conn, "last_rebuild", time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+    set_meta(conn, "embedding_provider", embedder.NAME)
+    set_meta(conn, "embedding_model", embedder.MODEL)
+    set_meta(conn, "embedding_dim", str(embedder.DIM))
     conn.commit()
     conn.close()
 
@@ -303,7 +552,13 @@ def cmd_rebuild(corpus: Path, db_path: Path, force: bool) -> int:
 # ─── query ───────────────────────────────────────────────────────────────────
 
 
-def cmd_query(db_path: Path, query: str, top_k: int, snippet_chars: int) -> int:
+def cmd_query(
+    db_path: Path,
+    embedder: Embedder,
+    query: str,
+    top_k: int,
+    snippet_chars: int,
+) -> int:
     if not db_path.exists():
         print(
             f"ERROR: index not found at {db_path}. Run 'rebuild' first.",
@@ -314,14 +569,24 @@ def cmd_query(db_path: Path, query: str, top_k: int, snippet_chars: int) -> int:
     try:
         import numpy as np
     except ImportError:
-        print(
-            "ERROR: numpy not installed. Run: pip install numpy",
-            file=sys.stderr,
-        )
+        print("ERROR: numpy not installed. Run: pip install numpy", file=sys.stderr)
         return 2
 
     conn = open_db(db_path)
-    embedder = get_embedder()
+
+    # Verify the current embedder matches the indexed one
+    stored_dim = get_meta(conn, "embedding_dim")
+    stored_model = get_meta(conn, "embedding_model")
+    if stored_dim and int(stored_dim) != embedder.DIM:
+        print(
+            f"ERROR: query embedder dim ({embedder.DIM}) doesn't match "
+            f"indexed dim ({stored_dim}). The index was built with "
+            f"{stored_model}. Either:\n"
+            f"  - Use the same provider as the index, or\n"
+            f"  - Run 'rebuild --force' to re-embed with the new provider.",
+            file=sys.stderr,
+        )
+        return 2
 
     qvec = np.array(embedder.embed_query(query), dtype=np.float32)
     qvec /= np.linalg.norm(qvec) + 1e-12
@@ -335,24 +600,19 @@ def cmd_query(db_path: Path, query: str, top_k: int, snippet_chars: int) -> int:
         print("ERROR: index is empty. Run 'rebuild' first.", file=sys.stderr)
         return 2
 
-    embs = np.array(
-        [unpack_embedding(r[4]) for r in rows], dtype=np.float32
-    )
-    # Normalize once; then dot-product = cosine similarity.
+    embs = np.array([unpack_embedding(r[4]) for r in rows], dtype=np.float32)
     norms = np.linalg.norm(embs, axis=1, keepdims=True) + 1e-12
     embs_n = embs / norms
     sims = embs_n @ qvec
 
-    # Top-K
     top_idx = np.argsort(-sims)[:top_k]
 
-    print(f"# Top {len(top_idx)} matches for: {query!r}\n")
+    print(f"# Top {len(top_idx)} matches for: {query!r}")
+    print(f"# (provider: {embedder.NAME}, model: {embedder.MODEL}, dim: {embedder.DIM})\n")
     seen_docs: set[str] = set()
     for rank, i in enumerate(top_idx, 1):
         chunk_id, path, chunk_idx, text, _ = rows[i]
         score = float(sims[i])
-        # Dedupe: skip if we've already shown 2 chunks from the same doc
-        # (top-3 already gives a strong signal that the doc is relevant).
         dedupe_key = f"{path}:{chunk_idx // 3}"
         if dedupe_key in seen_docs:
             continue
@@ -382,7 +642,9 @@ def cmd_status(db_path: Path) -> int:
     print(f"Index: {db_path}")
     print(f"  docs:     {n_docs}")
     print(f"  chunks:   {n_chunks}")
+    print(f"  provider: {meta.get('embedding_provider', '?')}")
     print(f"  model:    {meta.get('embedding_model', '?')}")
+    print(f"  dim:      {meta.get('embedding_dim', '?')}")
     print(f"  rebuilt:  {meta.get('last_rebuild', '?')}")
     conn.close()
     return 0
@@ -405,6 +667,24 @@ def main() -> int:
         default=None,
         help="SQLite path (default: <corpus>/.research-index.sqlite)",
     )
+    parser.add_argument(
+        "--provider",
+        choices=sorted(PROVIDERS),
+        default=None,
+        help="Override the embedding provider (default: from .process-engine.yaml "
+        "or env detection or fastembed)",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Override the embedding model name (provider-specific default if unset)",
+    )
+    parser.add_argument(
+        "--project-root",
+        default=".",
+        help="Project root for reading .process-engine.yaml (default: cwd)",
+    )
+
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_rebuild = sub.add_parser("rebuild", help="Build / refresh the index")
@@ -425,20 +705,31 @@ def main() -> int:
 
     corpus = Path(args.corpus)
     db_path = (
-        Path(args.index)
-        if args.index
-        else corpus / ".research-index.sqlite"
+        Path(args.index) if args.index else corpus / ".research-index.sqlite"
     )
+    project_root = Path(args.project_root)
+
+    if args.cmd == "status":
+        return cmd_status(db_path)
 
     if args.cmd == "rebuild":
         if not corpus.exists():
             print(f"ERROR: corpus {corpus} does not exist", file=sys.stderr)
             return 1
-        return cmd_rebuild(corpus, db_path, args.force)
+
+    # Provider resolution: CLI → yaml → env → fastembed default
+    provider_name, yaml_model = resolve_provider(args.provider, project_root)
+    model = args.model or yaml_model
+    try:
+        embedder = make_embedder(provider_name, model)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    if args.cmd == "rebuild":
+        return cmd_rebuild(corpus, db_path, embedder, args.force)
     if args.cmd == "query":
-        return cmd_query(db_path, args.query, args.top, args.snippet)
-    if args.cmd == "status":
-        return cmd_status(db_path)
+        return cmd_query(db_path, embedder, args.query, args.top, args.snippet)
     return 1
 
 

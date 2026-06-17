@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.4.0-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.5.0-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -114,13 +114,26 @@ Both project-agnostic; tweak via `.claude/session.yaml` per project.
 
 ### RAG over `docs/research/`
 
-`scripts/research_index.py` — local SQLite + Gemini-embedding index.
-Solves the "Workbox-miss class" by surfacing relevant prior briefs,
-architect docs, planner artifacts before drafting. `brief-writer` +
-`architect` agents consult it in their Step 0.
+`scripts/research_index.py` — local SQLite index with **4 swappable
+embedding providers**. Solves the "Workbox-miss class" by surfacing
+relevant prior briefs, architect docs, planner artifacts before
+drafting. `brief-writer` + `architect` agents consult it in their
+Step 0.
+
+| Provider | API key? | Quality | Cost |
+|---|---|---|---|
+| **`fastembed`** (default) | None | Good for ≤10k docs | $0, runs offline |
+| `voyage` | `VOYAGE_API_KEY` | Best recall (Anthropic-recommended) | Free credit + paid |
+| `gemini` | `GEMINI_API_KEY` | Good | Free tier + paid |
+| `openai` | `OPENAI_API_KEY` | Good | Cheap paid |
+
+Adopters get a working RAG with **zero signups** by default. Power
+users switch via one line in `.process-engine.yaml`. Validated on
+8CStudio's Wave 1M.3 corpus — Workbox brief surfaces at cosine 0.73
+in ≤10s of CPU, no network calls.
 
 - Zero infra (SQLite).
-- Free embeddings via Gemini's free tier.
+- Zero API keys (fastembed default).
 - Sub-second query on ≤100k chunks.
 - Sha256-incremental rebuild.
 
@@ -238,7 +251,7 @@ Don't have to flip everything at once.
 | Want only this | Run |
 |---|---|
 | Just session skills | `pe install <project>` then never invoke other agents |
-| Just RAG | `pe install <project>` + set `GEMINI_API_KEY` + `python3 scripts/research_index.py rebuild` |
+| Just RAG | `pe install <project>` + `pip install fastembed numpy` + `python3 scripts/research_index.py rebuild` (no API key needed) |
 | Just weekly retro | `pe install <project>` + `pe launchd <project>` |
 | Just code-reviewer | `pe install <project>` then invoke `code-reviewer` agent before commits |
 
@@ -290,9 +303,10 @@ See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
 - v0.1 — 3 agents (brief-writer, researcher, ceo), 3 commands, templates, docs ✅
 - v0.2 — 6 more agents, start-session + end-session skills, launchd templates, `.process-engine.yaml` config ✅
 - v0.3 — RAG over `docs/research/*` via SQLite + Gemini embeddings, `/research-search`, brief-writer + architect Step-0 wiring ✅
-- **v0.4 (current)** — `pe` unified CLI, public-launch README, CHANGELOG, CONTRIBUTING ✅
-- v0.5 — `hooks/` directory (pre-commit hooks generalized) + `pe eject` + Linux + Windows scheduler templates
-- v0.6 — Domain-specific agent extraction (data-model-auditor, database-reviewer, tenant-isolation-auditor)
+- v0.4 — `pe` unified CLI, public-launch README, CHANGELOG, CONTRIBUTING ✅
+- **v0.5 (current)** — Multi-provider embeddings (fastembed default + voyage / gemini / openai); zero-API-key adopter path ✅
+- v0.6 — `hooks/` directory (pre-commit hooks generalized) + `pe eject` + Linux + Windows scheduler templates
+- v0.7 — Domain-specific agent extraction (data-model-auditor, database-reviewer, tenant-isolation-auditor)
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
 ---

@@ -1,7 +1,7 @@
 {
   "name": "8colors-process-engine",
-  "version": "0.4.0",
-  "description": "Portable Claude Code process engine — 9 agents + 2 session skills + 4 commands + launchd templates + RAG over docs/research/ + unified pe CLI. OSS-first doctrine baked in.",
+  "version": "0.5.0",
+  "description": "Portable Claude Code process engine — 9 agents + 2 session skills + 4 commands + launchd templates + multi-provider RAG (fastembed default, no API key) + unified pe CLI. OSS-first doctrine baked in.",
   "author": "8Colors",
   "license": "MIT",
   "homepage": "https://github.com/sanishsk/8colors-process-engine",
@@ -21,8 +21,9 @@
     "script": "scripts/research_index.py",
     "command": "commands/research-search.md",
     "doctrine": "docs/RAG.md",
-    "embedding_model": "models/text-embedding-004",
-    "embedding_dim": 768,
-    "embedding_provider": "gemini"
+    "default_provider": "fastembed",
+    "default_model": "BAAI/bge-small-en-v1.5",
+    "default_dim": 384,
+    "providers": ["fastembed", "voyage", "gemini", "openai"]
   }
 }
