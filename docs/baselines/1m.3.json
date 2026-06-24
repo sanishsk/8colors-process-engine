@@ -1,0 +1,96 @@
+{
+  "branch": "phase1/1m.3-write-queue-sync",
+  "captured_at": "2026-06-24T17:01:27+00:00",
+  "cost": {
+    "cache_read_tokens": null,
+    "input_tokens": null,
+    "output_tokens": null
+  },
+  "feature_commits": [
+    "068c4cc8f398",
+    "42c06f5b506e",
+    "36f6e206a0d5",
+    "010ae32fded3",
+    "0604f1ee90fc",
+    "4ea626aa32d4",
+    "b77b81a32f6d",
+    "2fcd4babaa76",
+    "a2364b629c3c",
+    "61322570e5a6",
+    "85e531880b9a",
+    "a3c98f1e99e0",
+    "4f0a9685f999",
+    "6b72d4d746c8",
+    "eb1f37abe1ba",
+    "e4727a1bd171",
+    "317ec26277c4",
+    "44be741fd75e"
+  ],
+  "measurable_notes": [
+    {
+      "field": "speed.wall_clock_hours",
+      "reason": "first slot commit \u2192 merge commit timestamps",
+      "status": "measured"
+    },
+    {
+      "field": "speed.iterations",
+      "reason": "count of commits on the slot branch",
+      "status": "measured"
+    },
+    {
+      "field": "size.*",
+      "reason": "git diff --numstat on merge commit",
+      "status": "measured"
+    },
+    {
+      "field": "quality.rework_72h",
+      "reason": "fix-prefix or slot_id matches in 72h after merge, file-overlap rule applied",
+      "status": "measured"
+    },
+    {
+      "field": "quality.sentry_incidents_7d",
+      "reason": "no --sentry-count supplied; run Sentry MCP query for release:<merge_commit> 7d window and rerun",
+      "status": "null_unavailable"
+    },
+    {
+      "field": "quality.gate_pass_rate",
+      "reason": "pre-E1 slots \u2014 gates did not emit envelopes; first measurable on post-E1 slots",
+      "status": "null_retrospective"
+    },
+    {
+      "field": "cost.*",
+      "reason": "Claude Code did not emit per-slot token telemetry pre-E2.1; forward-going only",
+      "status": "null_retrospective"
+    }
+  ],
+  "merge_commit": "88c4cc5",
+  "project": "/Users/sanishsasikumar/Documents/8Colors/8CStudio",
+  "quality": {
+    "gate_pass_rate": null,
+    "rework_72h": {
+      "commits": [
+        {
+          "rule": "file_overlap",
+          "sha": "c90f13b3c008",
+          "subject": "fix(1M.5.1): bump SW CACHE_NAME v9 \u2192 v10 so installed PWAs pick up bootstrapTokens()"
+        }
+      ],
+      "count": 1
+    },
+    "sentry_incidents_7d": null
+  },
+  "schema_version": "1.0.0",
+  "size": {
+    "files_changed": 43,
+    "lines_added": 6628,
+    "lines_removed": 68
+  },
+  "slot_id": "1M.3",
+  "slot_kind": "feature_multi_iteration",
+  "speed": {
+    "first_commit_at": "2026-05-27T21:18:04+00:00",
+    "iterations": 18,
+    "merged_at": "2026-06-04T19:00:05+00:00",
+    "wall_clock_hours": 189.7
+  }
+}

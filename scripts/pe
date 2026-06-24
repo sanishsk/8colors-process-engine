@@ -12,6 +12,7 @@
 #   pe upgrade                git pull the engine; symlinks auto-propagate to projects
 #   pe status                 Show engine version, last commit, install paths
 #   pe doctor [<project>]     Diagnose engine install (broken symlinks, missing deps)
+#   pe baseline capture ...   Record a Phase 0 slot baseline (speed/size/quality)
 #   pe version                Print engine version
 #   pe help [<subcommand>]    Show help
 
@@ -49,6 +50,7 @@ SUBCOMMANDS
     status                Show engine version, last commit, install paths
     doctor [<project>]    Diagnose install (broken symlinks, missing deps)
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
+    baseline capture ...  Record a Phase 0 slot baseline (speed / size / quality)
     version               Print engine version
     help [<subcommand>]   Show help
 
@@ -439,6 +441,38 @@ cmd_eject() {
 cmd="${1:-help}"
 shift || true
 
+cmd_baseline() {
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        capture)
+            exec python3 "$ENGINE_DIR/scripts/baseline.py" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe baseline — Phase 0 slot baselines (E2)
+
+SUBCOMMANDS
+    capture --project <path> --slot-id <id> --slot-kind <kind> \\
+            --branch <name> --merge-commit <sha> \\
+            [--sentry-count <n>] [--output <path>]
+
+        Computes speed (wall-clock + iterations), size (files / lines),
+        and quality (rework_72h) for a shipped slot, from git history.
+
+SEE ALSO
+    docs/baselines/README.md         Corpus + Phase 3 success criterion
+    schemas/baseline.schema.json     Record contract
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe baseline' subcommand: $sub" >&2
+            echo "Run 'pe baseline help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 case "$cmd" in
     install)    cmd_install "$@" ;;
     launchd)    cmd_launchd "$@" ;;
@@ -446,6 +480,7 @@ case "$cmd" in
     status)     cmd_status "$@" ;;
     doctor)     cmd_doctor "$@" ;;
     eject)      cmd_eject "$@" ;;
+    baseline)   cmd_baseline "$@" ;;
     version|-v|--version) echo "$VERSION" ;;
     help|-h|--help) help_subcommand "$@" ;;
     *)
