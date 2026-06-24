@@ -2,13 +2,23 @@
 """
 pe_gate.py — gate envelope parser + validator.
 
-E1, 2026-06-24. Stdlib only. Invoked via `pe gate parse <file>`.
+E1, 2026-06-24. Stdlib only. Invoked via `pe gate parse [--bare] <file>`.
 
-Reads a transcript file (or any text containing a fenced
-```json gate-envelope ... ``` block), extracts the LAST such block,
-validates it against schemas/gate-envelope.schema.json, and exits
-with a status code the orchestrator can act on:
+DEFAULT MODE — TRANSCRIPT (E1.d hardening, 2026-06-25):
+Reads a transcript file containing BOTH:
+  (a) a fenced ```json gate-envelope ... ``` block (the LAST one wins), and
+  (b) an "Envelope key values" cross-check block whose 6 required field
+      values literally match the envelope.
 
+Requiring (b) at the parser level closes a silent-skip gap observed in
+E1.1 runtime testing: agents passed schema validation while omitting
+the cross-check entirely. Folding the cross-check check into the same
+exit-code path means the gate cannot do "half its job" and still pass.
+
+BARE MODE (--bare): tolerates raw JSON with no fence and no cross-check.
+For fixtures and tests only. Agents must NOT use --bare in self-validation.
+
+Exit codes:
   0  PASS                 — verdict=PASS
   1  FAIL worker_quality  — verdict=FAIL, failure_class=worker_quality
                             (the only class that triggers escalation)
@@ -16,7 +26,8 @@ with a status code the orchestrator can act on:
                             {task_underspecified, blocked, out_of_scope}
                             (halt to human checkpoint)
   3  WARN                 — verdict=WARN (proceed, but surface)
-  4  schema / parse error — envelope missing, malformed, or schema-invalid
+  4  schema / parse error — envelope missing/malformed/schema-invalid,
+                            OR (default mode) cross-check missing/mismatched
 
 On success the validated envelope is printed to stdout as JSON, ready
 for piping into orchestrator logic. On error a diagnostic line is
@@ -51,6 +62,34 @@ EXIT_PARSE_ERROR = 4
 FENCE_RE = re.compile(
     r"```json\s+gate-envelope\s*\n(.*?)\n```",
     re.DOTALL,
+)
+
+# Header line of the cross-check block, matched at start of a line.
+# Tolerant of trailing whitespace; exact phrase per the agent contract.
+CROSSCHECK_HEADER_RE = re.compile(
+    r"^[ \t]*Envelope key values[ \t]*$",
+    re.MULTILINE,
+)
+
+# A "key: value" line inside the cross-check block. Indented (≥2 spaces
+# or one tab), key is identifier-or-array-index, value runs to EOL.
+CROSSCHECK_KV_RE = re.compile(
+    r"^[ \t]{2,}([a-zA-Z_][a-zA-Z0-9_\[\]]*):[ \t]+(.*?)[ \t]*$",
+)
+
+# Required envelope fields the cross-check MUST enumerate and MUST match.
+# Findings rows are optional in the cross-check; if present they are
+# format-checked but not strictly value-matched (extracting envelope
+# findings[] structure from the cross-check string format adds complexity
+# without changing the load-bearing property: did the agent type out the
+# top-level envelope state).
+CROSSCHECK_REQUIRED_FIELDS = (
+    "schema_version",
+    "gate_name",
+    "verdict",
+    "failure_class",
+    "model_used",
+    "timestamp",
 )
 
 
@@ -169,24 +208,83 @@ def _validate_number(value: Any, schema: dict, path: str) -> list[str]:
 # Envelope extraction + verdict logic
 # ────────────────────────────────────────────────────────────────────
 
-def extract_envelope(text: str) -> tuple[dict | None, str | None]:
-    """Return (envelope_dict, error_message). The LAST fenced block wins."""
+def extract_envelope(text: str, *, bare: bool = False) -> tuple[dict | None, str | None]:
+    """Return (envelope_dict, error_message). The LAST fenced block wins.
+
+    In default (transcript) mode the fence is REQUIRED. In bare mode the
+    function also tolerates a raw JSON object spanning the whole input —
+    this path is only reachable via the explicit --bare CLI flag.
+    """
     matches = FENCE_RE.findall(text)
     if not matches:
-        # Tolerate a bare JSON file (e.g. fixture) — try parsing the whole input.
-        text_stripped = text.strip()
-        if text_stripped.startswith("{") and text_stripped.endswith("}"):
-            try:
-                return json.loads(text_stripped), None
-            except json.JSONDecodeError as exc:
-                return None, f"bare JSON parse failed: {exc}"
-        return None, "no ```json gate-envelope``` fenced block found in input"
+        if bare:
+            text_stripped = text.strip()
+            if text_stripped.startswith("{") and text_stripped.endswith("}"):
+                try:
+                    return json.loads(text_stripped), None
+                except json.JSONDecodeError as exc:
+                    return None, f"bare JSON parse failed: {exc}"
+            return None, "bare mode: input is not a JSON object"
+        return None, (
+            "no ```json gate-envelope``` fenced block found in input "
+            "(transcript mode requires both a fenced envelope AND an "
+            "'Envelope key values' cross-check block; pass --bare to "
+            "validate raw JSON instead — fixtures only, not for agents)"
+        )
 
     body = matches[-1]
     try:
         return json.loads(body), None
     except json.JSONDecodeError as exc:
         return None, f"envelope JSON parse failed: {exc}"
+
+
+def extract_crosscheck(text: str) -> dict | None:
+    """Find an 'Envelope key values' block and parse its indented k:v lines.
+
+    Returns the dict of field-name → raw-string-value, or None if the
+    header line was not found. Stops at the first non-indented or blank
+    line after at least one k:v line has been collected.
+    """
+    m = CROSSCHECK_HEADER_RE.search(text)
+    if not m:
+        return None
+    rest = text[m.end():].lstrip("\n").splitlines()
+    out: dict[str, str] = {}
+    for ln in rest:
+        if not ln.strip():
+            # Blank line ends the block once we've collected at least one pair.
+            if out:
+                break
+            continue
+        kvm = CROSSCHECK_KV_RE.match(ln)
+        if not kvm:
+            # Non-indented or malformed line ends the block.
+            break
+        out[kvm.group(1)] = kvm.group(2)
+    return out
+
+
+def verify_crosscheck(envelope: dict, crosscheck: dict) -> list[str]:
+    """Return a list of cross-check errors; empty list = ok.
+
+    Checks: every required field is present, and its string-value
+    literally matches the envelope's value (after str() coercion and
+    rstrip of trailing whitespace).
+    """
+    errors: list[str] = []
+    for field in CROSSCHECK_REQUIRED_FIELDS:
+        if field not in crosscheck:
+            errors.append(f"cross-check: missing required field '{field}'")
+            continue
+        expected = str(envelope.get(field, "")).strip()
+        actual = crosscheck[field].strip()
+        if actual != expected:
+            errors.append(
+                f"cross-check: field '{field}' shows {actual!r} "
+                f"but envelope has {expected!r}"
+            )
+    return errors
 
 
 def classify_exit(envelope: dict) -> int:
@@ -208,17 +306,26 @@ def classify_exit(envelope: dict) -> int:
 # ────────────────────────────────────────────────────────────────────
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 2 or argv[1] in ("-h", "--help"):
+    # Surface flags before the positional path.
+    args = list(argv[1:])
+    if args and args[0] in ("-h", "--help"):
         print(__doc__)
         return 0
+    bare = False
+    if args and args[0] == "--bare":
+        bare = True
+        args.pop(0)
+    if not args:
+        print("usage: pe gate parse [--bare] <file>", file=sys.stderr)
+        return EXIT_PARSE_ERROR
 
-    target = Path(argv[1])
+    target = Path(args[0])
     if not target.exists():
         print(f"ERROR: file not found: {target}", file=sys.stderr)
         return EXIT_PARSE_ERROR
 
     text = target.read_text(encoding="utf-8")
-    envelope, err = extract_envelope(text)
+    envelope, err = extract_envelope(text, bare=bare)
     if envelope is None:
         print(f"ERROR: {err}", file=sys.stderr)
         return EXIT_PARSE_ERROR
@@ -240,6 +347,21 @@ def main(argv: list[str]) -> int:
             0,
             f"$.schema_version: envelope major {schema_major} != engine major {expected_major}",
         )
+
+    # E1.d cross-check (transcript mode only). The cross-check exists to
+    # force the agent to literally enumerate the envelope's required
+    # field values in prose BEFORE the fence — a behavioural step that
+    # E1.a's bare-JSON self-validation could not catch when skipped.
+    if not bare:
+        crosscheck = extract_crosscheck(text)
+        if crosscheck is None:
+            validation_errors.append(
+                "cross-check: 'Envelope key values' block not found in transcript "
+                "(must appear before the fenced envelope; see CRITICAL OUTPUT "
+                "CONTRACT §'Pre-emission cross-check')"
+            )
+        else:
+            validation_errors.extend(verify_crosscheck(envelope, crosscheck))
 
     # Always print the envelope to stdout so callers can pipe it.
     print(json.dumps(envelope, indent=2, sort_keys=True))

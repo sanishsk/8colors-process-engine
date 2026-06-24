@@ -347,57 +347,81 @@ NOT add a new field.
 ## Mandatory self-validation step (run this before emitting)
 
 Prompt-only self-checks are unreliable — agents have been observed
-asserting "all checks passed" while emitting invalid envelopes. You
-have Bash. Use it. The contract requires you to validate your draft
-envelope against the schema **before** emitting it as your final
-answer:
+asserting "all checks passed" while emitting invalid envelopes, and
+**separately** observed skipping the pre-emission cross-check entirely
+while still producing schema-valid envelopes. The contract therefore
+requires `pe gate parse` to validate both at once, from a single
+transcript draft:
 
 ```bash
-# 1. Write your draft envelope to a tempfile.
-cat > /tmp/gate-envelope-draft.json <<'EOF'
+# 1. Write your draft TRANSCRIPT to a tempfile. The transcript MUST
+#    contain BOTH the "Envelope key values" cross-check block AND
+#    the fenced envelope below it. Writing just the JSON is no
+#    longer sufficient — the parser will reject it (exit 4).
+cat > /tmp/gate-envelope-draft.md <<'EOF'
+Envelope key values
+  schema_version: 1.0.0
+  gate_name:      security-reviewer
+  verdict:        FAIL
+  failure_class:  worker_quality
+  model_used:     claude-sonnet-4-6
+  timestamp:      2026-06-25T01:30:00Z
+
+```json gate-envelope
 {
   "schema_version": "1.0.0",
   "gate_name": "security-reviewer",
-  "verdict": "...",
-  ... your envelope ...
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "model_used": "claude-sonnet-4-6",
+  "timestamp": "2026-06-25T01:30:00Z",
+  ... rest of your envelope ...
 }
+```
 EOF
 
 # 2. Validate it. The `pe` CLI is installed; if not on PATH, the
 #    absolute path is ~/.local/bin/pe or
 #    <engine-repo>/scripts/pe.
-pe gate parse /tmp/gate-envelope-draft.json
+pe gate parse /tmp/gate-envelope-draft.md
 
 # 3. Inspect the exit code:
 #    0 = PASS  (your verdict was PASS)
 #    1 = FAIL worker_quality
 #    2 = FAIL non-escalatable
 #    3 = WARN
-#    4 = parse/schema error  ← MUST FIX before final emission
+#    4 = parse/schema error or cross-check missing/mismatched
+#        ← MUST FIX before final emission
 ```
 
 If exit code is 4, the parser printed validation errors to stderr.
-Read them, fix the envelope (most often: a banned field name,
-non-kebab-case `rule`, or missing required field), and re-run. **Do
-not emit until the exit code is one of 0/1/2/3.**
+Common causes:
+- envelope: banned field name, non-kebab-case `rule`, missing required
+  field, malformed JSON.
+- cross-check: missing the `Envelope key values` block entirely, or
+  one of its values does not match the envelope (e.g. the cross-check
+  says `verdict: PASS` but the envelope is FAIL).
+
+Read the errors, fix, and re-run. **Do not emit until the exit code
+is one of 0/1/2/3.**
 
 Cap: maximum 3 self-validation iterations. If you cannot produce a
-schema-valid envelope after 3 attempts, emit a `verdict=FAIL,
-failure_class=blocked` envelope with a `summary` explaining the
-specific validation error you couldn't resolve. Better to halt
+valid transcript after 3 attempts, emit a `verdict=FAIL,
+failure_class=blocked` envelope (still inside a transcript with a
+matching cross-check) and a `summary` explaining the specific
+validation error you couldn't resolve. Better to halt
 deterministically than to ship a broken envelope.
 
-After validation succeeds, emit the validated envelope inside the
-literal ` ```json gate-envelope ` fence as the last block of your
-reply.
+After validation succeeds, emit the EXACT SAME transcript — the
+cross-check block followed by the fenced envelope — as the last part
+of your reply. Do not edit values between validation and emission; the
+draft you validated IS the artifact you emit.
 
 ## Pre-emission cross-check — print the values, don't just tick boxes
 
-In your reply, **before** the final fenced envelope, print a short
-"Envelope key values" section that literally shows each required
-field's value. Not "✓ verdict correct" — actually show
-`verdict: FAIL`. This forces explicit enumeration and catches
-drift the boolean-checklist style missed:
+The "Envelope key values" block is now enforced by `pe gate parse`
+(E1.d, 2026-06-25). The parser requires the 6 fields below to be
+present AND to literally equal the envelope's values:
 
 ```
 Envelope key values
@@ -406,13 +430,16 @@ Envelope key values
   verdict:        FAIL
   failure_class:  worker_quality
   model_used:     claude-sonnet-4-6
-  timestamp:      2026-06-24T20:15:00Z
+  timestamp:      2026-06-25T01:30:00Z
   findings[0]:    severity=CRITICAL  rule=secret-in-source
   findings[1]:    severity=HIGH      rule=<your-second-finding-here>
 ```
 
-If you can't print one of these values cleanly, your envelope is not
-ready. Go back to the self-validation step.
+`findings[N]` rows are optional in the cross-check (the parser does
+not enforce their format); the 6 named fields above are required.
+Do not write `verdict: ✓` or `verdict: correct` — write the literal
+value. Drift between the cross-check and the envelope is the exact
+failure mode this block exists to catch.
 
 ## Self-validation (optional but recommended)
 

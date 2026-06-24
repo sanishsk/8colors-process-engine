@@ -368,3 +368,77 @@ canonical template for the remaining 4 gate agents:
 The rest of the section — fence rules, decision table, exemplars,
 banned-field list, **self-validation step**, key-values cross-check
 — stays verbatim. This is what makes E1.1 mechanical.
+
+## 14. E1.d — Cross-check enforced by the parser (the silent-skip fix)
+
+Shipped 2026-06-25. Trigger: E1.1 runtime cross-check on security-reviewer.
+
+### What the runtime test exposed
+
+Three criteria were verified on a fresh `security-reviewer` invocation
+against a planted-vuln fixture:
+
+| Criterion | Result |
+|---|---|
+| `model_used: claude-sonnet-*` | ✓ pass (sonnet-4-6) — tier routing held |
+| CRITICAL OUTPUT CONTRACT followed | ⚠ partial — envelope shape correct, but the agent skipped the "Envelope key values" cross-check block |
+| Envelope round-trips through `pe gate parse` | ✓ pass (exit 1, FAIL/worker_quality) |
+
+The cross-check section was present in the agent's prompt (line 394 of
+the shipped `security-reviewer.md`) and was explicitly required in
+prose — "In your reply, **before** the final fenced envelope, print a
+short 'Envelope key values' section that literally shows each required
+field's value." The agent skipped it anyway, then passed the
+schema-only self-validation step (which only checked the JSON).
+
+### Why "instruction" wasn't enough
+
+This is the **same failure class as E1.c, one level up**: a quality
+step written as an INSTRUCTION instead of an enforced GATE. Phase 3
+routes on these envelopes; the orchestrator needs to know that the
+agent did its **whole** process, not just that the JSON output passes
+schema validation. As long as the cross-check lived only in prose, an
+agent could ship a valid envelope without ever having enumerated its
+own state in plain text — the exact loop E1.a was meant to close.
+
+### The structural fix (single source of truth)
+
+`pe gate parse` now has two modes:
+
+- **Default (transcript mode)**: input must contain BOTH the fenced
+  envelope AND an "Envelope key values" cross-check block whose 6
+  required fields literally equal the envelope. Missing cross-check or
+  any value mismatch → exit 4 (same code as schema error, same
+  orchestrator handling).
+- **`--bare`**: legacy raw-JSON tolerance, for fixtures only. Agents
+  must NOT use `--bare` in self-validation.
+
+The agent's self-validation step now writes a TRANSCRIPT
+(`/tmp/gate-envelope-draft.md`) containing both blocks, not raw JSON.
+The same exit-code contract enforces both — one parser, one path.
+The agent literally cannot pass self-validation without producing the
+cross-check.
+
+### What this protects
+
+- Phase 3 escalation router from making routing decisions on envelopes
+  whose authors skipped the introspection step.
+- Future contract additions: any further "you must enumerate X" step
+  can be folded into the same `pe gate parse` exit-code contract by
+  extending the parser, without inventing a parallel gate.
+- The 3 E1.1-ported agents (security-reviewer / tdd-guide / e2e-runner)
+  from shipping with the same silent-skip behavior as the security
+  reviewer's runtime test demonstrated.
+
+### Re-test required after E1.d
+
+Every agent ported under E1.1 must pass a fresh invocation runtime
+cross-check confirming:
+1. `model_used: claude-sonnet-*` (tier routing still holds)
+2. transcript-mode `pe gate parse` exits 0/1/2/3 — i.e., the agent
+   actually emitted the cross-check, not just the envelope
+3. orchestrator-side `pe gate parse <full-transcript>` reproduces
+   the same exit code
+
+E1.1 does not "hold" until all 3 ported agents pass. Until then,
+PR #5's test plan checkboxes stay unchecked.
