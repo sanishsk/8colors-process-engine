@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "task_underspecified",
+  "confidence": 0.55,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-06-24T14:38:00Z",
+  "summary": "Slot says 'make it faster' but no metric defined. Cannot judge pass/fail.",
+  "findings": []
+}

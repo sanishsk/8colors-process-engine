@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "MAYBE",
+  "failure_class": "none",
+  "model_used": "claude-sonnet-4-6",
+  "timestamp": "2026-06-24T14:40:00Z",
+  "findings": []
+}

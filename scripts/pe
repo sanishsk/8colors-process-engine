@@ -12,6 +12,7 @@
 #   pe upgrade                git pull the engine; symlinks auto-propagate to projects
 #   pe status                 Show engine version, last commit, install paths
 #   pe doctor [<project>]     Diagnose engine install (broken symlinks, missing deps)
+#   pe gate parse <file>      Extract + validate gate-envelope JSON (E1)
 #   pe version                Print engine version
 #   pe help [<subcommand>]    Show help
 
@@ -49,6 +50,7 @@ SUBCOMMANDS
     status                Show engine version, last commit, install paths
     doctor [<project>]    Diagnose install (broken symlinks, missing deps)
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
+    gate parse <file>     Extract + validate gate-envelope JSON (E1)
     version               Print engine version
     help [<subcommand>]   Show help
 
@@ -439,6 +441,50 @@ cmd_eject() {
 cmd="${1:-help}"
 shift || true
 
+cmd_gate() {
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        parse)
+            if [ $# -lt 1 ]; then
+                cat >&2 <<EOF
+Usage: pe gate parse <transcript-or-envelope-file>
+
+Extracts the last fenced 'json gate-envelope' block from <file>,
+validates it against schemas/gate-envelope.schema.json, and exits:
+  0 PASS                 verdict=PASS
+  1 FAIL worker_quality  escalation candidate
+  2 FAIL non-escalatable failure_class in {task_underspecified,blocked,out_of_scope}
+  3 WARN                 proceed, surface to human
+  4 parse/schema error
+
+Bare .json files (no fenced block) are also accepted — this is the
+path third-party gate tools (e.g. CodeRabbit) emit on.
+EOF
+                exit 2
+            fi
+            exec python3 "$ENGINE_DIR/scripts/pe_gate.py" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe gate — quality gate envelope tooling (E1)
+
+SUBCOMMANDS
+    parse <file>    Extract + validate gate-envelope JSON from a transcript or artifact.
+
+SEE ALSO
+    docs/E1_GATE_ENVELOPE.md         Design rationale, failure_class semantics
+    schemas/gate-envelope.schema.json JSON Schema draft-07 contract
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe gate' subcommand: $sub" >&2
+            echo "Run 'pe gate help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 case "$cmd" in
     install)    cmd_install "$@" ;;
     launchd)    cmd_launchd "$@" ;;
@@ -446,6 +492,7 @@ case "$cmd" in
     status)     cmd_status "$@" ;;
     doctor)     cmd_doctor "$@" ;;
     eject)      cmd_eject "$@" ;;
+    gate)       cmd_gate "$@" ;;
     version|-v|--version) echo "$VERSION" ;;
     help|-h|--help) help_subcommand "$@" ;;
     *)
