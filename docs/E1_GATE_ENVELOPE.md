@@ -254,18 +254,26 @@ anything before Phase 3.
 ## 11. Open issues / follow-ups
 
 - **E1.1** — adopt the envelope on `security-reviewer`, `tdd-guide`,
-  `e2e-runner`, `database-reviewer`. Pure mechanical work. ~1h each.
+  `e2e-runner`, `database-reviewer`. Mechanical: copy the entire
+  "CRITICAL OUTPUT CONTRACT" section verbatim from `code-reviewer.md`,
+  change `gate_name` + 1-2 agent-specific exemplars, **keep the
+  mandatory self-validation step intact** (see §13). ~1h each.
 - **E1.2** — add a `pe gate validate-schema` subcommand that asserts
-  the schema file itself is valid JSON Schema draft-07 (currently
-  done implicitly by the parser; explicit subcommand helps in CI).
-- **E2** (next slot) — Phase 0 baseline harness. Pick 3 8CStudio slot
-  types; record wall-clock + tokens + pass-rate + rework-rate. Output
-  to `docs/baselines/`.
+  the schema file itself is valid JSON Schema draft-07.
+- **E2** (done) — Phase 0 baseline harness. Records for 1M.5, 1M.3,
+  1m.5.1 in `docs/baselines/`. PR #2.
 - **E3** — bump remaining Haiku gate agents to Sonnet+ once they
   adopt the envelope. Track per-iteration cost impact.
-- **Open** — should `gate_name` allow project-defined values (for
-  custom gates in adopter projects), or stay closed-enum? Default
-  closed; revisit if the first beta tester asks.
+- **Open — subagent model honoring.** During E1.a live testing the
+  `code-reviewer` ran on Haiku 4.5 despite `model: sonnet` in the
+  agent frontmatter. May be a Claude Code subagent runtime issue or
+  an invocation-time override. Worth investigating before E1.1 —
+  the gate-agent paradox depends on the frontmatter being honored.
+  Not blocking E1.a: the envelope contract held even on Haiku once
+  self-validation was in place.
+- **Open** — should `gate_name` allow project-defined values (custom
+  gates in adopter projects), or stay closed-enum? Default closed;
+  revisit if the first beta tester asks.
 
 ---
 
@@ -282,6 +290,81 @@ E1 smoke run, 2026-06-24:
 === /nope/nada.json        ===  exit=4 (file not found)
 ```
 
-The contract is real. The first downstream consumer (Phase 3's
-escalation router) can be built against it without further design
-work on this layer.
+E1.a live test receipt, 2026-06-24:
+
+```
+=== transcript-1.md (pre-tighten, agent improvised rule format)        exit=4
+=== transcript-3.md (post-tighten, agent self-validated via pe gate)   exit=1
+```
+
+The contract is real and now self-enforcing. The first downstream
+consumer (Phase 3's escalation router) can be built against it
+without further design work on this layer.
+
+---
+
+## 13. E1.a — Mandatory self-validation (the determinism fix)
+
+Shipped 2026-06-24 as part of PR #1. Reason: pure prompt engineering
+proved insufficient to constrain agent output shape.
+
+### What pass 1, 2, and 3 of the live test showed
+
+| Pass | Fence info-string | Envelope shape | rule format | Self-validation | Exit |
+|---|---|---|---|---|---|
+| 1 | ✓ correct | ✓ correct | ✗ `"SQL Injection — f-string"` | none | **4** |
+| 2 | ✗ plain `json` | ✗ improvised banned fields | ✓ kebab-case | none | would be **4** |
+| 3 | ✓ correct | ✓ correct | ✓ kebab-case | **yes** | **1** (valid) |
+
+Pass 2 regressed from pass 1 after the prompt was tightened — agents
+over-rotate on whichever instruction is emphasized in the invocation
+context. Asserting "all 9 checks passed" while emitting invalid
+output is a real, observed failure mode. The fix is structural, not
+linguistic.
+
+### The structural fix
+
+Each gate agent's prompt now contains a **Mandatory self-validation
+step** requiring the agent to:
+
+1. Write its draft envelope JSON to `/tmp/gate-envelope-draft.json`.
+2. Run `pe gate parse /tmp/gate-envelope-draft.json`.
+3. If exit code is 4 (schema error), read stderr, fix the envelope,
+   retry — up to 3 iterations.
+4. Only emit the validated envelope inside the
+   ` ```json gate-envelope ` fence after the parser returned 0/1/2/3.
+5. If 3 iterations cannot produce a valid envelope, emit
+   `verdict=FAIL, failure_class=blocked` with a `summary` naming the
+   specific validation error. **Halt deterministically rather than
+   ship broken.**
+
+Pass 3 of the live test confirmed the agent actually calls Bash and
+runs the parser (9 tool calls vs. 1 on the prompt-only passes).
+Envelope validity is now a tool-enforced contract, not an
+asserted-by-prose claim.
+
+### Why this matters for Phase 3
+
+The Phase 3 escalation router will route on `pe gate parse` exit
+codes. If gates could emit malformed envelopes that always exit 4,
+the router would either burn retries on schema errors or have to
+special-case them out. With self-validation in place, exit 4 is a
+true "gate broke" signal, not "agent improvised the shape" noise.
+
+### Template for E1.1 rollout
+
+`agents/code-reviewer.md`'s CRITICAL OUTPUT CONTRACT section is the
+canonical template for the remaining 4 gate agents:
+
+- `security-reviewer` — change `gate_name`; rule examples
+  (`csrf-missing`, `secret-in-source`, `unsafe-deserialize`).
+- `tdd-guide` — `gate_name`; rule examples (`untested-code-path`,
+  `flaky-test`, `coverage-low`).
+- `e2e-runner` — `gate_name`; rule examples (`selector-stale`,
+  `timeout`, `network-error`).
+- `database-reviewer` — `gate_name`; rule examples
+  (`missing-rls-policy`, `n-plus-one`, `unsafe-cascade`).
+
+The rest of the section — fence rules, decision table, exemplars,
+banned-field list, **self-validation step**, key-values cross-check
+— stays verbatim. This is what makes E1.1 mechanical.
