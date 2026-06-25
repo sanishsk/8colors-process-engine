@@ -47,9 +47,12 @@ merge silently closed both `#3` and `#5` because they shared that base.
 surface 5–10 minutes later when you try to look at `#3`/`#5`.
 
 **The rule:** no `--delete-branch` mid-batch. Defer cleanup to the end,
-when every PR in the batch is in master. **3 separate auto-close
-incidents in our gate-layer merge** — every one of them caused by an
-early `--delete-branch`. This is the single highest-value rule in this
+when every PR in the batch is in master. In our gate-layer merge, **4
+mid-batch `--delete-branch`s landed; 3 happened to have no dependents
+and caused no harm — pure luck, not safety. The 4th had two dependents
+and cascaded, auto-closing both.** The discipline cost (defer cleanup)
+is zero; the recovery cost when it bites is ~30 minutes per closed PR.
+Always pay the zero cost. This is the single highest-value rule in this
 file.
 
 ### Trap 2 — closed-PR-with-deleted-base can't be reopened
