@@ -12,6 +12,7 @@
 #   pe upgrade                git pull the engine; symlinks auto-propagate to projects
 #   pe status                 Show engine version, last commit, install paths
 #   pe doctor [<project>]     Diagnose engine install (broken symlinks, missing deps)
+#   pe baseline capture ...   Record a Phase 0 slot baseline (speed/size/quality)
 #   pe gate parse <file>      Extract + validate gate-envelope JSON (E1)
 #   pe version                Print engine version
 #   pe help [<subcommand>]    Show help
@@ -50,6 +51,7 @@ SUBCOMMANDS
     status                Show engine version, last commit, install paths
     doctor [<project>]    Diagnose install (broken symlinks, missing deps)
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
+    baseline capture ...  Record a Phase 0 slot baseline (speed / size / quality)
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     version               Print engine version
     help [<subcommand>]   Show help
@@ -328,6 +330,68 @@ cmd_doctor() {
         echo "  ⚠ Missing .process-engine.yaml — re-run 'pe install' to create it"
     fi
 
+    # E1.c.1 — check user-global agent collisions from THIS project's
+    # perspective. For each engine agent, classify:
+    #   (a) project-local symlink to engine        → ✓ healthy
+    #   (b) project-local file/symlink to something else → ⚠ project-overridden
+    #   (c) no project-local file, but user-global regular file exists
+    #       AND differs from engine                → ✗ SHADOWED by stale copy
+    #   (d) no project-local + no user-global      → ⚠ engine agent missing
+    #                                                from this project's
+    #                                                resolution (run pe install)
+    local shadowed_count=0
+    local missing_count=0
+    declare -a shadowed_names=()
+    declare -a missing_names=()
+    for engine_agent in "$ENGINE_DIR"/agents/*.md; do
+        local name; name="$(basename "$engine_agent")"
+        local project_local="$target/.claude/agents/$name"
+        local user_global="$HOME/.claude/agents/$name"
+        if [ -L "$project_local" ]; then
+            # symlink — check it points at our engine
+            local resolved; resolved=$(readlink "$project_local")
+            if [ "$resolved" != "$engine_agent" ]; then
+                echo "  ⚠ Project-local $name symlinks to $resolved (not this engine)"
+            fi
+            # healthy or wrong-engine — either way, user-global is not in play
+            continue
+        elif [ -f "$project_local" ]; then
+            # regular file in project — project author chose to fork. Not a
+            # collision we manage.
+            continue
+        fi
+        # No project-local file for this engine agent.
+        if [ -e "$user_global" ] && [ ! -L "$user_global" ]; then
+            if ! cmp -s "$engine_agent" "$user_global" 2>/dev/null; then
+                shadowed_count=$((shadowed_count+1))
+                shadowed_names+=("$name")
+            fi
+        else
+            missing_count=$((missing_count+1))
+            missing_names+=("$name")
+        fi
+    done
+
+    if [ $shadowed_count -gt 0 ]; then
+        echo ""
+        echo "  ✗ SHADOWED by stale user-global files (${shadowed_count}):"
+        for n in "${shadowed_names[@]}"; do
+            echo "      ~/.claude/agents/$n  (regular file, differs from engine)"
+        done
+        echo "    Fix: re-run 'pe install $target' to add project-local symlinks."
+        echo "    See docs/E1_b_SUBAGENT_MODEL_HONORING.md for the failure mode."
+        broken=$((broken+shadowed_count))
+    fi
+
+    if [ $missing_count -gt 0 ]; then
+        echo ""
+        echo "  ⚠ Engine agents not installed in this project (${missing_count}):"
+        for n in "${missing_names[@]}"; do
+            echo "      $n"
+        done
+        echo "    Fix: 'pe install $target' to symlink them."
+    fi
+
     # Check RAG deps if research_index.py is installed
     if [ -e "$target/scripts/research_index.py" ]; then
         local py
@@ -441,6 +505,38 @@ cmd_eject() {
 cmd="${1:-help}"
 shift || true
 
+cmd_baseline() {
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        capture)
+            exec python3 "$ENGINE_DIR/scripts/baseline.py" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe baseline — Phase 0 slot baselines (E2)
+
+SUBCOMMANDS
+    capture --project <path> --slot-id <id> --slot-kind <kind> \\
+            --branch <name> --merge-commit <sha> \\
+            [--sentry-count <n>] [--output <path>]
+
+        Computes speed (wall-clock + iterations), size (files / lines),
+        and quality (rework_72h) for a shipped slot, from git history.
+
+SEE ALSO
+    docs/baselines/README.md         Corpus + Phase 3 success criterion
+    schemas/baseline.schema.json     Record contract
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe baseline' subcommand: $sub" >&2
+            echo "Run 'pe baseline help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -492,6 +588,7 @@ case "$cmd" in
     status)     cmd_status "$@" ;;
     doctor)     cmd_doctor "$@" ;;
     eject)      cmd_eject "$@" ;;
+    baseline)   cmd_baseline "$@" ;;
     gate)       cmd_gate "$@" ;;
     version|-v|--version) echo "$VERSION" ;;
     help|-h|--help) help_subcommand "$@" ;;
