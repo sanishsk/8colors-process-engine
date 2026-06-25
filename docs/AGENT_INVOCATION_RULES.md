@@ -37,3 +37,33 @@ Launch 3 agents in parallel:
 3. code-reviewer — general quality
 
 Aggregate findings; fix CRITICAL + HIGH before merge.
+
+## Gate envelope (E1, 2026-06-24)
+
+As of E1, the `code-reviewer` agent emits a machine-parseable
+**gate envelope** as the final fenced ` ```json gate-envelope ` block in
+its output. The envelope carries `verdict`, `failure_class`,
+`findings[]`, `confidence`, `model_used`, and is validated against
+`schemas/gate-envelope.schema.json`. Run `pe gate parse <transcript>`
+to extract + validate it.
+
+**Status of consumers:**
+
+- **E1 ships the contract + one reference emitter** (`code-reviewer`).
+- The orchestrator that routes on the envelope (escalation ladder +
+  circuit breaker) is **Phase 3 — not wired yet**. For now the
+  envelope is observational: it powers dashboards, fixture corpora,
+  and gives Phase 3 something concrete to build against.
+- The remaining gate agents (`security-reviewer`, `tdd-guide`,
+  `e2e-runner`, `database-reviewer`) will adopt the envelope in
+  follow-up slot E1.1.
+
+**Gate-agent paradox:** the `code-reviewer` model is now `sonnet`,
+not `haiku`. Gates run at Sonnet+ regardless of the worker tier
+because the engine's quality bar cannot exceed the gate's quality
+bar. Per-iteration cost implications: see
+`docs/E1_GATE_ENVELOPE.md §4`.
+
+Full rationale, exit-code contract, schema versioning policy, and
+the three orchestrator options (named, deferred to Phase 4) in
+`docs/E1_GATE_ENVELOPE.md`.

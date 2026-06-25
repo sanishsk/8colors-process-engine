@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/sanishsk/8colors-process-engine/blob/master/schemas/gate-envelope.schema.json",
+  "title": "Gate Envelope",
+  "description": "Machine-parseable verdict emitted by L3 quality gate agents (code-reviewer, security-reviewer, tdd-guide, e2e-runner, merge gate). Consumed by the L1 orchestrator to drive the escalation ladder and circuit breaker. See docs/E1_GATE_ENVELOPE.md for design rationale.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "gate_name",
+    "verdict",
+    "failure_class",
+    "findings",
+    "model_used",
+    "timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "SemVer of this envelope schema. Bumped on breaking shape changes. Orchestrator MUST refuse envelopes from unknown major versions.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "examples": ["1.0.0"]
+    },
+    "gate_name": {
+      "type": "string",
+      "description": "Identifier of the gate that produced this envelope. Used by the orchestrator to know which gate failed and what to retry/escalate.",
+      "enum": [
+        "code-reviewer",
+        "security-reviewer",
+        "tdd-guide",
+        "e2e-runner",
+        "database-reviewer",
+        "merge-gate"
+      ]
+    },
+    "verdict": {
+      "type": "string",
+      "description": "Top-level pass/fail signal. WARN means findings exist but none block — orchestrator may proceed but should surface to human.",
+      "enum": ["PASS", "WARN", "FAIL"]
+    },
+    "failure_class": {
+      "type": "string",
+      "description": "ONLY meaningful when verdict=FAIL. Determines whether the orchestrator escalates to a higher-tier worker or halts to a human checkpoint. Set to 'none' when verdict is PASS or WARN.\n\n- worker_quality: the worker produced a buggy/incomplete output the gate could prove wrong. ESCALATE Haiku→Sonnet→Opus→human.\n- task_underspecified: gate cannot tell pass from fail because the goal or acceptance criteria are ambiguous. HALT to human; do not escalate.\n- blocked: an external dependency (missing migration, missing secret, network, broken fixture) prevents the work. HALT to human.\n- out_of_scope: the work proposed by the worker reaches outside the slot scope (touches files not in the slot's allowlist, modifies foundational config, etc.). HALT to human.\n- none: only valid when verdict is PASS or WARN.",
+      "enum": [
+        "worker_quality",
+        "task_underspecified",
+        "blocked",
+        "out_of_scope",
+        "none"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Gate's self-reported confidence in its own verdict, 0.0–1.0. Below 0.6 means the orchestrator should treat verdict as advisory and surface to human. Optional but recommended.",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "findings": {
+      "type": "array",
+      "description": "Structured findings. May be empty even when verdict is FAIL (e.g. failure_class=blocked has no per-file findings).",
+      "items": {
+        "$ref": "#/definitions/finding"
+      }
+    },
+    "summary": {
+      "type": "string",
+      "description": "One-sentence human-readable summary of the verdict. Surfaced in dashboards and dev-log digests.",
+      "maxLength": 280
+    },
+    "model_used": {
+      "type": "string",
+      "description": "Model identifier that produced this envelope. Used by the orchestrator to enforce the gate-agent paradox rule (gates must run at Sonnet+).",
+      "examples": ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"]
+    },
+    "tier": {
+      "type": "string",
+      "description": "Convenience tier label corresponding to model_used.",
+      "enum": ["haiku", "sonnet", "opus"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp at which the gate emitted this envelope."
+    },
+    "scope": {
+      "type": "object",
+      "description": "Optional scope context — useful for the merge gate and for circuit-breaker accounting.",
+      "additionalProperties": false,
+      "properties": {
+        "branch": { "type": "string" },
+        "commit": { "type": "string" },
+        "files_reviewed": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "lines_reviewed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "description": "Optional gate-cost telemetry. Feeds the circuit breaker's per-iteration token budget (gates are per-iteration cost, not fixed overhead — see E1_GATE_ENVELOPE.md §3).",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "cache_read_tokens": { "type": "integer", "minimum": 0 },
+        "wall_seconds": { "type": "number", "minimum": 0 }
+      }
+    }
+  },
+  "definitions": {
+    "finding": {
+      "type": "object",
+      "required": ["severity", "rule", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+          "description": "CRITICAL blocks; HIGH should block unless skip-reason; MEDIUM/LOW are advisory."
+        },
+        "rule": {
+          "type": "string",
+          "description": "Short rule identifier (e.g. 'sql-injection', 'mutable-default', 'rls-bypass'). Stable across runs — used for deduplication and trend analysis.",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "maxLength": 60
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable description of the finding.",
+          "maxLength": 500
+        },
+        "file": {
+          "type": "string",
+          "description": "Relative path from project root. Omit when finding is not file-local."
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-indexed line number. Omit when not applicable."
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "Concrete remediation. Omit when the rule is descriptive only.",
+          "maxLength": 1000
+        }
+      }
+    }
+  }
+}

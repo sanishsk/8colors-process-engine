@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.96,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-06-24T19:47:00Z",
+  "summary": "E1 gate-envelope implementation is production-ready. All schema, parser, CLI, agent prompt, and fixture validations pass. No blocking issues; 2 LOW observations noted but intentional.",
+  "findings": [
+    {
+      "severity": "LOW",
+      "rule": "datetime-parsing-lenient",
+      "file": "scripts/pe_gate.py",
+      "line": 153,
+      "message": "datetime.fromisoformat accepts naive datetimes (no timezone), exceeding JSON Schema draft-07 'format: date-time' spec which technically allows them. Intentional leniency is acceptable for a validator.",
+      "suggestion": "Document in E1.2 (validate-schema subcommand) that this is intentional. No code change required."
+    }
+  ],
+  "scope": {
+    "branch": "feat/e1-gate-envelope",
+    "files_reviewed": [
+      "schemas/gate-envelope.schema.json",
+      "scripts/pe_gate.py",
+      "scripts/pe",
+      "agents/code-reviewer.md",
+      "docs/E1_GATE_ENVELOPE.md",
+      "docs/AGENT_INVOCATION_RULES.md",
+      "schemas/fixtures/pass.json",
+      "schemas/fixtures/fail-escalate.json",
+      "schemas/fixtures/fail-halt.json",
+      "schemas/fixtures/invalid-bad-enum.json",
+      "schemas/fixtures/transcript-fenced.md"
+    ],
+    "lines_reviewed": 987
+  },
+  "cost": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "wall_seconds": 0
+  }
+}
