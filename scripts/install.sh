@@ -28,9 +28,34 @@ mkdir -p "$TARGET/docs/process-engine"
 mkdir -p "$TARGET/scripts"
 mkdir -p "$HOME/.claude/skills"
 
-# Symlink agents (so engine upgrades propagate)
+# Symlink agents (so engine upgrades propagate).
+#
+# Collision detection (E1.c.1, 2026-06-24): for each engine agent we
+# install, check whether ~/.claude/agents/<name>.md exists as a regular
+# file (not a symlink). If so, it will be silently SHADOWED in this
+# project by the project-local symlink we are about to create, but
+# OTHER projects without their own `pe install` will still resolve to
+# the stale user-global file. The user needs to know.
+#
+# Real-world reproduction this guards against: the 8CStudio install
+# ran at engine v0.1 (3 agents), so the other 11 agents shipped over
+# v0.2-v0.7 lived only in ~/.claude/agents/ as pre-engine regular
+# files. They silently shadowed all downstream engine evolution
+# (including the E1 / E1.a gate-envelope contract) until E1.c re-ran
+# `pe install` against 8CStudio. See docs/E1_b_SUBAGENT_MODEL_HONORING.md.
+declare -a USER_GLOBAL_COLLISIONS=()
 for f in "$ENGINE_DIR"/agents/*.md; do
-  ln -sf "$f" "$TARGET/.claude/agents/$(basename "$f")"
+  agent_name="$(basename "$f")"
+  user_global_path="$HOME/.claude/agents/$agent_name"
+  if [ -e "$user_global_path" ] && [ ! -L "$user_global_path" ]; then
+    # Regular file at ~/.claude/agents/<name>.md. Compare to the engine
+    # version; only flag if they actually differ (no false positives
+    # when the user-global file IS already engine content).
+    if ! cmp -s "$f" "$user_global_path"; then
+      USER_GLOBAL_COLLISIONS+=("$agent_name")
+    fi
+  fi
+  ln -sf "$f" "$TARGET/.claude/agents/$agent_name"
 done
 
 # Symlink commands
@@ -104,6 +129,45 @@ for link in "$TARGET"/.claude/agents/*.md "$TARGET"/.claude/commands/*.md \
     BROKEN=$((BROKEN+1))
   fi
 done
+
+# Report user-global agent collisions (E1.c.1).
+#
+# These are agents where ~/.claude/agents/<name>.md exists as a
+# regular file that differs from the engine version. The project
+# we just installed into is FINE (its project-local symlink wins),
+# but every OTHER project that hasn't run `pe install` is still
+# resolving the stale user-global copy. That's a silent shadow we
+# don't want beta testers to discover the hard way.
+if [ "${#USER_GLOBAL_COLLISIONS[@]}" -gt 0 ]; then
+  echo ""
+  echo "⚠  USER-GLOBAL AGENT COLLISIONS DETECTED (${#USER_GLOBAL_COLLISIONS[@]} files)"
+  echo ""
+  echo "  These regular files in ~/.claude/agents/ DIFFER from the engine"
+  echo "  versions of the same agents. For THIS project they are now"
+  echo "  shadowed by the project-local symlinks we just created. But for"
+  echo "  any OTHER project without project-local symlinks, Claude Code"
+  echo "  will still resolve to the stale user-global copies — silently."
+  echo ""
+  echo "  Affected agents:"
+  for name in "${USER_GLOBAL_COLLISIONS[@]}"; do
+    echo "    - ~/.claude/agents/$name"
+  done
+  echo ""
+  echo "  Recommended actions (pick one per agent or apply all):"
+  echo "    1. Run 'pe install' in every other project that should use the"
+  echo "       engine versions of these agents."
+  echo "    2. Diff each user-global file against the engine equivalent."
+  echo "       If it has no operator customizations beyond the engine:"
+  echo "         diff ~/.claude/agents/<name>.md \\"
+  echo "              \"$ENGINE_DIR/agents/<name>.md\""
+  echo "         rm ~/.claude/agents/<name>.md   # falls through to engine"
+  echo "    3. Run 'pe doctor' in any project to enumerate this for that"
+  echo "       project's perspective."
+  echo ""
+  echo "  Why this matters: this is the propagation gap that hid the E1"
+  echo "  gate-envelope contract from Claude Code at runtime for several"
+  echo "  hours of debugging. See docs/E1_b_SUBAGENT_MODEL_HONORING.md."
+fi
 
 if [ $BROKEN -gt 0 ]; then
   echo ""
