@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/sanishsk/8colors-process-engine/blob/master/schemas/baseline.schema.json",
+  "title": "Slot Baseline Record",
+  "description": "Per-slot performance record captured by scripts/baseline.py. The Phase 0 baseline corpus lives in docs/baselines/<slot-id>.json. See docs/E1_GATE_ENVELOPE.md §8 for the metric rationale: Phase 3's escalation ladder must not regress any of the QUALITY fields against this baseline.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "slot_id",
+    "slot_kind",
+    "project",
+    "branch",
+    "merge_commit",
+    "captured_at",
+    "speed",
+    "size",
+    "quality",
+    "measurable_notes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "examples": ["1.0.0"]
+    },
+    "slot_id": {
+      "type": "string",
+      "description": "Project-local slot identifier, e.g. '1M.5', '1M.3', '1m.5.1-sw-cache-bump'.",
+      "minLength": 1
+    },
+    "slot_kind": {
+      "type": "string",
+      "description": "Classification for routing baseline expectations.",
+      "enum": ["feature_incremental", "feature_multi_iteration", "bug_fix", "hotfix", "refactor", "docs"]
+    },
+    "project": {
+      "type": "string",
+      "description": "Project repo path or short name.",
+      "minLength": 1
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "merge_commit": {
+      "type": "string",
+      "description": "Full or short SHA of the merge into master/main.",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "feature_commits": {
+      "type": "array",
+      "description": "Slot-branch commits (excluding merge) — used to count iterations.",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" }
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "speed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wall_clock_hours", "iterations"],
+      "properties": {
+        "wall_clock_hours": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Hours from first slot commit to merge commit."
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of commits on the slot branch (including merge). Proxy for 'how many tries did it take'."
+        },
+        "first_commit_at": { "type": "string", "format": "date-time" },
+        "merged_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files_changed", "lines_added", "lines_removed"],
+      "properties": {
+        "files_changed": { "type": "integer", "minimum": 0 },
+        "lines_added": { "type": "integer", "minimum": 0 },
+        "lines_removed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "description": "Quality is the constraint. Phase 3 ships only if these do not regress.",
+      "additionalProperties": false,
+      "required": ["rework_72h"],
+      "properties": {
+        "rework_72h": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["count", "commits"],
+          "properties": {
+            "count": { "type": "integer", "minimum": 0 },
+            "commits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sha", "subject", "rule"],
+                "properties": {
+                  "sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+                  "subject": { "type": "string" },
+                  "rule": {
+                    "type": "string",
+                    "description": "Why this commit counted as rework.",
+                    "enum": ["slot_id_in_subject", "file_overlap", "fix_prefix_in_window"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sentry_incidents_7d": {
+          "description": "Count of new Sentry issues tagged release:<merge_commit> in the 7-day window. Null when the Sentry MCP was not queryable at capture time.",
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "gate_pass_rate": {
+          "description": "Fraction of slot's gate invocations that returned PASS on first try. NULL for any pre-E1 slot — gates didn't emit envelopes yet. Forward-going only.",
+          "oneOf": [
+            { "type": "number", "minimum": 0, "maximum": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "description": "Optional. Null for all retrospective slots — Claude Code did not emit per-slot token telemetry pre-E2.1. Forward-going slots will populate.",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens":      { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "output_tokens":     { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "cache_read_tokens": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] }
+      }
+    },
+    "measurable_notes": {
+      "type": "array",
+      "description": "Honest accounting of what was and wasn't measurable for this record. Surfaces the retrospective-vs-forward-going distinction so Phase 3 comparisons are fair.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "status", "reason"],
+        "properties": {
+          "field": { "type": "string" },
+          "status": { "type": "string", "enum": ["measured", "null_retrospective", "null_unavailable"] },
+          "reason": { "type": "string", "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

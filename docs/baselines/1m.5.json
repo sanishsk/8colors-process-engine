@@ -1,0 +1,79 @@
+{
+  "branch": "phase1/1m.5-offline-auth-refresh",
+  "captured_at": "2026-06-24T17:01:27+00:00",
+  "cost": {
+    "cache_read_tokens": null,
+    "input_tokens": null,
+    "output_tokens": null
+  },
+  "feature_commits": [
+    "913e26d161fc"
+  ],
+  "measurable_notes": [
+    {
+      "field": "speed.wall_clock_hours",
+      "reason": "first slot commit \u2192 merge commit timestamps",
+      "status": "measured"
+    },
+    {
+      "field": "speed.iterations",
+      "reason": "count of commits on the slot branch",
+      "status": "measured"
+    },
+    {
+      "field": "size.*",
+      "reason": "git diff --numstat on merge commit",
+      "status": "measured"
+    },
+    {
+      "field": "quality.rework_72h",
+      "reason": "fix-prefix or slot_id matches in 72h after merge, file-overlap rule applied",
+      "status": "measured"
+    },
+    {
+      "field": "quality.sentry_incidents_7d",
+      "reason": "no --sentry-count supplied; run Sentry MCP query for release:<merge_commit> 7d window and rerun",
+      "status": "null_unavailable"
+    },
+    {
+      "field": "quality.gate_pass_rate",
+      "reason": "pre-E1 slots \u2014 gates did not emit envelopes; first measurable on post-E1 slots",
+      "status": "null_retrospective"
+    },
+    {
+      "field": "cost.*",
+      "reason": "Claude Code did not emit per-slot token telemetry pre-E2.1; forward-going only",
+      "status": "null_retrospective"
+    }
+  ],
+  "merge_commit": "776b435",
+  "project": "/Users/sanishsasikumar/Documents/8Colors/8CStudio",
+  "quality": {
+    "gate_pass_rate": null,
+    "rework_72h": {
+      "commits": [
+        {
+          "rule": "slot_id_in_subject",
+          "sha": "c90f13b3c008",
+          "subject": "fix(1M.5.1): bump SW CACHE_NAME v9 \u2192 v10 so installed PWAs pick up bootstrapTokens()"
+        }
+      ],
+      "count": 1
+    },
+    "sentry_incidents_7d": null
+  },
+  "schema_version": "1.0.0",
+  "size": {
+    "files_changed": 13,
+    "lines_added": 1169,
+    "lines_removed": 4
+  },
+  "slot_id": "1M.5",
+  "slot_kind": "feature_incremental",
+  "speed": {
+    "first_commit_at": "2026-06-04T20:04:48+00:00",
+    "iterations": 1,
+    "merged_at": "2026-06-04T20:19:44+00:00",
+    "wall_clock_hours": 0.25
+  }
+}
