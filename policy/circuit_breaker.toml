@@ -21,14 +21,19 @@ policy_version = "1.0"
 # each tier gets 2 attempts before the orchestrator escalates.
 tier_retry_cap = 1
 
-# Total worker invocations per slot. Default = 6 = 2 attempts × 3
-# tiers. Headroom for the "lands in one shot" profile (1M.5, 1m.5.1
-# both ran 1 iter); hard halt long before 1M.3's measured 18.
+# Total worker invocations per slot. Default = 6 = (tier_retry_cap + 1)
+# × 3 tiers = 2 attempts × 3 tiers (Haiku, Sonnet, Opus). The cap is
+# derived from the ladder shape, not a round number.
 #
-# Compressing 1M.3's 18 → halt-at-6 is the *intended* outcome: v2 §5.2
-# promises escalation catches the multi-iteration profile and routes
-# it up rather than retrying the same tier indefinitely. The shadow
-# log records whether each halt would have been a correct call.
+# Plotted against E2 baseline iteration counts:
+#   1M.5    → 1 iter   (5 below cap, fits cleanly)
+#   1m.5.1  → 1 iter   (5 below cap, fits cleanly)
+#   1M.3    → 18 iters (12 OVER cap → halt at 6 is the INTENDED
+#                       outcome: v2 §5.2 promises escalation catches
+#                       the multi-iteration profile and routes it up
+#                       rather than retrying indefinitely. The shadow
+#                       log records whether each halt would have been
+#                       a correct call.)
 slot_iteration_cap = 6
 
 [per_slot.overrides]

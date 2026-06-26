@@ -169,9 +169,9 @@ than a single "iteration cap"):
 
 | Knob | Default | Rationale |
 |---|---:|---|
-| `tier_retry_cap` | **1** | One retry at same tier before escalating. Allows 2 attempts per tier. |
+| `tier_retry_cap` | **1** | One retry at same tier before escalating. Allows **2 attempts per tier** (initial + 1 retry). |
 | `ladder_max_steps` | **3** | Haiku → Sonnet → Opus → halt. Fixed by the ladder definition; not a knob. |
-| `slot_iteration_cap` | **6** | `tier_retry_cap * 3 + 3` = 2 attempts × 3 tiers. Headroom for 1M.5 / 1m.5.1 (1 iter, well under); hard halt long before 1M.3's 18. |
+| `slot_iteration_cap` | **6** | `(tier_retry_cap + 1) * ladder_max_steps` = 2 × 3 = **6 worker invocations**. The cap is derived from ladder shape, not picked. Plotted against E2: 1M.5 used **1 iter** (5 below cap, fits), 1m.5.1 used **1 iter** (5 below cap, fits), 1M.3 used **18 iters** (12 *over* cap → halt at 6 is **the intended outcome**, see below). |
 
 **Honest framing:** under this cap, 1M.3's 18-iteration profile
 would have been halted-to-human at iter 6 instead of grinding to 18.
