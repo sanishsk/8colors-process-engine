@@ -157,6 +157,96 @@ out="$(python3 "$ORCH" decide \
     --iteration 1 --current-tier haiku --decisions-log "$LOG")"
 assert_action "transcript escalate" "escalate_one_tier" "$out"
 
+# ─── severity-override (2026-06-26 — slot 1M.3.224b catch) ────────────────
+#
+# Verdict-blind severity floor: a PASS/WARN envelope carrying HIGH or
+# CRITICAL findings overrides the verdict→continue mapping and halts.
+# Mirrors the consumer project's commit policy (HIGH = address-or-
+# skip-documented). Without these tests, the regression would silently
+# auto-merge HIGH-finding work at enforcement.
+
+mk_envelope_with_findings() {
+    # $1=file $2=verdict $3=findings_json_array
+    local file="$1" verdict="$2" findings="$3"
+    cat > "$file" <<JSON
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "$verdict",
+  "failure_class": "none",
+  "confidence": 0.95,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-06-26T00:00:00Z",
+  "summary": "severity-override fixture",
+  "findings": $findings
+}
+JSON
+}
+
+# 6a. WARN + 1 HIGH finding → halt (the original divergence case).
+mk_envelope_with_findings "$TMP/warn-1high.json" "WARN" \
+    '[{"severity": "HIGH", "rule": "x", "message": "y"}]'
+echo "=== 6a. WARN + 1 HIGH finding → halt (severity override) ==="
+out="$(python3 "$ORCH" decide --bare \
+    --envelope "$TMP/warn-1high.json" \
+    --slot-id PHASE3.1 --slot-kind feature_incremental \
+    --iteration 6 --current-tier sonnet --decisions-log "$LOG")"
+assert_action "WARN+HIGH halt" "halt_to_human" "$out"
+assert_rule   "WARN+HIGH halt" "severity_floor:HIGH" "$out"
+
+# 6b. PASS + 1 CRITICAL → halt (CRITICAL also blocks regardless of verdict).
+mk_envelope_with_findings "$TMP/pass-1critical.json" "PASS" \
+    '[{"severity": "CRITICAL", "rule": "x", "message": "y"}]'
+echo "=== 6b. PASS + 1 CRITICAL → halt (severity override) ==="
+out="$(python3 "$ORCH" decide --bare \
+    --envelope "$TMP/pass-1critical.json" \
+    --slot-id PHASE3.1 --slot-kind feature_incremental \
+    --iteration 7 --current-tier sonnet --decisions-log "$LOG")"
+assert_action "PASS+CRITICAL halt" "halt_to_human" "$out"
+assert_rule   "PASS+CRITICAL halt" "severity_floor:CRITICAL" "$out"
+
+# 6c. WARN + only MEDIUM/LOW → continue (no false positive).
+mk_envelope_with_findings "$TMP/warn-medium-low.json" "WARN" \
+    '[{"severity": "MEDIUM", "rule": "x", "message": "y"}, {"severity": "LOW", "rule": "z", "message": "w"}]'
+echo "=== 6c. WARN + only MEDIUM/LOW → continue (no false positive) ==="
+out="$(python3 "$ORCH" decide --bare \
+    --envelope "$TMP/warn-medium-low.json" \
+    --slot-id PHASE3.1 --slot-kind feature_incremental \
+    --iteration 8 --current-tier sonnet --decisions-log "$LOG")"
+assert_action "WARN+MEDIUM/LOW continue" "continue" "$out"
+assert_rule   "WARN+MEDIUM/LOW continue" "none" "$out"
+
+# 6d. PASS + empty findings → continue (regression guard for §10.2).
+mk_envelope_with_findings "$TMP/pass-empty.json" "PASS" "[]"
+echo "=== 6d. PASS + empty findings → continue (regression guard) ==="
+out="$(python3 "$ORCH" decide --bare \
+    --envelope "$TMP/pass-empty.json" \
+    --slot-id PHASE3.1 --slot-kind feature_incremental \
+    --iteration 9 --current-tier sonnet --decisions-log "$LOG")"
+assert_action "PASS+empty continue" "continue" "$out"
+
+# 6e. FAIL + HIGH finding → routes via failure_class, NOT severity floor.
+# Severity floor MUST NOT shadow the existing FAIL→failure_class path.
+mk_envelope_with_findings "$TMP/fail-high.json" "FAIL" \
+    '[{"severity": "HIGH", "rule": "x", "message": "y"}]'
+# Change failure_class to worker_quality so we can verify the FAIL path
+# still routes via failure_class even when HIGH findings are present.
+python3 -c "
+import json
+p = '$TMP/fail-high.json'
+d = json.load(open(p))
+d['failure_class'] = 'worker_quality'
+json.dump(d, open(p, 'w'))
+"
+echo "=== 6e. FAIL + HIGH → failure_class path wins (severity floor doesn't shadow FAIL) ==="
+out="$(python3 "$ORCH" decide --bare \
+    --envelope "$TMP/fail-high.json" \
+    --slot-id PHASE3.1 --slot-kind feature_incremental \
+    --iteration 10 --current-tier haiku --decisions-log "$LOG")"
+assert_action "FAIL+HIGH escalate" "escalate_one_tier" "$out"
+assert_rule   "FAIL+HIGH escalate" "worker_quality -> escalate_one_tier" "$out"
+
 # ─── shadow-mode invariants (load-bearing — the whole point of Phase 3) ───
 
 echo "=== SHADOW-1: every recorded decision has enforced=false ==="
@@ -187,7 +277,12 @@ unexpected_files="$(find "$TMP" -type f \
     ! -path "$TMP/.pe/reconciliations.jsonl" \
     ! -path "$TMP/task-underspec-highconf.json" \
     ! -path "$TMP/blocked-highconf.json" \
-    ! -path "$TMP/out-of-scope-highconf.json")"
+    ! -path "$TMP/out-of-scope-highconf.json" \
+    ! -path "$TMP/warn-1high.json" \
+    ! -path "$TMP/pass-1critical.json" \
+    ! -path "$TMP/warn-medium-low.json" \
+    ! -path "$TMP/pass-empty.json" \
+    ! -path "$TMP/fail-high.json")"
 if [ -z "$unexpected_files" ]; then
     echo "  ✓ only .pe/{decisions,breaker-cumulative,reconciliations} written"
     pass=$((pass + 1))
