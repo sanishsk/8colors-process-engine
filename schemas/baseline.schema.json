@@ -22,7 +22,7 @@
     "schema_version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-      "examples": ["1.0.0"]
+      "examples": ["1.1.0"]
     },
     "slot_id": {
       "type": "string",
@@ -154,6 +154,23 @@
           "field": { "type": "string" },
           "status": { "type": "string", "enum": ["measured", "null_retrospective", "null_unavailable"] },
           "reason": { "type": "string", "maxLength": 500 }
+        }
+      }
+    },
+    "shadow_routed": {
+      "type": "object",
+      "description": "Optional. Present when Phase 3 shadow-mode routing decisions were recorded for this slot (via .pe/decisions.jsonl). Absent on pre-Phase-3 baselines and on slots that bypassed shadow-mode. See docs/PHASE_3_ESCALATION_ROUTER.md §10.",
+      "additionalProperties": false,
+      "required": ["decisions_count", "decision_ids", "actions"],
+      "properties": {
+        "decisions_count": { "type": "integer", "minimum": 1 },
+        "decision_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "actions": {
+          "type": "array",
+          "items": { "type": "string" }
         }
       }
     }

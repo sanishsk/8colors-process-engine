@@ -1,0 +1,93 @@
+# Phase 3 circuit-breaker caps.
+#
+# Two caps run in parallel:
+#   - Per-slot iteration cap (stops one runaway slot)
+#   - Cumulative token budget (primary safety guard — stops
+#     death-by-a-thousand-escalations across the campaign)
+#
+# Gate cost is tracked separately from worker cost because
+# E1 §4 documents the gate-agent paradox: gates run at Sonnet+,
+# so on a 5-iteration slot, gate cost can dominate. Surfacing the
+# two ledgers separately makes budget diagnosis instant.
+#
+# All caps are tuned against the E2 baseline corpus
+# (docs/baselines/{1m.3,1m.5,1m.5.1}.json) — see
+# docs/PHASE_3_ESCALATION_ROUTER.md §3 for the justification.
+
+policy_version = "1.0"
+
+[per_slot]
+# Retries at the same tier before escalating up. With this set to 1,
+# each tier gets 2 attempts before the orchestrator escalates.
+tier_retry_cap = 1
+
+# Total worker invocations per slot. Default = 6 = (tier_retry_cap + 1)
+# × 3 tiers = 2 attempts × 3 tiers (Haiku, Sonnet, Opus). The cap is
+# derived from the ladder shape, not a round number.
+#
+# Plotted against E2 baseline iteration counts:
+#   1M.5    → 1 iter   (5 below cap, fits cleanly)
+#   1m.5.1  → 1 iter   (5 below cap, fits cleanly)
+#   1M.3    → 18 iters BUT NOT thrashing — productive multi-fix
+#                       iteration across phases 6.1.1 → 6.1.9, each
+#                       an operator-discovered edge case between
+#                       staged deploys. The Phase 3 iteration counter
+#                       governs gate-FAIL → retry-or-escalate loops
+#                       on the SAME task; it does NOT count
+#                       operator-driven discovery of new constraints
+#                       across deploys. So 1M.3's 18 commits are
+#                       outside this cap's scope. See
+#                       docs/PHASE_3_ESCALATION_ROUTER.md §3 for the
+#                       full honesty.
+#
+# Cap=6 is shipped to start measuring, NOT to enforce. The shadow log
+# will tell us if a forward-going slot ever hits a gate-driven
+# iter=6 halt that the operator then overrides — that's the
+# "would-have-killed-good-work" signal and a hard graduation block
+# (brief §9).
+#
+# STATUS: tested = false. Cap was never exercised by a forward-going
+# shadow slot at the time of writing. Per brief §9 graduation
+# checklist: un-triggered ≠ validated — absence of the
+# would-have-killed-good-work signature means the cap was never
+# approached, not that it's right. Flip this comment to
+# `tested = true` only after a real shadow slot hits ≥4 gate-driven
+# iters within one work attempt and the operator confirms no
+# would-have-killed-good-work signature appeared.
+slot_iteration_cap = 6
+
+[per_slot.overrides]
+# Per-`slot_kind` overrides. Defaults to slot_iteration_cap when
+# omitted. Re-evaluate after ≥3 forward-going slots per kind show
+# whether the multi-iter profile compresses under escalation.
+# hotfix = 3
+# refactor = 8
+
+[cumulative]
+# PRIMARY safety guard. A router that escalates every slot to Opus
+# stays under each per-slot cap while blowing the total. Default
+# scope = per-campaign (one operator session). Operator can scope to
+# per-day if running long unattended.
+scope = "campaign"
+
+# Token budgets default to `inf` until E2.1 wires per-invocation token
+# capture. Shadow-mode runs with infinite budgets — values below are
+# the structure the breaker will enforce later.
+worker_tokens_budget = "inf"
+gate_tokens_budget   = "inf"
+
+# Once E2.1 lands, expected ratios per v2 §10 (~5× speedup at
+# constant quality budget) put a starting guess at:
+#   worker_tokens_budget = 4_000_000
+#   gate_tokens_budget   = 2_000_000
+# But these MUST be calibrated against actual measured campaigns,
+# not picked here.
+
+[telemetry]
+# Where the breaker writes its ledger. JSONL append-only.
+ledger_path = ".pe/breaker-ledger.jsonl"
+
+# Whether the breaker writes a heartbeat record per slot even when
+# no cap is approaching. Useful for diagnosing "budget evaporated
+# silently" cases. Off by default to keep ledger small in shadow-mode.
+heartbeat = false
