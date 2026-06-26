@@ -43,7 +43,7 @@ retrospective-vs-forward-going line is visible.
 | **lines_added** | 1169 | 6628 | 7 |
 | **lines_removed** | 4 | 68 | 1 |
 | **rework_72h** | **1** | **1** | 0 |
-| **sentry_incidents_7d** | _null (MCP unauthed)_ | _null (MCP unauthed)_ | _n/a_ |
+| **sentry_incidents_7d** | _null (pre-#79)_ | _null (pre-#79)_ | _null (pre-#79)_ |
 | **gate_pass_rate** | _null (pre-E1)_ | _null (pre-E1)_ | _null (pre-E1)_ |
 | **tokens** | _null (pre-E2.1)_ | _null (pre-E2.1)_ | _null (pre-E2.1)_ |
 
@@ -71,7 +71,7 @@ The harness records every "not measured" field with a `status` and a
 |---|---|---|
 | `quality.gate_pass_rate` | `null_retrospective` | Pre-E1, gates emitted prose, not envelopes. First measurable on the **next** slot shipped post-E1 (PR #1). |
 | `cost.*` (tokens) | `null_retrospective` | Claude Code did not emit per-slot token telemetry pre-E2.1. Forward-going slot harness will. |
-| `quality.sentry_incidents_7d` | `null_unavailable` | Sentry MCP requires OAuth at capture time. Operator can rerun harness with `--sentry-count <n>` once authed; the records will update in place. |
+| `quality.sentry_incidents_7d` | `null_retrospective` | **Forward-going only by design** (revised 2026-06-26). Pre-PR #79 (engine commit `b04d428`) deploys had broken release tagging — events from that period are tagged `release: unknown` in Sentry, not the actual SHA. Verified directly via API: queries for `release:<sha>` return 0 across all 3 baselines; the deploy week of 2026-06-04 → 06-11 has 3 issues in Sentry, 2 of them tagged `release: unknown`. Sentry events are immutable — retroactive retag impossible. **DO NOT** "backfill" with 0 (or any number) — null with the receipt is the structural truth; 0 would be a phantom baseline. Forward-going slots (post-#79) carry real release tags and ARE measurable. See `docs/PHASE_3_ESCALATION_ROUTER.md` §11 for the full evidence chain + graduation implications. |
 
 ## Detection rules — known false-positive risks (and the fix in place)
 

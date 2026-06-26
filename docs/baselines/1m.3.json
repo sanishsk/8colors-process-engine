@@ -49,8 +49,8 @@
     },
     {
       "field": "quality.sentry_incidents_7d",
-      "reason": "no --sentry-count supplied; run Sentry MCP query for release:<merge_commit> 7d window and rerun",
-      "status": "null_unavailable"
+      "reason": "Pre-PR #79 (b04d428) deploys: release tagging was broken. deploy-staging.sh did not propagate GIT_SHA over SSH \u2192 compose substituted 'unknown' \u2192 app.py reported release:unknown to Sentry. Evidence verified 2026-06-26 via direct Sentry API: 3 issues exist in the 1M.3/1M.5 deploy week (2026-06-04 \u2192 06-11), 2 of them tagged release:unknown, 0 tagged with any of {776b435, 88c4cc5, c90f13b}. Sentry events are immutable \u2014 retroactive retag impossible. sentry_incidents_7d for pre-PR#79 slots is permanently NULL by design; metric is forward-going only (slots deployed after b04d428 carry real release tags and ARE measurable). See docs/PHASE_3_ESCALATION_ROUTER.md \u00a79 + \u00a711 for graduation impact.",
+      "status": "null_retrospective"
     },
     {
       "field": "quality.gate_pass_rate",

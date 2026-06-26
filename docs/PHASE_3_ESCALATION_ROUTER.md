@@ -274,7 +274,26 @@ declaring graduation on a single lucky slot; larger samples delay
 the cost win unnecessarily.
 
 **Graduation gate (all required):**
-- [ ] Sentry MCP authed AND 3 baselines backfilled with real counts.
+- [ ] **Sentry gate is FORWARD-GOING ONLY** (revised 2026-06-26 after
+      backfill attempt revealed pre-PR#79 release tagging was broken).
+      For slots deployed before PR #79 (engine fix commit `b04d428`),
+      `sentry_incidents_7d` is permanently NULL by design —
+      release-tagging was broken at deploy time, events from that
+      period are tagged `release: unknown` in Sentry, and events are
+      immutable. The three E2 baselines (1M.3, 1M.5, 1m.5.1) all fall
+      in this category and carry `null_retrospective` with the
+      evidence chain in `measurable_notes`.
+      **Criterion is satisfied when:** (a) shadow-mode slots
+      (which now have real release tagging post-#79) accumulate
+      sentry_incidents_7d measurements, AND (b) those measurements
+      show no release-tagged regression against zero (the implicit
+      bar: a healthy slot ships zero new release-tagged Sentry
+      issues in its 7d window — release-tagging now works, so this
+      bar is real).
+      **DO NOT** "fix" the pre-#79 nulls by inventing a number
+      (e.g. zero from the broken-tag query) — that would create a
+      fake baseline to compare against, defeating the gate. The
+      null IS the receipt.
 - [ ] N≥3 forward-going shadow-mode slots logged with full
       reconciliation (§10).
 - [ ] No regression on any of the 3 metrics above.
@@ -395,21 +414,61 @@ N≥3.
 
 ---
 
-## 11. Sentry backfill — graduation block
+## 11. Sentry baseline — forward-going only by design
 
-Sentry MCP auth is pending operator action (2026-06-26 session).
-While unblocking, this:
+**Status revised 2026-06-26 after backfill attempt.** Original
+framing assumed pre-#79 baselines could be retroactively populated
+once Sentry MCP auth completed. They can't. Here's what we learned
+and what it means.
 
-- **Does NOT block building** — shadow-mode + skeleton + schema all
-  proceed against the slot work already underway.
-- **DOES block graduation.** `sentry_incidents_7d` is one of three
-  non-regression metrics. Two of three baselines (1M.5, 1M.3) are
-  currently null on this field. Graduating to enforcement on
-  "2 of 3 metrics" is exactly the corner-cutting operator named as
-  the failure mode.
+**What happened (2026-06-26):**
+- Sentry MCP OAuth flow broken (`mcp.sentry.dev` proxy loses state
+  during GitHub federated login). Confirmed across 4 attempts —
+  not user-fixable.
+- Pivoted to direct Sentry REST API via user auth token (per
+  CLAUDE.md §9 + §12b API-credentials pattern). Auth succeeded
+  cleanly.
+- Queried each merge SHA (`776b435`, `88c4cc5`, `c90f13b`) for
+  release-tagged issues in 7d post-merge window. **All three
+  returned 0.**
 
-Explicit guardrail: graduation checklist item #1 is "Sentry MCP
-authed AND 3 baselines backfilled." No exceptions for "auth was slow."
+**Why "0 across the board" is not a clean result:**
+The Sentry release-tagging fix (PR #79 / engine commit `b04d428`)
+landed 2026-06-25 — **three weeks AFTER** the 1M.3 / 1M.5 / 1m.5.1
+deploys (2026-06-04 / 06-04 / 06-05). Before #79, `deploy-staging.sh`
+didn't propagate `GIT_SHA` over SSH → docker compose substituted
+`unknown` → app.py reported `release: unknown` to Sentry. Verified
+directly: 3 issues exist in the deploy week of 2026-06-04 → 06-11;
+**2 of them are tagged `release: unknown`**; 0 are tagged with any of
+{`776b435`, `88c4cc5`, `c90f13b`}. Sentry events are immutable —
+retroactive retag is impossible.
+
+**Conclusion: `sentry_incidents_7d` is a forward-going-only metric
+for the engine.** Pre-#79 baselines carry `null_retrospective` with
+the evidence chain in `measurable_notes`. Forward-going slots will
+have real release tagging and ARE measurable.
+
+**What this changes for graduation (§9 criterion #1, updated):**
+The Sentry gate is no longer "backfill the 3 baselines"; it is
+"shadow-mode slots show no release-tagged regression against zero,
+where zero is now a real bar because release-tagging works." Same
+"don't compare against a fake number" discipline as the un-triggered
+≠ validated branch in the cap-validation criterion.
+
+**Anti-pattern flagged:** a future session might be tempted to
+"resolve" the null by recording 0 (or any number) into the 3
+baseline JSONs. **Don't.** Null with the receipt is the structural
+truth; 0 would be a phantom baseline.
+
+**Other two graduation metrics unaffected:**
+- `rework_72h` — derived from git history, retrospectively
+  measurable, remains valid for all 3 baselines.
+- `gate_pass_rate` — already `null_retrospective` for all 3 (pre-E1
+  gates emitted prose, not envelopes), unchanged.
+
+So the graduation gate stays meaningful on 2 of 3 metrics
+retrospectively + all 3 metrics forward-going. Net: weaker than the
+original assumption but honest.
 
 ---
 
