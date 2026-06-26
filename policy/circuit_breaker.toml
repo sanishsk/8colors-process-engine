@@ -28,12 +28,23 @@ tier_retry_cap = 1
 # Plotted against E2 baseline iteration counts:
 #   1M.5    → 1 iter   (5 below cap, fits cleanly)
 #   1m.5.1  → 1 iter   (5 below cap, fits cleanly)
-#   1M.3    → 18 iters (12 OVER cap → halt at 6 is the INTENDED
-#                       outcome: v2 §5.2 promises escalation catches
-#                       the multi-iteration profile and routes it up
-#                       rather than retrying indefinitely. The shadow
-#                       log records whether each halt would have been
-#                       a correct call.)
+#   1M.3    → 18 iters BUT NOT thrashing — productive multi-fix
+#                       iteration across phases 6.1.1 → 6.1.9, each
+#                       an operator-discovered edge case between
+#                       staged deploys. The Phase 3 iteration counter
+#                       governs gate-FAIL → retry-or-escalate loops
+#                       on the SAME task; it does NOT count
+#                       operator-driven discovery of new constraints
+#                       across deploys. So 1M.3's 18 commits are
+#                       outside this cap's scope. See
+#                       docs/PHASE_3_ESCALATION_ROUTER.md §3 for the
+#                       full honesty.
+#
+# Cap=6 is shipped to start measuring, NOT to enforce. The shadow log
+# will tell us if a forward-going slot ever hits a gate-driven
+# iter=6 halt that the operator then overrides — that's the
+# "would-have-killed-good-work" signal and a hard graduation block
+# (brief §9).
 slot_iteration_cap = 6
 
 [per_slot.overrides]

@@ -173,17 +173,43 @@ than a single "iteration cap"):
 | `ladder_max_steps` | **3** | Haiku → Sonnet → Opus → halt. Fixed by the ladder definition; not a knob. |
 | `slot_iteration_cap` | **6** | `(tier_retry_cap + 1) * ladder_max_steps` = 2 × 3 = **6 worker invocations**. The cap is derived from ladder shape, not picked. Plotted against E2: 1M.5 used **1 iter** (5 below cap, fits), 1m.5.1 used **1 iter** (5 below cap, fits), 1M.3 used **18 iters** (12 *over* cap → halt at 6 is **the intended outcome**, see below). |
 
-**Honest framing:** under this cap, 1M.3's 18-iteration profile
-would have been halted-to-human at iter 6 instead of grinding to 18.
-That is *the intended outcome* — v2's promise is that escalation
-catches the multi-iteration profile and routes it up rather than
-retrying the same tier indefinitely. The shadow log will record
-whether each of those halts would have been a correct call.
+**Honest framing — 1M.3 specifically** (added 2026-06-26 after
+post-push review): reading 1M.3's 18 commit subjects shows they were
+**productive multi-fix iteration, not thrashing**. Phases 6.1.1 →
+6.1.9 are nine distinct field-test-discovered fixes (silent file
+drop, sticky offline state, bridge UUID cache, server FK guard,
+drain refresh after deploy, etc.) — each surfaced by operator
+airplane-mode testing between staged deploys. Cap=6 would have
+killed the slot eight working fixes short.
+
+What this means for the cap design:
+
+1. **Phase 3's iteration counter is the WRONG axis to count
+   operator-driven discovery.** The counter governs gate-FAIL →
+   retry-or-escalate loops on the *same task*, not new constraints
+   surfaced by external testing. Each post-deploy discovery is a
+   new slot iteration that starts at `iter=1`, not iter=N continuing
+   from yesterday.
+2. **The earlier "intended compression" framing was wrong for
+   1M.3.** Multi-fix slots like 1M.3 are not the failure mode v2
+   §5.2's escalation ladder was built to compress.
+3. **Cap=6 may still be the right value** for its actual scope (one
+   gate-driven retry/escalate loop within one work attempt), but
+   that proposition is now explicitly empirical, not theoretical.
+4. **The shadow log will tell us.** If forward-going slots
+   accumulate gate-driven `iter=6` halts that the operator then
+   overrides to "actually we needed more attempts at this," cap=6
+   is too tight for at least that slot_kind.
+
+**Validation deferred to graduation** — see §9 for the new
+explicit criterion. We ship cap=6 because we have to ship *some*
+number to start measuring; we do not graduate on a theoretical cap.
 
 `slot_iteration_cap` is configurable per `slot_kind` in the policy
-file. The defaults above are the conservative starting point.
-Per-`slot_kind` overrides are an option once forward-going data
-shows the multi-iteration profile reliably needs more headroom.
+file. Defaults are the starting point, calibrated **against the
+gate-driven loop scope only**. Per-`slot_kind` overrides become
+warranted once forward-going data shows a slot kind reliably
+needs more headroom for gate-driven retries.
 
 ---
 
@@ -252,6 +278,15 @@ the cost win unnecessarily.
 - [ ] N≥3 forward-going shadow-mode slots logged with full
       reconciliation (§10).
 - [ ] No regression on any of the 3 metrics above.
+- [ ] **Cap validation against real shadow slots** (added 2026-06-26
+      after the 1M.3 reread): at least ONE shadow slot in the corpus
+      must have run ≥4 gate-driven iterations *within the same
+      work attempt*. If the shadow log shows any case where the
+      router would have halted-at-cap a slot that the operator
+      ultimately landed (the "would-have-killed-good-work"
+      signature), raise the cap before graduating. Without this
+      criterion, cap=6 graduates on a theoretical baseline (no
+      multi-iter gate-driven loop has been observed forward-going).
 - [ ] Operator reviews the shadow-log diff: "would the router have
       changed the outcome on slot X?" — and signs off.
 
