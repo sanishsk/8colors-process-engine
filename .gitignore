@@ -8,4 +8,7 @@ node_modules/
 __pycache__/
 *.pyc
 .env
+
+# Phase 3 shadow-mode runtime logs (never commit — written to consumer repos via pe shadow decide)
+.pe/
 .env.local
