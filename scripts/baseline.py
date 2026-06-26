@@ -55,7 +55,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 REWORK_WINDOW_SECONDS = 72 * 3600
 SENTRY_WINDOW_SECONDS = 7 * 24 * 3600  # for docs only — script doesn't call Sentry
@@ -138,6 +138,42 @@ def merge_touched_files(repo: Path, merge_commit: str) -> set[str]:
     return {line for line in diff.splitlines() if line}
 
 
+def shadow_decisions_for_slot(repo: Path, slot_id: str) -> dict | None:
+    """Phase 3 forward-going hook: report any shadow-routed decisions
+    observed for this slot. Reads .pe/decisions.jsonl from the project
+    root. Returns None when shadow-mode was not used (no file or no
+    matching decisions). See docs/PHASE_3_ESCALATION_ROUTER.md §10.
+    """
+    decisions_path = repo / ".pe" / "decisions.jsonl"
+    if not decisions_path.exists():
+        return None
+    decision_ids: list[str] = []
+    actions: list[str] = []
+    try:
+        with decisions_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("slot_id") != slot_id:
+                    continue
+                decision_ids.append(rec.get("decision_id", "?"))
+                actions.append(rec.get("router_decision", {}).get("action", "?"))
+    except OSError:
+        return None
+    if not decision_ids:
+        return None
+    return {
+        "decisions_count": len(decision_ids),
+        "decision_ids": decision_ids,
+        "actions": actions,
+    }
+
+
 def rework_window(repo: Path, merge_commit: str, slot_id: str) -> dict:
     merged_at = commit_timestamp(repo, merge_commit)
     deadline = merged_at + dt.timedelta(seconds=REWORK_WINDOW_SECONDS)
@@ -205,6 +241,7 @@ def build_record(args: argparse.Namespace) -> dict:
 
     files_changed, lines_added, lines_removed = merge_stat(repo, args.merge_commit)
     rework = rework_window(repo, args.merge_commit, args.slot_id)
+    shadow = shadow_decisions_for_slot(repo, args.slot_id)
 
     notes: list[dict] = []
 
@@ -275,6 +312,17 @@ def build_record(args: argparse.Namespace) -> dict:
         },
         "measurable_notes": notes,
     }
+
+    if shadow is not None:
+        record["shadow_routed"] = shadow
+        note(
+            "shadow_routed",
+            "measured",
+            (
+                f"{shadow['decisions_count']} Phase 3 shadow decision(s) "
+                "observed via .pe/decisions.jsonl"
+            ),
+        )
 
     return record
 

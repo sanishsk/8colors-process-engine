@@ -53,6 +53,8 @@ SUBCOMMANDS
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
     baseline capture ...  Record a Phase 0 slot baseline (speed / size / quality)
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
+    shadow decide ...     Phase 3 shadow-mode routing decision (no enforcement)
+    shadow reconcile ...  Join shadow decisions for a slot to actual outcome
     version               Print engine version
     help [<subcommand>]   Show help
 
@@ -537,6 +539,53 @@ EOF
     esac
 }
 
+cmd_shadow() {
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        decide|reconcile)
+            exec python3 "$ENGINE_DIR/scripts/pe_orchestrator.py" "$sub" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe shadow — Phase 3 escalation router (SHADOW-MODE)
+
+The orchestrator records what it WOULD do given a gate envelope.
+Does NOT enforce — the actual worker / human pipeline continues.
+Decisions and reconciliations feed the graduation harness.
+
+SUBCOMMANDS
+    decide     --envelope <file> --slot-id <id> --iteration <n> \\
+               --current-tier <haiku|sonnet|opus> [--slot-kind <kind>] \\
+               [--routing-policy <file>] [--breaker-policy <file>] \\
+               [--decisions-log .pe/decisions.jsonl]
+
+        Emits one shadow decision per gate envelope. Returns a JSON
+        summary on stdout (action / from_tier / to_tier / rule /
+        breaker-would-trip).
+
+    reconcile  --slot-id <id> [--decisions-log .pe/decisions.jsonl] \\
+               [--reconciliations-log .pe/reconciliations.jsonl]
+
+        Joins all shadow decisions for a slot against actual outcome.
+        Reads the outcome JSON object from stdin (keys: merge_commit,
+        ultimate_outcome, actual_iterations_used,
+        actual_tier_progression, router_correctness).
+
+SEE ALSO
+    docs/PHASE_3_ESCALATION_ROUTER.md   Design, graduation criteria, schema
+    policy/failure_class_routing.toml   Routing rules
+    policy/circuit_breaker.toml         Iteration + token caps
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe shadow' subcommand: $sub" >&2
+            echo "Run 'pe shadow help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -590,6 +639,7 @@ case "$cmd" in
     eject)      cmd_eject "$@" ;;
     baseline)   cmd_baseline "$@" ;;
     gate)       cmd_gate "$@" ;;
+    shadow)     cmd_shadow "$@" ;;
     version|-v|--version) echo "$VERSION" ;;
     help|-h|--help) help_subcommand "$@" ;;
     *)

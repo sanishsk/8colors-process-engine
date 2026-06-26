@@ -1,0 +1,65 @@
+# Phase 3 routing policy — keyed off the E1 envelope's `failure_class`.
+#
+# This file is the receipt: the runtime decision uses the exit code of
+# `pe gate parse` (already classified per E1) + the current worker
+# tier. The rules below MUST stay in lock-step with `pe_gate.py`'s
+# exit-code mapping. If you change one, change both.
+#
+# Allowed actions:
+#   - "escalate_one_tier"  → move worker up one tier on the ladder
+#   - "halt_to_human"      → orchestrator stops; operator decides
+#   - "continue"           → no decision; verdict was PASS (or WARN)
+#
+# Top-tier policy (the operator-refined terminal rule) is encoded
+# below in [terminal_rules].
+
+policy_version = "1.0"
+
+[ladder]
+# Worker tiers, ordered cheapest → most-capable. The orchestrator
+# escalates by stepping forward in this list. Reaching past the end
+# means halt_to_human, regardless of failure_class.
+tiers = ["haiku", "sonnet", "opus"]
+
+# E1 §4 gate-agent paradox: gates run at Sonnet+ even when the worker
+# is on Haiku. The router does not move the gate's tier; only the
+# worker's.
+gate_minimum_tier = "sonnet"
+
+[rules]
+# failure_class → action.
+# `pe gate parse` exit codes for reference: 0=PASS, 1=worker_quality,
+# 2=task_underspecified|blocked|out_of_scope, 3=WARN, 4=schema error.
+worker_quality       = "escalate_one_tier"
+task_underspecified  = "halt_to_human"
+blocked              = "halt_to_human"
+out_of_scope         = "halt_to_human"
+none                 = "continue"
+
+[terminal_rules]
+# Operator refinement: top-tier worker_quality FAIL has nowhere to
+# escalate. Name the terminal state explicitly here, in the policy
+# layer — do not leave it for the breaker to catch.
+top_tier_worker_quality = "halt_to_human"
+
+# Same-class FAIL across every tier on one slot is a derived signal
+# the gate may need review, not the worker. Recorded in the shadow
+# log under `tier_progression_exhausted`. No automatic action — the
+# operator decides whether the gate or the worker is the problem.
+
+[confidence_override]
+# Envelope `confidence` field, when present and below threshold,
+# overrides the routing decision to surface to human regardless of
+# verdict. v2 §11 warns about rubber-stamp gates; this catches them.
+threshold = 0.6
+action_below_threshold = "halt_to_human"
+
+[schema_error]
+# Defensive: if `pe gate parse` returns exit 4 (schema invalid),
+# the envelope is unusable. Never silent-pass.
+action = "halt_to_human"
+
+[unknown]
+# Defensive: if a future schema bump introduces a failure_class this
+# policy doesn't know, halt rather than guess.
+action = "halt_to_human"
