@@ -451,6 +451,60 @@ out, stopped per the timebox rule, reverted cleanly — but
 generated zero shadow records because the diagnosis path never
 fired an agent. Surfaced the gap before graduation, not during it.
 
+### 10.2 Severity-aware routing — finding severity is NOT advisory
+
+**Added 2026-06-26 after slot 1M.3.224b surfaced the second
+unstated precondition on real shadow data.** The original
+routing policy keyed off `verdict + failure_class` only. Finding
+severity was invisible to the router: a `WARN` envelope with 3
+HIGH findings routed identically to a clean `WARN`. That's not
+how consumer projects treat HIGH findings — 8CStudio's commit
+policy (CLAUDE.md §9): "CRITICAL must block; HIGH should be
+fixed before commit unless explicit `Code-skip-reason: <reason>`
+trailer is logged." So the router said "continue" on a state
+where the consumer's own discipline said "stop."
+
+**The rule** (now encoded in `policy/failure_class_routing.toml`
+`[severity_override]`): a PASS or WARN envelope carrying findings
+of severity in `block_severities` (default: `["HIGH",
+"CRITICAL"]`) overrides the verdict→continue mapping and routes
+to `halt_to_human`. FAIL verdicts are untouched — those still
+route via `failure_class` as before. The severity floor fires
+after schema-error + confidence-override and before the
+verdict→continue lookup.
+
+**Why this matters at enforcement:** without this rule, the first
+time the router is taken off shadow-mode, it would silently
+auto-merge any WARN+HIGH or PASS+HIGH work that the consumer
+project's commit-time hooks would have blocked. The router exists
+to AUTOMATE the operator's commit-time judgment; a blind spot at
+this layer would actively contradict the operator's own discipline.
+
+**Receipt:** slot 1M.3.224b (8CStudio, 2026-06-26) generated 3
+envelopes — code-reviewer WARN+1HIGH, database-reviewer PASS+0HIGH,
+security-reviewer WARN+3HIGH. Under the pre-fix policy, all three
+routed `continue` (`rule_matched=none`). Reconcile recorded
+`decisions_matching_reality: 1, decisions_diverging_from_reality:
+2` — the operator stopped on the 4 HIGH findings per project
+policy; the router would have proceeded. That mismatch in
+`.pe/reconciliations.jsonl` is the receipt this rule fixes.
+
+**Cohort reset:** shadow records produced under the pre-fix
+policy (slot 1M.5.1 + slot 1M.3.224b on engine baseline
+`8e533ce` or earlier) cannot validate the corrected policy.
+Honest accounting: N effectively resets toward 0 after this rule
+lands. That's not a setback — it's the cheap-now-vs-catastrophic-
+later read: catching this at 2 records is the whole point of
+shadow-mode. New shadow cohort accumulates against the corrected
+policy starting at the next gate-exercising slot.
+
+**Test coverage** (`tests/test_phase_3_orchestrator.sh`):
+- 6a: WARN + 1 HIGH → halt (rule_matched=`severity_floor:HIGH`)
+- 6b: PASS + 1 CRITICAL → halt (rule_matched=`severity_floor:CRITICAL`)
+- 6c: WARN + only MEDIUM/LOW → continue (no false positive)
+- 6d: PASS + empty findings → continue (regression guard)
+- 6e: FAIL + HIGH finding → routes via `failure_class`, severity floor does NOT shadow the FAIL path
+
 ---
 
 ## 11. Sentry baseline — forward-going only by design

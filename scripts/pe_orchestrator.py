@@ -186,6 +186,36 @@ def route(
             notes=f"envelope confidence={confidence} < {threshold}",
         )
 
+    # 2.5. Severity-override — verdict-blind severity floor. Fires
+    # BEFORE PASS/WARN→continue so a WARN-with-HIGH-findings envelope
+    # halts rather than silently advancing. Mirrors the consumer
+    # project's commit policy (HIGH = address-or-skip-documented).
+    # Added 2026-06-26 after slot 1M.3.224b surfaced the gap on real
+    # shadow data — see policy receipt + brief §10.2.
+    severity_cfg = routing_policy.get("severity_override", {})
+    block_severities = set(severity_cfg.get("block_severities", []))
+    if block_severities and verdict in ("PASS", "WARN"):
+        findings = envelope.get("findings") or []
+        blocking = [
+            f for f in findings
+            if isinstance(f, dict) and f.get("severity") in block_severities
+        ]
+        if blocking:
+            blocking_sevs = sorted({f.get("severity") for f in blocking})
+            return RouterDecision(
+                action=severity_cfg.get("action_on_match", "halt_to_human"),
+                from_tier=current_worker_tier,
+                to_tier=None,
+                rule_matched=(
+                    f"severity_floor:{','.join(blocking_sevs)}"
+                ),
+                rule_source=rule_source,
+                notes=(
+                    f"verdict={verdict} but {len(blocking)} finding(s) at "
+                    f"blocking severity ({','.join(blocking_sevs)})"
+                ),
+            )
+
     # 3. PASS / WARN → continue.
     if verdict in ("PASS", "WARN"):
         return RouterDecision(

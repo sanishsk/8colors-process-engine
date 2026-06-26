@@ -54,6 +54,35 @@ top_tier_worker_quality = "halt_to_human"
 threshold = 0.6
 action_below_threshold = "halt_to_human"
 
+[severity_override]
+# Verdict-blind severity floor — added 2026-06-26 after 8CStudio
+# slot 1M.3.224b surfaced a real policy gap on shadow data.
+#
+# A PASS or WARN envelope carrying findings of severity in
+# `block_severities` overrides the verdict→continue mapping and
+# routes to `action_on_match` (typically halt_to_human). The router
+# exists to AUTOMATE the consumer project's commit policy, and that
+# policy treats HIGH findings as blocking-pending-skip-reason (see
+# 8CStudio CLAUDE.md §9: "CRITICAL must block; HIGH should be fixed
+# before commit unless explicit Code-skip-reason trailer is logged").
+# Without this gate, a WARN-with-3-HIGH envelope routes identically
+# to a clean WARN — silently auto-merging work the operator policy
+# says to stop on.
+#
+# Receipt (the divergence this fixes): slot 1M.3.224b shadow run
+# (engine `8e533ce` baseline) produced 3 envelopes — code-reviewer
+# WARN+1HIGH, database-reviewer PASS, security-reviewer WARN+3HIGH.
+# Router said continue on all three. Reconcile showed 2/3 decisions
+# diverged from what the operator actually did (stopped to address
+# HIGHs per project policy). Slot's reconciliation log captures this
+# as the routing-policy gap.
+#
+# This rule fires AFTER schema-error + confidence-override and
+# BEFORE the verdict→continue / failure_class lookups. It does NOT
+# fire on FAIL verdicts (those already route via failure_class).
+block_severities = ["HIGH", "CRITICAL"]
+action_on_match = "halt_to_human"
+
 [schema_error]
 # Defensive: if `pe gate parse` returns exit 4 (schema invalid),
 # the envelope is unusable. Never silent-pass.
