@@ -412,6 +412,45 @@ If the schema cannot answer any of these for a given slot, the
 reconciliation is incomplete and that slot does not count toward
 N≥3.
 
+### 10.1 Unstated precondition — slots must exercise the gate layer to count
+
+**Added 2026-06-26 after the first shadow-mode slot ran.** §9's
+"N≥3 forward-going slots" criterion has a precondition that was
+implicit in the original draft and surfaced only when a real slot
+ran: **a slot counts toward N only if it actually invokes the L3
+gate layer.** Pure-diagnosis slots — investigation without a code
+change that fires an agent — produce zero `pe shadow decide`
+invocations and therefore zero per-decision records. There is
+nothing for the router to decide on, and §2.D explicitly forbids
+manufacturing synthetic envelopes to fill the gap ("would validate
+the router against synthetic data").
+
+This is one layer up from the un-triggered≠validated principle: a
+slot that *ran* is not necessarily a slot that *exercised the
+router*. The N≥3 bar is N≥3 router-exercising slots.
+
+**Concrete consequence for slot selection:**
+
+| Slot kind | Counts toward N? | Why |
+|---|---|---|
+| Code change that fires ≥1 L3 gate | YES | Real envelope → real router decision → real reconciliation |
+| Pure-diagnosis (no code change) | NO | Zero envelopes → null-by-design reconciliation |
+| Code change firing gates but all PASS (failure_class=none) | YES, but low-signal | Records `continue` decisions; useful as plumbing proof but doesn't exercise escalation/halt paths |
+| Code change triggering escalation, halt, or near-cap | YES, and high-signal | The slots where the router does its interesting work — graduation cohort should include ≥1 of these |
+
+**Selection heuristic:** the N≥3 cohort must collectively cover at
+least one slot that exercises **escalation or halt or near-cap**,
+not three thin PASS-only slots. Three PASS slots prove plumbing,
+not routing. The receipt for graduation is the router actually
+making non-trivial decisions, not just logging them.
+
+**Origin:** caught by the first shadow-mode slot run
+(2026-06-26, 8CStudio BACKLOG #224 diagnosis). The slot did real,
+disciplined work — diagnosed hypothesis (a), found it didn't pan
+out, stopped per the timebox rule, reverted cleanly — but
+generated zero shadow records because the diagnosis path never
+fired an agent. Surfaced the gap before graduation, not during it.
+
 ---
 
 ## 11. Sentry baseline — forward-going only by design
