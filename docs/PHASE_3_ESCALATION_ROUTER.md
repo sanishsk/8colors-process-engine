@@ -287,6 +287,29 @@ the cost win unnecessarily.
       signature), raise the cap before graduating. Without this
       criterion, cap=6 graduates on a theoretical baseline (no
       multi-iter gate-driven loop has been observed forward-going).
+- [ ] **Un-triggered ≠ validated** (added 2026-06-26): if at
+      graduation time NO shadow slot has exercised ≥4 gate-driven
+      iters within one work attempt, the cap is **UNVALIDATED**,
+      not validated. Absence of the would-have-killed-good-work
+      signature is meaningless if the cap was never approached
+      (same "no CI fired ≠ CI passed" failure mode as the
+      trigger-filter saga in 8CStudio's #225 work). Two acceptable
+      paths in this state:
+      - (a) **Keep accumulating shadow slots** until at least one
+        exercises the cap, then re-evaluate against the §9 criterion
+        above. This is the rigorous path.
+      - (b) **Graduate with explicit "untested-conservative" flag**
+        on the cap value, plus a recorded watchpoint:
+        `pe shadow alert --on first-cap-trip` (future work) or an
+        operator-side dashboard entry that surfaces the first
+        gate-driven iter≥4 the moment it lands. Either way, the
+        cap's status in `policy/circuit_breaker.toml` must be
+        marked `tested = false  # see §9 watchpoint` until path
+        (a) closes the loop.
+      Path (b) is acceptable because the cap is conservative — it
+      can only **cut work short**, never extend a runaway — and
+      shadow-log retrospection lets us catch the first miscall and
+      raise the cap before any second slot suffers.
 - [ ] Operator reviews the shadow-log diff: "would the router have
       changed the outcome on slot X?" — and signs off.
 

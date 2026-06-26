@@ -45,6 +45,15 @@ tier_retry_cap = 1
 # iter=6 halt that the operator then overrides — that's the
 # "would-have-killed-good-work" signal and a hard graduation block
 # (brief §9).
+#
+# STATUS: tested = false. Cap was never exercised by a forward-going
+# shadow slot at the time of writing. Per brief §9 graduation
+# checklist: un-triggered ≠ validated — absence of the
+# would-have-killed-good-work signature means the cap was never
+# approached, not that it's right. Flip this comment to
+# `tested = true` only after a real shadow slot hits ≥4 gate-driven
+# iters within one work attempt and the operator confirms no
+# would-have-killed-good-work signature appeared.
 slot_iteration_cap = 6
 
 [per_slot.overrides]
