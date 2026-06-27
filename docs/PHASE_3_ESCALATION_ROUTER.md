@@ -306,29 +306,104 @@ the cost win unnecessarily.
       signature), raise the cap before graduating. Without this
       criterion, cap=6 graduates on a theoretical baseline (no
       multi-iter gate-driven loop has been observed forward-going).
-- [ ] **Un-triggered ≠ validated** (added 2026-06-26): if at
-      graduation time NO shadow slot has exercised ≥4 gate-driven
-      iters within one work attempt, the cap is **UNVALIDATED**,
-      not validated. Absence of the would-have-killed-good-work
-      signature is meaningless if the cap was never approached
-      (same "no CI fired ≠ CI passed" failure mode as the
-      trigger-filter saga in 8CStudio's #225 work). Two acceptable
-      paths in this state:
+- [ ] **Un-triggered ≠ validated — but fail-safe mechanisms may
+      graduate untested with explicit flags** (added 2026-06-26,
+      generalized 2026-06-27): if at graduation time NO shadow slot
+      has exercised a given routing-policy mechanism, that mechanism
+      is **UNVALIDATED**, not validated. Absence of the
+      would-have-killed-good-work signature is meaningless if the
+      mechanism was never approached (same "no CI fired ≠ CI passed"
+      failure mode as the trigger-filter saga in 8CStudio's #225
+      work).
+
+      **Mechanisms this clause covers:**
+      - **`slot_iteration_cap` (cap)** — per-slot iteration budget,
+        currently 6.
+      - **`severity_override` (severity-floor)** — PASS/WARN with
+        HIGH/CRITICAL findings halts to human. Added 2026-06-26 per
+        §10.2.
+      - **`worker_quality → escalate_one_tier` (escalation-ladder)**
+        — tier promotion on worker_quality FAIL.
+
+      **Two paths for each mechanism, independently:**
       - (a) **Keep accumulating shadow slots** until at least one
-        exercises the cap, then re-evaluate against the §9 criterion
-        above. This is the rigorous path.
+        exercises the mechanism, then re-evaluate against §9. This
+        is the rigorous path.
       - (b) **Graduate with explicit "untested-conservative" flag**
-        on the cap value, plus a recorded watchpoint:
-        `pe shadow alert --on first-cap-trip` (future work) or an
-        operator-side dashboard entry that surfaces the first
-        gate-driven iter≥4 the moment it lands. Either way, the
-        cap's status in `policy/circuit_breaker.toml` must be
-        marked `tested = false  # see §9 watchpoint` until path
-        (a) closes the loop.
-      Path (b) is acceptable because the cap is conservative — it
-      can only **cut work short**, never extend a runaway — and
-      shadow-log retrospection lets us catch the first miscall and
-      raise the cap before any second slot suffers.
+        on the mechanism. The mechanism's status in
+        `policy/failure_class_routing.toml` (or
+        `policy/circuit_breaker.toml` for cap) must carry
+        `tested = false  # see §9 watchpoint` until path (a)
+        closes the loop. **Path (b) requires a concrete-now
+        watchpoint obligation, not aspirational tooling** — the
+        safety argument for (b) is "retrospection catches the
+        first miscall before a second slot suffers," and that's
+        only real if the surfacing mechanism exists today.
+
+      **Path (b) watchpoint obligation — concrete, executable
+      today, no orchestrator change required:** the operator
+      manually reviews the first **M=3** enforce-mode slots'
+      `.pe/decisions.jsonl` specifically for first-fires of any
+      `tested=false` mechanism. First-fire detection rules (against
+      the existing decision-record schema in §10):
+      - **cap first-fire:**
+        `breaker_state_at_decision.breaker_would_trip == true`
+        AND `enforced == true`.
+      - **severity-floor first-fire:**
+        `router_decision.rule_matched` starts with
+        `severity_floor:` AND `enforced == true`.
+      - **escalation-ladder first-fire:**
+        `router_decision.action == "escalate_one_tier"` AND
+        `enforced == true`.
+
+      The manual-review commitment is **recorded in the graduation
+      signoff** with the M value (default 3, matches §9 cohort
+      minimum) and the scope (which mechanisms are `tested=false`
+      at graduation). When a first-fire is detected, the operator
+      inspects whether the router's call matched what they would
+      have done; if it diverges, the policy is tightened OR the
+      mechanism's `tested=false` is escalated to a real
+      graduation re-evaluation before the next slot runs. **The
+      watchpoint is the operator's commitment, not a tool — it
+      must be carried out, not assumed.**
+
+      **Eligibility for path (b) — fail-safe requirement:** path
+      (b) is only available for mechanisms whose unexpected-case
+      behavior is **provably fail-safe** (degenerate or
+      unanticipated input routes to halt_to_human, never to
+      continue or silent retry). The proof must be in writing — a
+      static-analysis trace through the orchestrator code citing
+      every degenerate branch and showing it routes to halt — and
+      cited in the graduation-checklist signoff.
+
+      - **Cap:** fail-safe (can only cut work short, never extend
+        a runaway; iteration counter is monotonic).
+      - **Severity-floor:** fail-safe **conditional on reviewer
+        calibration**. Floor cannot silently pass a HIGH the
+        reviewer **holds**; a HIGH the reviewer over-downgrades
+        upstream of the envelope never reaches the floor (see
+        `memory/project_phase_3_severity_floor_held_highs_only.md`
+        in the consuming project + §10.2 for the original
+        receipt). Eligibility for path (b) **preserved** —
+        over-halting on held HIGHs is still over-halting, never
+        under-halting — but the conditional must be **named in
+        the graduation signoff**, not rounded up to unconditional.
+      - **Escalation-ladder:** fail-safe per static-analysis
+        2026-06-27 — top-tier exhaustion → halt via
+        `top_tier_worker_quality`; unknown tier → halt; unknown
+        failure_class → halt; schema error → halt; confidence
+        below threshold → halt. No fallback-to-continue anywhere
+        on the escalate path. **Caveat:** static ≠ runtime;
+        first-fire in enforcement requires the same scrutiny that
+        slot 1M.3.224b got.
+
+      Path (b) is acceptable for the three named mechanisms
+      because each is conservative — over-halts or cuts short,
+      never silently extends a runaway or auto-merges bad work.
+      The path (b) watchpoint catches the first miscall and
+      tightens the policy before any second slot suffers — but
+      only if the watchpoint is actually carried out per the
+      signoff commitment.
 - [ ] Operator reviews the shadow-log diff: "would the router have
       changed the outcome on slot X?" — and signs off.
 
@@ -443,6 +518,45 @@ least one slot that exercises **escalation or halt or near-cap**,
 not three thin PASS-only slots. Three PASS slots prove plumbing,
 not routing. The receipt for graduation is the router actually
 making non-trivial decisions, not just logging them.
+
+**The good-faith-attempt clause** (added 2026-06-27): the selection
+heuristic above says the cohort must INCLUDE a slot that exercises
+escalation/halt/near-cap — not that the slot must *organically*
+trigger. The distinction matters because some mechanisms
+(worker_quality FAIL → escalation; near-cap from ≥4 iter loops)
+cannot be scheduled — they happen when reality produces them, not
+on operator pace. Holding graduation hostage to an unscheduled
+event has no upper bound and contradicts §9's "larger samples
+delay the cost win unnecessarily" framing.
+
+**Therefore the heuristic is satisfied when:** the cohort INCLUDES
+≥1 slot SELECTED for substantive non-trivial potential (real
+surface area likely to produce a held HIGH, a worker_quality FAIL,
+or a multi-iter loop) AND run in good faith. If that slot
+organically exercises escalation/halt/near-cap, the relevant
+mechanism is `tested=true` at graduation — bonus. If it does not,
+graduation may proceed with the relevant mechanism `tested=false`
+per §9's "Un-triggered ≠ validated" path (b), provided:
+- The slot's selection rationale is recorded in the reconciliation
+  `notes` field. "Selected for substantive non-trivial potential"
+  is not boilerplate — name the surface area expected to produce
+  the trigger.
+- The mechanism is on §9's fail-safe eligibility list.
+- The operator watchpoint per §9 path (b) is committed in the
+  graduation signoff (concrete-now obligation, not aspirational
+  tooling).
+
+**Anti-pattern this clause forbids:** running three thin PASS-only
+slots ALL picked for smallest-mechanical count-clearance, then
+graduating on the basis that none organically fired. The cohort
+must contain ≥1 slot whose selection rationale is
+substantive-non-trivial-potential; the "did it actually fire"
+question becomes the bonus, not the gate.
+
+**Anti-pattern this clause does NOT forbid:** picking a real
+substantive slot, running it honestly, and graduating with the
+mechanism `tested=false` when reality didn't produce the trigger.
+That's good engineering, not a shortcut.
 
 **Origin:** caught by the first shadow-mode slot run
 (2026-06-26, 8CStudio BACKLOG #224 diagnosis). The slot did real,
