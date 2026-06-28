@@ -545,7 +545,7 @@ def cmd_decide(args: argparse.Namespace) -> int:
         envelope=envelope or {},
         router_decision=asdict(decision),
         breaker_state_at_decision=asdict(breaker_state),
-        enforced=False,
+        enforced=bool(getattr(args, "enforce", False)),
     )
     append_decision(record, decisions_path)
 
@@ -557,7 +557,7 @@ def cmd_decide(args: argparse.Namespace) -> int:
         "rule_matched": decision.rule_matched,
         "breaker_would_trip": breaker_state.breaker_would_trip,
         "trip_reason": breaker_state.trip_reason,
-        "enforced": False,
+        "enforced": bool(getattr(args, "enforce", False)),
     }
     print(json.dumps(summary, indent=2))
     return 0
@@ -598,6 +598,20 @@ def build_parser() -> argparse.ArgumentParser:
             "Treat --envelope as raw JSON (fixture mode). Default is "
             "transcript mode — E1.d cross-check enforced. Use for tests "
             "only; real agent emissions go through transcripts."
+        ),
+    )
+    d.add_argument(
+        "--enforce",
+        action="store_true",
+        help=(
+            "Phase 3 GRADUATED 2026-06-28: mark the decision record "
+            "as enforced=true. The operator pipeline commits to acting "
+            "on the router's decision (halt / escalate / continue) "
+            "rather than just logging it. Required for §9 watchpoint "
+            "first-fire detection — the M=3 enforce-mode review "
+            "depends on `enforced == true` rows. Default (shadow mode) "
+            "remains False for backwards-compat + so test fixtures "
+            "stay non-enforcing."
         ),
     )
     d.set_defaults(func=cmd_decide)

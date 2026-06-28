@@ -46,15 +46,21 @@ tier_retry_cap = 1
 # "would-have-killed-good-work" signal and a hard graduation block
 # (brief §9).
 #
-# STATUS: tested = false. Cap was never exercised by a forward-going
-# shadow slot at the time of writing. Per brief §9 graduation
-# checklist: un-triggered ≠ validated — absence of the
-# would-have-killed-good-work signature means the cap was never
-# approached, not that it's right. Flip this comment to
-# `tested = true` only after a real shadow slot hits ≥4 gate-driven
-# iters within one work attempt and the operator confirms no
-# would-have-killed-good-work signature appeared.
+# STATUS at graduation (2026-06-28): tested = false # see §9 watchpoint
+#
+# Per brief §9 path (b) (PR #14 generalization, 2026-06-27): the cap
+# carries untested with explicit flag. Fail-safe eligibility proof:
+# can only cut work short, never extend a runaway; iteration counter
+# is monotonic. Cited in graduation signoff. Operator watchpoint:
+# M=3 enforce-mode slots' .pe/decisions.jsonl reviewed for first-fires
+# detected by `breaker_state_at_decision.breaker_would_trip == true
+# AND enforced == true`. On first-fire: operator inspects whether
+# router's halt-at-cap matched what they would have done; if diverges,
+# policy tightened OR tested=false escalated to real re-evaluation
+# before next slot runs. Flip this to `tested = true` only after
+# first-fire match-with-reality is confirmed.
 slot_iteration_cap = 6
+tested = false  # see §9 watchpoint
 
 [per_slot.overrides]
 # Per-`slot_kind` overrides. Defaults to slot_iteration_cap when

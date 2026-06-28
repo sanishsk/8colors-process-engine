@@ -36,6 +36,25 @@ blocked              = "halt_to_human"
 out_of_scope         = "halt_to_human"
 none                 = "continue"
 
+# Escalation-ladder STATUS at graduation (2026-06-28):
+#   worker_quality → escalate_one_tier — tested = false  # see §9 watchpoint
+#
+# Per brief §9 path (b) (PR #14 generalization, 2026-06-27): the
+# escalation ladder carries untested with explicit flag because no
+# shadow slot in cohort produced an organic worker_quality FAIL.
+# Fail-safe eligibility proof: top-tier exhaustion → halt via
+# `top_tier_worker_quality`; unknown tier → halt; unknown failure_class
+# → halt; schema error → halt; confidence below threshold → halt. No
+# fallback-to-continue anywhere on the escalate path. Cited in
+# graduation signoff. Operator watchpoint: M=3 enforce-mode slots'
+# .pe/decisions.jsonl reviewed for first-fires detected by
+# `router_decision.action == "escalate_one_tier" AND enforced == true`.
+# On first-fire: same scrutiny that slot 1M.3.224b got — operator
+# inspects whether router's escalation matched what they would have
+# done; if diverges, policy tightened OR tested=false escalated to
+# real re-evaluation before next slot runs. Flip to `tested = true`
+# only after first-fire match-with-reality is confirmed.
+
 [terminal_rules]
 # Operator refinement: top-tier worker_quality FAIL has nowhere to
 # escalate. Name the terminal state explicitly here, in the policy
