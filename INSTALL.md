@@ -17,7 +17,17 @@ git clone https://github.com/sanishsk/8colors-process-engine.git \
     ~/.local/share/8colors-process-engine
 
 # 2. Symlink the pe CLI onto your PATH
+mkdir -p ~/.local/bin
 ln -s ~/.local/share/8colors-process-engine/scripts/pe ~/.local/bin/pe
+
+# 2a. Verify ~/.local/bin is on $PATH. Stock macOS zsh does not include it.
+#     If this prints "MISSING", add the export line to ~/.zshrc (or ~/.bashrc)
+#     and start a new shell, then re-run the check.
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) echo "OK — ~/.local/bin is on PATH" ;;
+  *) echo "MISSING — add this to ~/.zshrc, then open a new shell:"
+     echo '  export PATH="$HOME/.local/bin:$PATH"' ;;
+esac
 
 # 3. Install into a target project
 pe install /path/to/your-project

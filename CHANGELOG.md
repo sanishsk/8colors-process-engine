@@ -12,6 +12,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 > Distribution bundle: makes "everyone gets engine improvements" real.
 > Engine never self-modifies; humans review + version + pull.
 
+### Added
+
+- **INSTALL.md PATH check** — the quick-install snippet now includes a
+  `case` block that detects whether `~/.local/bin` is on `$PATH` and
+  prints the exact `export` line for `~/.zshrc` if not. Stock macOS zsh
+  doesn't include `~/.local/bin`, which produced a first-30-seconds
+  `pe: command not found` during the Origyn cross-environment install
+  test. Also adds an explicit `mkdir -p ~/.local/bin` before the
+  symlink in case the directory doesn't exist yet.
+
 ### Changed
 
 - **`pe` CLI** — Phase 3 graduated 2026-06-28, so the subcommand summary
