@@ -45,7 +45,9 @@ USAGE
     pe <subcommand> [args]
 
 SUBCOMMANDS
-    install <project>     Install agents/commands/skills/scripts into a project
+    install [--subset gate-only|core|full] <project>
+                          Install agents/commands/skills/scripts into a project
+                          (--subset controls which agents; default full)
     launchd <project>     Wire macOS launchd weekly CEO retro (macOS only)
     upgrade               git pull the engine; symlinks auto-propagate
     status                Show engine version, last commit, install paths
@@ -76,16 +78,37 @@ help_subcommand() {
     case "${1:-}" in
         install)
             cat <<EOF
-pe install <project>
+pe install [--subset gate-only|core|full] <project>
 
-Symlinks all engine agents, commands, skills, and scripts into the
+Symlinks engine agents, commands, skills, and scripts into the
 target project. Idempotent — re-run after engine upgrades or after
 adding new files.
 
+Subset presets (controls which agents get symlinked; commands,
+skills, and scripts are always installed):
+
+  gate-only  5 gate agents only:
+             code-reviewer, security-reviewer, database-reviewer,
+             tdd-guide, e2e-runner.
+
+  core       gate-only + planner + brief-writer + architect (8 agents).
+             The smallest install that supports the brief → plan →
+             implement → review pipeline.
+
+  full       All engine agents. Default — current behavior, no-surprise.
+
+Resolution order when --subset is omitted:
+  1. The install: subset value already in .process-engine.yaml
+     (preserves the choice from a prior install).
+  2. "full" (default).
+
+The resolved subset is persisted to .process-engine.yaml under
+install.subset so pe sync honors the operator's choice on re-points.
+
 What gets installed:
-  - Agents (9)    → <project>/.claude/agents/        (symlinked)
-  - Commands (4) → <project>/.claude/commands/      (symlinked)
-  - Skills (2)   → ~/.claude/skills/                 (symlinked, user-global)
+  - Agents        → <project>/.claude/agents/        (symlinked, subset-filtered)
+  - Commands     → <project>/.claude/commands/      (symlinked)
+  - Skills       → ~/.claude/skills/                 (symlinked, user-global)
   - research_index.py → <project>/scripts/           (symlinked)
   - .process-engine.yaml → <project>/                (copied if absent)
   - Templates    → <project>/docs/templates/         (copied)
@@ -204,8 +227,13 @@ EOF
 # ─── subcommand handlers ────────────────────────────────────────────────────
 
 cmd_install() {
-    local target="${1:?Usage: pe install <project>}"
-    exec "$ENGINE_DIR/scripts/install.sh" "$target"
+    if [ $# -lt 1 ]; then
+        echo "Usage: pe install [--subset gate-only|core|full] <project>" >&2
+        exit 1
+    fi
+    # Forward all args (flags + positional) to install.sh. install.sh owns
+    # validation and resolution (explicit flag > existing yaml > full default).
+    exec "$ENGINE_DIR/scripts/install.sh" "$@"
 }
 
 cmd_launchd() {

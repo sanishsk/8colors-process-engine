@@ -14,12 +14,72 @@
 # - brief-writer + architect agents now consult the index in their Step 0
 
 set -euo pipefail
-TARGET="${1:?Usage: ./install.sh /path/to/target-project}"
 ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# ─── Arg parsing ───────────────────────────────────────────────────────────
+# Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project
+SUBSET=""
+TARGET=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --subset)       SUBSET="${2:-}"; shift 2 ;;
+    --subset=*)     SUBSET="${1#--subset=}"; shift ;;
+    -h|--help)
+      echo "Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project"
+      exit 0 ;;
+    --*)
+      echo "Unknown flag: $1" >&2
+      echo "Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project" >&2
+      exit 2 ;;
+    *)
+      if [ -z "$TARGET" ]; then TARGET="$1"; else
+        echo "Unexpected positional arg: $1" >&2; exit 2
+      fi
+      shift ;;
+  esac
+done
+
+if [ -z "$TARGET" ]; then
+  echo "Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project" >&2
+  exit 1
+fi
 
 if [ ! -d "$TARGET" ]; then
   echo "Target $TARGET does not exist"; exit 1
 fi
+
+# Validate subset value if provided
+case "$SUBSET" in
+  ""|gate-only|core|full) ;;
+  *)
+    echo "ERROR: --subset must be one of: gate-only, core, full (got: $SUBSET)" >&2
+    exit 2 ;;
+esac
+
+# Resolve subset:
+#   1. Explicit --subset wins.
+#   2. Else inherit from existing .process-engine.yaml install.subset (re-install case).
+#   3. Else default to "full" (no-surprise default — current behavior).
+if [ -z "$SUBSET" ] && [ -f "$TARGET/.process-engine.yaml" ]; then
+  EXISTING=$(awk '/^install:/{f=1;next} f && /^  subset:/{print $2; exit} f && /^[^ ]/{exit}' "$TARGET/.process-engine.yaml" 2>/dev/null || true)
+  if [ -n "$EXISTING" ]; then
+    SUBSET="$EXISTING"
+  fi
+fi
+SUBSET="${SUBSET:-full}"
+
+# ─── Preset rosters (locked per docs/BACKLOG.md P1.3 confirmation) ────────
+GATE_ONLY_AGENTS="code-reviewer security-reviewer database-reviewer tdd-guide e2e-runner"
+CORE_AGENTS="$GATE_ONLY_AGENTS planner brief-writer architect"
+
+agent_in_subset() {
+  local name="$1"
+  case "$SUBSET" in
+    full)      return 0 ;;
+    core)      [[ " $CORE_AGENTS " == *" $name "* ]] ;;
+    gate-only) [[ " $GATE_ONLY_AGENTS " == *" $name "* ]] ;;
+  esac
+}
 
 mkdir -p "$TARGET/.claude/agents"
 mkdir -p "$TARGET/.claude/commands"
@@ -44,8 +104,20 @@ mkdir -p "$HOME/.claude/skills"
 # (including the E1 / E1.a gate-envelope contract) until E1.c re-ran
 # `pe install` against 8CStudio. See docs/E1_b_SUBAGENT_MODEL_HONORING.md.
 declare -a USER_GLOBAL_COLLISIONS=()
+declare -a INSTALLED_AGENTS=()
+declare -a SKIPPED_AGENTS=()
+# Subset-downgrade caveat: if a previous install ran with a broader subset
+# (e.g. "core") and this run uses a narrower one ("gate-only"), the orphan
+# symlinks from the previous install remain in place — install.sh only adds
+# symlinks, never removes them. The diff-before-clobber re-pointing contract
+# lives in `pe sync`, which is the right place for orphan cleanup too.
 for f in "$ENGINE_DIR"/agents/*.md; do
   agent_name="$(basename "$f")"
+  agent_stem="${agent_name%.md}"
+  if ! agent_in_subset "$agent_stem"; then
+    SKIPPED_AGENTS+=("$agent_stem")
+    continue
+  fi
   user_global_path="$HOME/.claude/agents/$agent_name"
   if [ -e "$user_global_path" ] && [ ! -L "$user_global_path" ]; then
     # Regular file at ~/.claude/agents/<name>.md. Compare to the engine
@@ -56,6 +128,7 @@ for f in "$ENGINE_DIR"/agents/*.md; do
     fi
   fi
   ln -sf "$f" "$TARGET/.claude/agents/$agent_name"
+  INSTALLED_AGENTS+=("$agent_stem")
 done
 
 # Symlink commands
@@ -104,10 +177,33 @@ if [ ! -f "$TARGET/.process-engine.yaml" ]; then
   CREATED_CONFIG=1
 fi
 
+# Persist the resolved subset to .process-engine.yaml so `pe sync` (and future
+# `pe install` re-runs without --subset) honor the operator's choice. Update
+# the existing value in place; append a new block if not present.
+YAML="$TARGET/.process-engine.yaml"
+if grep -qE '^install:' "$YAML" 2>/dev/null && \
+   awk '/^install:/{f=1;next} f && /^  subset:/{found=1; exit} f && /^[^ ]/{exit} END{exit !found}' "$YAML"; then
+  # BSD/GNU sed compatible in-place update
+  sed -i.bak -E "s/^([[:space:]]+)subset:.*/\\1subset: $SUBSET/" "$YAML"
+  rm -f "$YAML.bak"
+else
+  cat >> "$YAML" <<EOF
+
+# Engine install metadata (written by pe install — read by pe sync)
+install:
+  subset: $SUBSET
+EOF
+fi
+
 # Copy docs (project may edit — these are reference)
 cp -r "$ENGINE_DIR"/docs/* "$TARGET/docs/process-engine/"
 
 echo "✓ 8colors-process-engine v$(cat "$ENGINE_DIR/VERSION") installed to $TARGET"
+echo "  Subset:    $SUBSET (${#INSTALLED_AGENTS[@]} agents installed, ${#SKIPPED_AGENTS[@]} skipped)"
+if [ "${#SKIPPED_AGENTS[@]}" -gt 0 ]; then
+  echo "             Skipped: ${SKIPPED_AGENTS[*]}"
+  echo "             Re-run with --subset full to install everything."
+fi
 echo "  Agents:    $(ls "$TARGET/.claude/agents" | wc -l | tr -d ' ') symlinked → $TARGET/.claude/agents/"
 echo "  Commands:  $(ls "$TARGET/.claude/commands" | wc -l | tr -d ' ') symlinked → $TARGET/.claude/commands/"
 SKILL_COUNT=$(ls "$HOME/.claude/skills" 2>/dev/null | grep -cE '^(start|end)-session$' || true)

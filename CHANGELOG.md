@@ -14,6 +14,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`pe install --subset <preset>`** — subset install presets land per
+  CAPABILITY_CATALOG §8's "knowledge pack + project config" framing.
+  Presets:
+    - `gate-only` — 5 gate agents only (`code-reviewer`,
+      `security-reviewer`, `database-reviewer`, `tdd-guide`,
+      `e2e-runner`).
+    - `core` — gate-only plus `planner`, `brief-writer`, `architect`
+      (8 agents — smallest install that supports the
+      brief→plan→implement→review pipeline).
+    - `full` — current behavior, all engine agents. **Default.**
+  The resolved subset is persisted to `.process-engine.yaml` under
+  `install.subset` so `pe sync` (and re-runs of `pe install` without
+  the flag) honor the operator's choice. Resolution order: explicit
+  `--subset` > existing yaml value > `full` default. Invalid values
+  exit non-zero with a clear message.
+
+  **Known limitation:** subset downgrade (e.g. `core` → `gate-only`)
+  leaves orphan symlinks from the wider install — `install.sh` only
+  adds, never removes. Orphan cleanup lives in `pe sync` so it shares
+  the diff-before-clobber gate.
 - **INSTALL.md PATH check** — the quick-install snippet now includes a
   `case` block that detects whether `~/.local/bin` is on `$PATH` and
   prints the exact `export` line for `~/.zshrc` if not. Stock macOS zsh

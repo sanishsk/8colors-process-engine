@@ -31,7 +31,7 @@ Per `../process-engine-enhancement-design.md` §3, the engine has **five layers*
 
 **Capabilities in this catalog are L0 / L2 / L3 reuse pointers — NOT engine-bundled.**
 
-- Each project runs `pe install <project_path>` to symlink the subset of L3 agents + supporting agents it needs into its own `.claude/`.
+- Each project runs `pe install [--subset gate-only|core|full] <project_path>` to symlink the subset of L3 agents + supporting agents it needs into its own `.claude/`. Presets shipped in v0.8.0: `gate-only` (5 gate agents), `core` (gates + planner + brief-writer + architect = 8 agents), `full` (all agents, default). The chosen subset is persisted to `.process-engine.yaml` under `install.subset` so `pe sync` honors it on re-points.
 - The engine stays thin (L1 only). "Engine gets better each time" = **the catalog grows** (more agents documented, more tools vetted, more knowledge-pack templates) — NOT the engine binary carries more weight.
 - **Do NOT propose bundling L0 knowledge, L2 worker definitions, or L3 agents into the engine core.** That would break the separation that makes the engine reusable across products (8CStudio, fitness app, future products). Design doc §8 calls this the "knowledge pack + project config" contract.
 - New project = `pe install` + supply L0 knowledge pack + pick the L3 agents from this catalog that match its domain. That's the entire onboarding loop.
@@ -200,7 +200,7 @@ For tools the engine considered but didn't adopt today. Each row is a one-line p
 
 **Starting a new project (e.g., fitness app):**
 
-1. `pe install /path/to/fitness-app` — symlinks the 5 gate agents + supporting agents + skills into the project's `.claude/`.
+1. `pe install [--subset gate-only|core|full] /path/to/fitness-app` — symlinks the chosen agent subset + commands + skills into the project's `.claude/`. Pick `gate-only` for the leanest install (5 gate agents), `core` (8) for the full brief→plan→review pipeline, `full` (default) for everything in the catalog.
 2. Skim §1 to know what's already vetted; skim §3 for "I need X" pointers.
 3. If you adopt a new tool not in this catalog, ADD A ROW when you decide — don't leave the decision implicit.
 4. If you DON'T need a particular agent (e.g., fitness app has no PG → no `database-reviewer`), just don't invoke it. No need to uninstall.
