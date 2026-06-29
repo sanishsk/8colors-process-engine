@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.8.0] — UNRELEASED
+
+> Distribution bundle: makes "everyone gets engine improvements" real.
+> Engine never self-modifies; humans review + version + pull.
+
+### Changed
+
+- **`pe` CLI** — Phase 3 graduated 2026-06-28, so the subcommand summary
+  for `shadow decide` no longer claims "(no enforcement)". It now reads
+  "(enforce gated by --enforce; graduated 2026-06-28)". Functionality
+  unchanged — corrects an advertised-version lie surfaced by the Origyn
+  cross-environment install test.
+- **`pe doctor`** — now reports the engine version at the top of both the
+  self-check and the project-check, and prints an always-on per-agent
+  freshness summary line (`N/M up to date`, with the existing detailed
+  SHADOWED / MISSING blocks following). The summary fires regardless of
+  whether anything is wrong, so operators know the freshness check
+  actually ran on a clean install.
+
+---
+
 ## [0.7.0] — 2026-06-17
 
 ### Added

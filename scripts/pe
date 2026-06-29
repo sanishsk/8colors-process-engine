@@ -53,7 +53,7 @@ SUBCOMMANDS
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
     baseline capture ...  Record a Phase 0 slot baseline (speed / size / quality)
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
-    shadow decide ...     Phase 3 shadow-mode routing decision (no enforcement)
+    shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
     version               Print engine version
     help [<subcommand>]   Show help
@@ -288,6 +288,7 @@ cmd_doctor() {
 
     if [ -z "$target" ]; then
         echo "Engine self-check at $ENGINE_DIR"
+        echo "  engine version: $VERSION"
         for f in VERSION plugin.json scripts/install.sh scripts/install_launchd.sh \
                  scripts/research_index.py; do
             if [ ! -e "$ENGINE_DIR/$f" ]; then
@@ -307,6 +308,7 @@ cmd_doctor() {
     fi
 
     echo "Checking project install at $target"
+    echo "  engine version: $VERSION"
     echo ""
 
     # Check symlinks resolve
@@ -373,6 +375,12 @@ cmd_doctor() {
             missing_names+=("$name")
         fi
     done
+
+    # Per-agent freshness summary — always print so operator knows the check ran.
+    local engine_agent_count; engine_agent_count=$(find "$ENGINE_DIR/agents" -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')
+    local fresh_count=$((engine_agent_count - shadowed_count - missing_count))
+    echo ""
+    echo "  Per-agent freshness: ${fresh_count}/${engine_agent_count} up to date (${shadowed_count} shadowed, ${missing_count} missing)"
 
     if [ $shadowed_count -gt 0 ]; then
         echo ""
