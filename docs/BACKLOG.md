@@ -116,6 +116,20 @@ Last step before closing the bundle:
 
 ## P1-adjacent (carry forward, not blocking bundle)
 
+### Finding #6 (new, 2026-06-29 Origyn slice 1) — `scripts/research_index.py` SIM102 trips downstream lint · cosmetic
+
+`scripts/research_index.py:715` has nested `if` statements ruff flags as SIM102.
+The file gets symlinked into consuming projects via `pe install`, so consuming
+projects that run `ruff check .` on their full tree (Origyn does) hit the
+warning. Origyn worked around by excluding the symlinked path in its
+`pyproject.toml`. The fix belongs upstream so every adopter doesn't need the
+same exclude.
+
+**Fix:** combine the nested `if args.cmd == "rebuild"` + `if not corpus.exists()`
+into a single conjunction, or add `# noqa: SIM102` with rationale.
+
+**Trigger:** before the next `pe install` into a fresh project that runs ruff.
+
 ### Original Finding #5 — 8CStudio missing `.process-engine.yaml` · cosmetic
 
 `pe doctor /Users/sanishsasikumar/Documents/8Colors/8CStudio` reports
