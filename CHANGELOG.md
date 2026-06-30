@@ -14,6 +14,36 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`pe sync <project>`** — new subcommand that re-points the project's
+  engine-managed symlinks (agents in subset, commands, and
+  `scripts/research_index.py`) at the current engine, with a
+  **diff-before-clobber** safety contract. For each engine-managed file,
+  sync classifies the project state as one of:
+    - `current` — symlink already points at this engine (silent skip)
+    - `stale-symlink` — symlink points elsewhere (prompts to re-point)
+    - `matches` — regular file byte-identical to engine (silently upgrades to symlink)
+    - `differs` — regular file differs from engine (shows unified diff +
+      prompts y/N — NEVER overwrites without explicit confirmation)
+    - `missing` — in-subset agent absent from project (silently re-adds)
+    - `orphan` — agent symlink remains from a wider previous subset
+      (prompts to remove — fixes the install.sh subset-downgrade caveat)
+  Flags: `--dry-run` (no writes), `--yes` (auto-confirm prompts, including
+  diff overrides — use sparingly). User-global skills are deliberately out
+  of scope per BACKLOG P1.2 confirmation B: sync operates on project-local
+  surfaces only.
+
+  Documented as the canonical fix for the stale-user-globals propagation
+  hazard (BACKLOG resolved-but-document section): future projects pick up
+  engine improvements via `pe sync`, no manual diff-and-delete needed.
+
+  Ships with `tests/test_pe_sync.sh` proving the safety contract:
+  (1) stale symlink re-pointed when confirmed; (2) differing regular file
+  NOT overwritten when prompt declined. Per BACKLOG P1.2 confirmation (c):
+  the destructive path is gated by test, not by hope.
+- **`scripts/_subset.sh`** — shared fragment sourced by `install.sh` and
+  `pe sync` containing the preset rosters + yaml subset reader. Single
+  source of truth so install and sync never disagree on which agents
+  belong to which preset.
 - **`pe install --subset <preset>`** — subset install presets land per
   CAPABILITY_CATALOG §8's "knowledge pack + project config" framing.
   Presets:

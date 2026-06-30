@@ -36,6 +36,10 @@ fi
 
 VERSION=$(cat "$ENGINE_DIR/VERSION")
 
+# Source preset rosters + yaml subset reader (shared with install.sh)
+# shellcheck source=./_subset.sh
+. "$ENGINE_DIR/scripts/_subset.sh"
+
 # ─── usage ──────────────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
@@ -50,6 +54,7 @@ SUBCOMMANDS
                           (--subset controls which agents; default full)
     launchd <project>     Wire macOS launchd weekly CEO retro (macOS only)
     upgrade               git pull the engine; symlinks auto-propagate
+    sync <project>        Re-point project symlinks at current engine (diff-before-clobber)
     status                Show engine version, last commit, install paths
     doctor [<project>]    Diagnose install (broken symlinks, missing deps)
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
@@ -118,6 +123,42 @@ The script also appends *.research-index.sqlite +
 .process-engine.local.yaml to <project>/.gitignore if not present.
 
 Restart Claude Code in the target project after install.
+EOF
+            ;;
+        sync)
+            cat <<EOF
+pe sync [--dry-run] [--yes] <project>
+
+Re-points the project's engine-managed symlinks at the current engine.
+The contract is DIFF-BEFORE-CLOBBER: a file that differs from the
+engine version is NEVER overwritten without explicit confirmation.
+
+Scope (per BACKLOG P1.2 confirmation B):
+  - <project>/.claude/agents/<name>.md   (filtered by install.subset)
+  - <project>/.claude/commands/<name>.md
+  - <project>/scripts/research_index.py
+
+For each engine-managed file, sync classifies the project state:
+  current        symlink already points at this engine — silent skip
+  stale-symlink  symlink points elsewhere — prompt to re-point
+  matches        regular file, byte-identical to engine — silently upgrade to symlink
+  differs        regular file, differs from engine — show diff + prompt y/N
+  missing        in-subset agent has no file in project — silently re-add
+  orphan         project has a symlink for an agent NOT in current subset — prompt to remove
+
+Flags:
+  --dry-run   Show what would change, write nothing.
+  --yes       Auto-confirm prompts (re-points + orphan removals + diff overrides).
+              Use sparingly — bypasses the diff-before-clobber gate for differing
+              files. The default (interactive prompt) is the safe path.
+
+Exit codes:
+  0  Sync completed (some prompts may have been declined — that's OK)
+  1  Project missing or .process-engine.yaml missing
+  2  Invalid flag
+
+Originally surfaced by Finding #4 (Origyn cross-environment test) —
+the structural fix for stale-user-globals propagation across projects.
 EOF
             ;;
         launchd)
@@ -239,6 +280,215 @@ cmd_install() {
 cmd_launchd() {
     local target="${1:?Usage: pe launchd <project>}"
     exec "$ENGINE_DIR/scripts/install_launchd.sh" "$target"
+}
+
+# pe sync — re-point project symlinks at the current engine, with the
+# diff-before-clobber safety contract. See `pe help sync` for the full
+# state machine. Originally specced in docs/BACKLOG.md P1.2.
+cmd_sync() {
+    local target="" dry_run=0 yes=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) dry_run=1; shift ;;
+            --yes|-y)  yes=1; shift ;;
+            -h|--help)
+                help_subcommand sync
+                return 0 ;;
+            --*)
+                echo "ERROR: unknown flag: $1" >&2
+                echo "Usage: pe sync [--dry-run] [--yes] <project>" >&2
+                return 2 ;;
+            *)
+                if [ -z "$target" ]; then target="$1"; else
+                    echo "ERROR: unexpected positional arg: $1" >&2
+                    return 2
+                fi
+                shift ;;
+        esac
+    done
+
+    if [ -z "$target" ]; then
+        echo "Usage: pe sync [--dry-run] [--yes] <project>" >&2
+        return 1
+    fi
+    if [ ! -d "$target" ]; then
+        echo "ERROR: $target does not exist" >&2
+        return 1
+    fi
+
+    # Resolve subset from yaml; default full if missing.
+    local subset
+    subset=$(read_subset_from_yaml "$target/.process-engine.yaml")
+    subset="${subset:-full}"
+
+    echo "pe sync $target"
+    echo "  engine version: $VERSION"
+    echo "  subset: $subset"
+    if [ $dry_run -eq 1 ]; then
+        echo "  mode: dry-run (no writes)"
+    elif [ $yes -eq 1 ]; then
+        echo "  mode: --yes (auto-confirm prompts — bypasses diff gate)"
+    fi
+    echo ""
+
+    # Counters (read inside process_one via dynamic scoping)
+    local n_current=0 n_added=0 n_upgraded=0 n_repointed=0
+    local n_orphan_removed=0 n_orphan_kept=0 n_declined=0
+
+    # confirm PROMPT — returns 0 on yes, 1 on no. Auto-yes if $yes==1.
+    # Reads from stdin: when run interactively stdin is the tty; the smoke
+    # test pipes y/n on stdin. Either path exercises the same gate.
+    confirm() {
+        local q="$1" ans=""
+        if [ "$yes" -eq 1 ]; then
+            echo "      ↳ auto-confirm (--yes): $q"
+            return 0
+        fi
+        printf "      ↳ %s [y/N]: " "$q"
+        read -r ans || ans=""
+        echo "$ans"
+        case "$ans" in
+            y|Y|yes|YES) return 0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    # process_one ENGINE_SRC PROJECT_DST LABEL — classify + act on one file.
+    process_one() {
+        local engine_src="$1" project_dst="$2" label="$3"
+        local resolved state
+
+        if [ -L "$project_dst" ]; then
+            resolved=$(readlink "$project_dst")
+            if [ "$resolved" = "$engine_src" ]; then
+                state="current"
+            else
+                state="stale-symlink"
+            fi
+        elif [ -e "$project_dst" ]; then
+            if cmp -s "$engine_src" "$project_dst"; then
+                state="matches"
+            else
+                state="differs"
+            fi
+        else
+            state="missing"
+        fi
+
+        case "$state" in
+            current)
+                n_current=$((n_current+1))
+                ;;
+            missing)
+                echo "  + $label (missing — adding symlink)"
+                if [ $dry_run -eq 0 ]; then
+                    mkdir -p "$(dirname "$project_dst")"
+                    ln -sf "$engine_src" "$project_dst"
+                fi
+                n_added=$((n_added+1))
+                ;;
+            matches)
+                echo "  ↻ $label (regular file matches engine — upgrading to symlink)"
+                if [ $dry_run -eq 0 ]; then
+                    rm -f "$project_dst"
+                    ln -sf "$engine_src" "$project_dst"
+                fi
+                n_upgraded=$((n_upgraded+1))
+                ;;
+            stale-symlink)
+                echo "  ⚠ $label"
+                echo "      stale symlink → $resolved"
+                if [ $dry_run -eq 1 ]; then
+                    echo "      [dry-run] would re-point at $engine_src"
+                    n_repointed=$((n_repointed+1))
+                elif confirm "re-point to current engine?"; then
+                    ln -sf "$engine_src" "$project_dst"
+                    n_repointed=$((n_repointed+1))
+                else
+                    n_declined=$((n_declined+1))
+                fi
+                ;;
+            differs)
+                echo "  ⚠ $label (regular file, differs from engine)"
+                echo "      diff (engine → project):"
+                diff -u "$engine_src" "$project_dst" 2>/dev/null | sed 's/^/        /' | head -40
+                if [ $dry_run -eq 1 ]; then
+                    echo "      [dry-run] would NOT overwrite without confirmation"
+                    n_declined=$((n_declined+1))
+                elif confirm "overwrite with engine version? (existing file will be LOST)"; then
+                    ln -sf "$engine_src" "$project_dst"
+                    n_repointed=$((n_repointed+1))
+                else
+                    echo "      kept project version (engine version not applied)"
+                    n_declined=$((n_declined+1))
+                fi
+                ;;
+        esac
+    }
+
+    # ─── Agents (subset-filtered) ─────────────────────────────────────────
+    echo "Scanning agents (subset=$subset):"
+    local engine_agent_names=""
+    for f in "$ENGINE_DIR"/agents/*.md; do
+        local agent_name agent_stem
+        agent_name="$(basename "$f")"
+        agent_stem="${agent_name%.md}"
+        engine_agent_names="$engine_agent_names $agent_name"
+        if ! agent_in_subset "$agent_stem" "$subset"; then
+            continue
+        fi
+        process_one "$f" "$target/.claude/agents/$agent_name" "agent $agent_name"
+    done
+
+    # Orphan check — symlinks for engine agents NOT in current subset
+    if [ -d "$target/.claude/agents" ]; then
+        for project_agent in "$target/.claude/agents"/*.md; do
+            [ -e "$project_agent" ] || [ -L "$project_agent" ] || continue
+            local pname pstem
+            pname="$(basename "$project_agent")"
+            pstem="${pname%.md}"
+            # Only consider agents the engine ships (don't touch project-authored agents)
+            case "$engine_agent_names" in
+                *" $pname "*) ;;
+                *) continue ;;
+            esac
+            if agent_in_subset "$pstem" "$subset"; then
+                continue
+            fi
+            echo "  ✗ agent $pname (orphan — not in subset '$subset')"
+            if [ $dry_run -eq 1 ]; then
+                echo "      [dry-run] would prompt for removal"
+                n_orphan_kept=$((n_orphan_kept+1))
+            elif confirm "remove orphan symlink?"; then
+                rm -f "$project_agent"
+                n_orphan_removed=$((n_orphan_removed+1))
+            else
+                n_orphan_kept=$((n_orphan_kept+1))
+            fi
+        done
+    fi
+    echo ""
+
+    # ─── Commands (no subset filter) ──────────────────────────────────────
+    echo "Scanning commands:"
+    for f in "$ENGINE_DIR"/commands/*.md; do
+        local cname
+        cname="$(basename "$f")"
+        process_one "$f" "$target/.claude/commands/$cname" "command $cname"
+    done
+    echo ""
+
+    # ─── Scripts (research_index.py only — engine's sole script symlink) ──
+    echo "Scanning scripts:"
+    if [ -f "$ENGINE_DIR/scripts/research_index.py" ]; then
+        process_one "$ENGINE_DIR/scripts/research_index.py" \
+                    "$target/scripts/research_index.py" \
+                    "script research_index.py"
+    fi
+    echo ""
+
+    echo "Summary: ${n_current} current, ${n_added} added, ${n_upgraded} upgraded, ${n_repointed} re-pointed, ${n_orphan_removed} orphan removed, ${n_declined} declined, ${n_orphan_kept} orphan kept"
+    return 0
 }
 
 cmd_upgrade() {
@@ -670,6 +920,7 @@ case "$cmd" in
     install)    cmd_install "$@" ;;
     launchd)    cmd_launchd "$@" ;;
     upgrade)    cmd_upgrade "$@" ;;
+    sync)       cmd_sync "$@" ;;
     status)     cmd_status "$@" ;;
     doctor)     cmd_doctor "$@" ;;
     eject)      cmd_eject "$@" ;;

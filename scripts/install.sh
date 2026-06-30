@@ -16,6 +16,10 @@
 set -euo pipefail
 ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Source preset rosters + yaml subset reader (shared with pe sync).
+# shellcheck source=./_subset.sh
+. "$ENGINE_DIR/scripts/_subset.sh"
+
 # ─── Arg parsing ───────────────────────────────────────────────────────────
 # Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project
 SUBSET=""
@@ -60,26 +64,13 @@ esac
 #   1. Explicit --subset wins.
 #   2. Else inherit from existing .process-engine.yaml install.subset (re-install case).
 #   3. Else default to "full" (no-surprise default — current behavior).
-if [ -z "$SUBSET" ] && [ -f "$TARGET/.process-engine.yaml" ]; then
-  EXISTING=$(awk '/^install:/{f=1;next} f && /^  subset:/{print $2; exit} f && /^[^ ]/{exit}' "$TARGET/.process-engine.yaml" 2>/dev/null || true)
+if [ -z "$SUBSET" ]; then
+  EXISTING=$(read_subset_from_yaml "$TARGET/.process-engine.yaml")
   if [ -n "$EXISTING" ]; then
     SUBSET="$EXISTING"
   fi
 fi
 SUBSET="${SUBSET:-full}"
-
-# ─── Preset rosters (locked per docs/BACKLOG.md P1.3 confirmation) ────────
-GATE_ONLY_AGENTS="code-reviewer security-reviewer database-reviewer tdd-guide e2e-runner"
-CORE_AGENTS="$GATE_ONLY_AGENTS planner brief-writer architect"
-
-agent_in_subset() {
-  local name="$1"
-  case "$SUBSET" in
-    full)      return 0 ;;
-    core)      [[ " $CORE_AGENTS " == *" $name "* ]] ;;
-    gate-only) [[ " $GATE_ONLY_AGENTS " == *" $name "* ]] ;;
-  esac
-}
 
 mkdir -p "$TARGET/.claude/agents"
 mkdir -p "$TARGET/.claude/commands"
@@ -114,7 +105,7 @@ declare -a SKIPPED_AGENTS=()
 for f in "$ENGINE_DIR"/agents/*.md; do
   agent_name="$(basename "$f")"
   agent_stem="${agent_name%.md}"
-  if ! agent_in_subset "$agent_stem"; then
+  if ! agent_in_subset "$agent_stem" "$SUBSET"; then
     SKIPPED_AGENTS+=("$agent_stem")
     continue
   fi
