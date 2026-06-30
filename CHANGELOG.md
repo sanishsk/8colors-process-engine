@@ -7,10 +7,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [0.8.0] — UNRELEASED
+## [0.8.0] — 2026-06-30
 
 > Distribution bundle: makes "everyone gets engine improvements" real.
-> Engine never self-modifies; humans review + version + pull.
+> Engine never self-modifies; humans review + version + pull. Shipped
+> after a single-pass dogfood code-review of the cumulative bundle
+> diff (0 CRITICAL, 0 HIGH, 1 MEDIUM noted as documentation clarity).
 
 ### Added
 
