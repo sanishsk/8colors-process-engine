@@ -97,11 +97,15 @@ mkdir -p "$HOME/.claude/skills"
 declare -a USER_GLOBAL_COLLISIONS=()
 declare -a INSTALLED_AGENTS=()
 declare -a SKIPPED_AGENTS=()
-# Subset-downgrade caveat: if a previous install ran with a broader subset
-# (e.g. "core") and this run uses a narrower one ("gate-only"), the orphan
-# symlinks from the previous install remain in place — install.sh only adds
-# symlinks, never removes them. The diff-before-clobber re-pointing contract
-# lives in `pe sync`, which is the right place for orphan cleanup too.
+declare -a REMOVED_BROKEN=()
+# Reconciliation split (E1.c.2):
+#   - install.sh silently removes BROKEN symlinks (target vanished from engine —
+#     e.g. operator switched engine branch and an agent was removed upstream).
+#     Real files (operator customizations) are never touched.
+#   - Subset-downgrade orphans (fine symlink to an agent no longer in the
+#     current subset) stay a `pe sync` concern: interactive, prompted, per-file.
+#     Not silent, because widening a subset back is common and clobbering
+#     without confirmation would surprise the operator.
 for f in "$ENGINE_DIR"/agents/*.md; do
   agent_name="$(basename "$f")"
   agent_stem="${agent_name%.md}"
@@ -122,9 +126,28 @@ for f in "$ENGINE_DIR"/agents/*.md; do
   INSTALLED_AGENTS+=("$agent_stem")
 done
 
+# Reconcile broken agent symlinks (E1.c.2): remove project-local symlinks
+# whose engine target no longer exists. Skip real files (customizations)
+# and valid symlinks. Runs after the install loop so we only remove what
+# THIS install didn't create.
+for link in "$TARGET/.claude/agents"/*.md; do
+  [ -L "$link" ] || continue      # skip real files (customizations)
+  [ -e "$link" ] && continue      # skip valid symlinks
+  rm "$link"
+  REMOVED_BROKEN+=("agents/$(basename "$link")")
+done
+
 # Symlink commands
 for f in "$ENGINE_DIR"/commands/*.md; do
   ln -sf "$f" "$TARGET/.claude/commands/$(basename "$f")"
+done
+
+# Reconcile broken command symlinks (E1.c.2): same shape as agents.
+for link in "$TARGET/.claude/commands"/*.md; do
+  [ -L "$link" ] || continue
+  [ -e "$link" ] && continue
+  rm "$link"
+  REMOVED_BROKEN+=("commands/$(basename "$link")")
 done
 
 # Symlink skills (user-global — start-session / end-session apply across all
@@ -197,6 +220,9 @@ if [ "${#SKIPPED_AGENTS[@]}" -gt 0 ]; then
 fi
 echo "  Agents:    $(ls "$TARGET/.claude/agents" | wc -l | tr -d ' ') symlinked → $TARGET/.claude/agents/"
 echo "  Commands:  $(ls "$TARGET/.claude/commands" | wc -l | tr -d ' ') symlinked → $TARGET/.claude/commands/"
+if [ "${#REMOVED_BROKEN[@]}" -gt 0 ]; then
+  echo "  Reconciled: ${#REMOVED_BROKEN[@]} broken symlink(s) removed (${REMOVED_BROKEN[*]})"
+fi
 SKILL_COUNT=$(ls "$HOME/.claude/skills" 2>/dev/null | grep -cE '^(start|end)-session$' || true)
 echo "  Skills:    ${SKILL_COUNT} symlinked → ~/.claude/skills/ (user-global)"
 echo "  Templates: copied → $TARGET/docs/templates/"

@@ -14,16 +14,24 @@
 
 | # | Block | State | Trigger to start |
 |---|---|---|---|
-| **P1** | Distribution bundle (5 items, locked order) | **DO NOW** | Active engine-repo session |
-| **P2** | Coupled-parallelism — Stage A coupling map → Stage B Phase 4 | **AFTER P1 ships** | P1 merged + dogfooded; then produce coupling map |
-| **P3** | Auto-update suggestion (surface, don't apply) | **BACKLOG, NOT NOW** | After P1 + P2 settled; only as suggestion-surfacer, never self-commit |
+| **P1** | Distribution bundle (5 items, locked order) | ✅ **SHIPPED in v0.8.0** (2026-06-30) | — |
+| **P2 Stage A** | Coupling map | ✅ **SHIPPED** — `docs/COUPLING_MAP.md` (2026-06-30) | — |
+| **P2 Stage B** | Phase 4 DAG scheduler | ⏸️ **PARKED** — clean clusters, no pervasive tangle | COUPLING_MAP §7 re-eval triggers |
+| **P3** | Auto-update suggestion surfacer | ⏸️ **PARKED** | ≥1 concrete recurring "we keep noticing X" pattern from adopter feedback |
+| **E1.c.2** | Reconciling `pe install` (broken-symlink cleanup) | ✅ **SHIPPED in v0.9.0** (2026-07-01) | — |
 
-Original findings #1–#5 (2026-06-29 Origyn test) are absorbed into P1; #5
-(8CStudio `.process-engine.yaml` cosmetic) lives in P1-adjacent notes below.
+Original findings #1–#5 (2026-06-29 Origyn test) shipped in v0.8.0 P1 bundle.
+Finding #6 (research_index.py SIM102) shipped in v0.8.0 as commit `9ec6cb5`.
+Finding #5 (8CStudio `.process-engine.yaml`) resolved out-of-band during that
+session. Details below preserved as history — see per-item ✅ markers.
 
 ---
 
-# PRIORITY 1 — Distribution bundle (engine-repo only)
+# PRIORITY 1 — Distribution bundle (engine-repo only) — ✅ SHIPPED v0.8.0
+
+**Status 2026-06-30:** all 5 items landed under `[0.8.0]` in CHANGELOG.md.
+See per-item commit refs below. Kept in this doc as history — the spec
+is the source of the shipped behavior.
 
 **Goal:** make "everyone gets engine improvements" real via reviewed, pulled
 distribution. Engine never self-modifies; humans review + version + pull.
@@ -45,12 +53,12 @@ distribution. Engine never self-modifies; humans review + version + pull.
 Phase 4, E2.1, auto-tier-routing, watchpoint tooling, `pe install` reconciling
 (E1.c.2). All deferred — they belong to P2 or later.
 
-## P1.5-prep — VERSION + CHANGELOG skeleton
+## P1.5-prep — VERSION + CHANGELOG skeleton — ✅ SHIPPED (`3c15b3d`)
 
 Bundled INTO item 1's commit. Open `[0.8.0]` heading in `CHANGELOG.md` so
 every subsequent commit drops its entry under it. No "unreleased" gap.
 
-## P1.1 — Version-awareness (cosmetic + non-breaking — smallest blast radius first)
+## P1.1 — Version-awareness (cosmetic + non-breaking — smallest blast radius first) — ✅ SHIPPED (`3c15b3d`)
 
 - Bump `VERSION` `0.7.0` → `0.8.0`.
 - `scripts/pe` line 56: drop `"(no enforcement)"`. Replace with `"(enforce gated by --enforce; graduated 2026-06-28)"`.
@@ -62,7 +70,7 @@ every subsequent commit drops its entry under it. No "unreleased" gap.
 **Originated from:** original Finding #1 (VERSION drift after Phase 3
 graduation). Fix path locked.
 
-## P1.4 — PATH fix in INSTALL.md (docs-only)
+## P1.4 — PATH fix in INSTALL.md (docs-only) — ✅ SHIPPED (`ea3ab63`)
 
 Done before P1.3 so it doesn't conflate with code changes.
 
@@ -72,7 +80,7 @@ Done before P1.3 so it doesn't conflate with code changes.
 **Originated from:** original Finding #3 (`~/.local/bin` not on PATH on fresh
 macOS — first-30-seconds friction surfaced during Origyn test).
 
-## P1.3 — Subset install preset
+## P1.3 — Subset install preset — ✅ SHIPPED (`2367e56`)
 
 - `pe install <project> --subset <preset>` where preset ∈ `{gate-only, core, full}`.
   - `gate-only` = 5 gate agents only (`code-reviewer`, `security-reviewer`, `database-reviewer`, `tdd-guide`, `e2e-runner`).
@@ -85,7 +93,7 @@ macOS — first-30-seconds friction surfaced during Origyn test).
 **Originated from:** original Finding #2 (`pe install` all-or-nothing
 contradicts catalog §8 subset promise). Path (a) lean preset chosen.
 
-## P1.2 — `pe sync` command (largest item — last in bundle)
+## P1.2 — `pe sync` command (largest item — last in bundle) — ✅ SHIPPED (`9ce0fc3`)
 
 THE contract: **diff-before-clobber**. Never blanket-overwrite.
 
@@ -104,7 +112,7 @@ THE contract: **diff-before-clobber**. Never blanket-overwrite.
 shadow engine in projects without project-local symlinks). `pe sync`
 retires the manual cleanup concern for all future projects.
 
-## P1.5-finalize — CHANGELOG discipline check
+## P1.5-finalize — CHANGELOG discipline check — ✅ SHIPPED (`8352265`)
 
 Last step before closing the bundle:
 - Verify every commit in the bundle has an entry under `[0.8.0]`.
@@ -116,7 +124,43 @@ Last step before closing the bundle:
 
 ## P1-adjacent (carry forward, not blocking bundle)
 
-### Finding #6 (new, 2026-06-29 Origyn slice 1) — `scripts/research_index.py` SIM102 trips downstream lint · cosmetic
+### Finding #7 (new, 2026-07-01 Origyn T1) — `worker_quality` failure_class is a poor fit for house-rule violations · design
+
+**Trigger observed:** Origyn slot `origyn-trainer-cockpit-t1`, iteration 1,
+code-reviewer emitted CRITICAL `file-line-count-hard-gate` (blueprints/trainer.py
+grew to 824 lines, exceeding CLAUDE.md §5 pre-commit gate 7's 800-line hard
+block). Router correctly fired `action=escalate_one_tier` (first-fire of the
+escalation ladder for the T1 slice). Operator flagged the watchpoint, decided
+against escalation, extracted helpers to a new file, re-reviewed → PASS.
+
+**The mismatch:** the escalation-ladder semantics assume `worker_quality` means
+"the worker (a specific tier) wasn't smart enough — retry at a higher tier."
+Here the failure was that a project house-rule (file-size gate) was violated.
+Escalating haiku → sonnet on the code-reviewer or the presumed worker would
+not change the file's line count. The finding is real but the remediation is
+mechanical (extract to a new module), not "throw a smarter model at it."
+
+**Proposed shape (not urgent):** a new failure_class, e.g.
+`house_rule_violation` or `structural_refactor_required`, with router action
+`halt_to_human` (or `require_refactor`). Distinct from `worker_quality`
+(actual code bug) and `out_of_scope` (touched files outside slot allowlist).
+Better matches the operator's actual response — this class of finding is
+"fix mechanically then re-review," never "escalate to a bigger worker."
+
+**Blast radius of NOT fixing:** small. Operators can override the router
+decision manually (as done here), record the choice in reconciliation
+`router_correctness` notes, and move on. Just makes the audit trail slightly
+noisier and the router's semantic promise slightly weaker.
+
+**Priority:** P2 or P3, no rush. The next observation of the same pattern
+will strengthen the case for a new failure_class.
+
+**Reference:** Origyn `.pe/decisions.jsonl` — slot `origyn-trainer-cockpit-t1`
+(FAIL/escalate first-fire) and `origyn-trainer-cockpit-t1-fix` (PASS/continue).
+
+---
+
+### Finding #6 (new, 2026-06-29 Origyn slice 1) — `scripts/research_index.py` SIM102 trips downstream lint · cosmetic — ✅ SHIPPED (`9ec6cb5`)
 
 `scripts/research_index.py:715` has nested `if` statements ruff flags as SIM102.
 The file gets symlinked into consuming projects via `pe install`, so consuming
@@ -130,7 +174,7 @@ into a single conjunction, or add `# noqa: SIM102` with rationale.
 
 **Trigger:** before the next `pe install` into a fresh project that runs ruff.
 
-### Original Finding #5 — 8CStudio missing `.process-engine.yaml` · cosmetic
+### Original Finding #5 — 8CStudio missing `.process-engine.yaml` · cosmetic — ✅ RESOLVED (2026-06-30, file present on disk)
 
 `pe doctor /Users/sanishsasikumar/Documents/8Colors/8CStudio` reports
 `Missing .process-engine.yaml — re-run 'pe install' to create it`.
@@ -140,6 +184,33 @@ into a single conjunction, or add `# noqa: SIM102` with rationale.
 `templates/.process-engine.yaml.template`.
 
 **Trigger:** before any `pe launchd` run on 8CStudio. Not bundle-critical.
+
+### E1.c.2 — reconciling `pe install` (broken-symlink cleanup) — ✅ SHIPPED v0.9.0 (2026-07-01)
+
+Closes GitHub issue #10. Originally deferred out of the P1 bundle (see
+"Out of scope for this bundle" line above) — promoted to active in the
+first post-v0.8.0 session once the bundle was proven stable.
+
+**What shipped:**
+- `pe install` silently removes BROKEN symlinks in `.claude/agents/` and
+  `.claude/commands/` on every install. Real files (customizations)
+  untouched. Skills (user-global) untouched.
+- New smoke test `tests/test_pe_install_reconcile.sh` (10 assertions
+  passing) — mirrors the shape of `test_pe_sync.sh`.
+- TROUBLESHOOTING.md §4 refreshed + new §4b: "Why does my project
+  have a broken symlink I didn't create?"
+
+**Design split (documented in `install.sh` header comment):**
+- **`pe install`** = silent removal of BROKEN symlinks only.
+- **`pe sync`** = interactive removal of subset-downgrade orphans
+  (fine symlinks to agents no longer in the current subset). Prompted
+  per-file because widening a subset back is common and clobbering
+  without confirmation would surprise the operator.
+
+**Deferred (separate policy call — not part of E1.c.2):**
+- Consuming-end story for `.process-engine.yaml` + `scripts/research_index.py`
+  untracked byproducts in adopters. Original issue #10 mentions this but
+  it's an adoption-policy decision, not a bug fix. Belongs in a follow-up.
 
 ### Resolved-but-document — stale user-globals (was Finding #4)
 

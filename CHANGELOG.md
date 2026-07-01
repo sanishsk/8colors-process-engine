@@ -7,6 +7,45 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.9.0] — 2026-07-01
+
+> Single-item minor: reconciling `pe install`. Closes GitHub issue #10
+> (E1.c.2). Ships with a smoke test and TROUBLESHOOTING §4 refresh.
+
+### Added
+
+- **`pe install` reconciles broken agent + command symlinks** (E1.c.2).
+  When re-installing into a project, symlinks in `.claude/agents/*.md`
+  and `.claude/commands/*.md` whose engine target no longer exists are
+  now silently removed. This closes the "switched engine branches, now
+  `pe doctor` reports a broken symlink I didn't create" hazard flagged
+  in the original E1.c.2 issue.
+- New smoke test `tests/test_pe_install_reconcile.sh` covers:
+  broken-symlink removal (agents + commands), real-file preservation
+  (customizations untouched), valid-symlink preservation.
+
+### Changed
+
+- `install.sh` now prints a `Reconciled: N broken symlink(s) removed` line
+  when it drops any.
+- TROUBLESHOOTING.md §4 updated to reference the reconciling install
+  behavior, plus new §4b: "Why does my project have a broken symlink I
+  didn't create?" per the E1.c.2 acceptance criteria.
+
+### Design notes
+
+Install reconciliation is deliberately **silent-broken-only**. Subset-
+downgrade orphans (fine symlinks to agents not in the current subset)
+remain a `pe sync` concern — `pe sync` prompts interactively per file
+because widening a subset back is common and clobbering without
+confirmation would surprise the operator. `install.sh` header comment
+documents the split.
+
+User-global skills (`~/.claude/skills/*`) are **out of scope** for
+reconciliation — same reason as `pe sync`: they cross-cut every project.
+
+---
+
 ## [0.8.0] — 2026-06-30
 
 > Distribution bundle: makes "everyone gets engine improvements" real.

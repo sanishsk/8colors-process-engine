@@ -271,8 +271,27 @@ pe install <project>     # re-symlinks with the new engine path
 ```
 
 If the engine path is correct but agents are still missing, an engine
-update may have deleted an agent file (e.g. an agent was renamed). The
-symlink to the now-missing file is broken; re-install drops it.
+update may have deleted an agent file (e.g. an agent was renamed).
+As of **v0.9.0** (E1.c.2), `pe install` reconciles this automatically:
+broken symlinks in `.claude/agents/` and `.claude/commands/` are
+silently removed on re-install. Real files (operator customizations)
+are never touched — only dangling symlinks.
+
+Subset-downgrade orphans (fine symlinks to agents that are no longer in
+the current subset, e.g. after `pe install --subset gate-only` following
+a `full` install) are NOT removed by install. They are removed
+interactively by `pe sync <project>` — see the `orphan` state in
+`pe help sync`.
+
+## 4b. "Why does my project have a broken symlink I didn't create?"
+
+Almost always: you re-installed the engine while switched to a
+different branch that had a superset of agents, then went back to a
+branch where one agent was removed or renamed. The project-local
+symlink was created against the wider branch's `agents/` set.
+
+As of v0.9.0, this heals on the next `pe install <project>` (E1.c.2).
+Before v0.9.0, the manual fix was `find <project>/.claude/agents -xtype l -delete`.
 
 ---
 
