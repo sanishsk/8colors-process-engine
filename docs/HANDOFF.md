@@ -13,14 +13,110 @@
 Engine v0.8.0 is on `origin/master`. Both adopters (8CStudio, Origyn)
 are synced and validated. Everything pushed. No dangling state.
 
-## Where to start
+## Session rituals — start and end
 
-```
-/start-session
+The engine ships two skills — `/start-session` and `/end-session` — that
+are THE rituals. Learn these and everything else falls into place.
+
+### Case A — brand new project (first-time onboarding)
+
+One-time setup per project, then it enters the daily flow (Case B).
+
+```bash
+# 1. Install the engine into the project
+pe install /path/to/new/project
+# — or with a leaner agent set —
+pe install --subset gate-only /path/to/new/project    # 5 gate agents
+pe install --subset core /path/to/new/project         # 8 agents
+pe install --subset full /path/to/new/project         # 15 agents (default)
+
+# 2. Edit the auto-created config with REAL values
+#    (never commit template placeholders — acme / Acme Corp / /Users/you/…)
+$EDITOR /path/to/new/project/.process-engine.yaml
+# Set: project.org_tag, project.display_name, project.root
+
+# 3. (Optional, macOS) Wire the Friday weekly retro
+pe launchd /path/to/new/project
+
+# 4. Verify install is healthy
+pe doctor /path/to/new/project
 ```
 
-in the engine repo — it'll orient from CLAUDE.md + memory + recent git.
-Then read this doc.
+Then continue with Case B every day. Create/grow `CLAUDE.md` +
+`MEMORY.md` in the project root as work happens — the session skills
+read them.
+
+### Case B — continuing work on a project (daily flow)
+
+**Start of session:**
+
+1. Open Claude Code in the project directory.
+2. Type `/start-session` — the skill reads CLAUDE.md, MEMORY, weekly
+   plan, git state; surfaces active focus + stale plans + first-task
+   recommendation and **STOPS waiting for you.** Never starts work
+   autonomously.
+3. If you recently pulled engine changes, run
+   `pe sync --dry-run /path/to/project` to preview any updates the
+   engine wants to propagate. Then `pe sync` (no `--dry-run`) if you
+   want them applied. Diff-before-clobber protects your customizations.
+4. Decide the task. Work.
+
+**End of session:**
+
+1. Type `/end-session` — the skill runs the close-out: git status, sync
+   check (ahead/behind origin), MEMORY banner updates (surfaces diffs —
+   **never auto-writes**), deliverables ledger (commits + hashes),
+   unresolved items, next-session pickup pointer.
+2. Review its output. Apply MEMORY updates it surfaces if you agree
+   (you commit them manually).
+3. Commit + push if you have work to ship (the skill never pushes for
+   you).
+
+Both skills are project-agnostic — they discover files via fallback
+chains. Tune per-project via `.claude/session.yaml`.
+
+### Case C — working ON the engine repo itself (this session's kind)
+
+Same shape as Case B, plus one thing:
+
+**Start:** `/start-session` → then read this doc (`docs/HANDOFF.md`)
+for state carried over from the last engine session.
+
+**End:** before typing `/end-session`, **update this doc**:
+
+- Bump "Last updated" date
+- Refresh "One-line state"
+- Roll shipped commits into "What shipped in the last session"
+- Add any new gotchas discovered
+
+Then `/end-session` and commit the updated HANDOFF.
+
+### Rule of thumb
+
+| Situation | Ritual |
+|---|---|
+| First time on a project | `pe install` + edit yaml + `/start-session` |
+| Daily start | `/start-session` |
+| After engine has new upstream commits | `pe sync --dry-run` → `pe sync` |
+| Daily end | `/end-session`, then commit + push if applicable |
+| Engine-repo session end | Update this doc **before** `/end-session` |
+| Something's off | `pe doctor /path/to/project` — engine version + freshness + shadowed count |
+
+### Why this works
+
+- `/start-session` does the "where was I?" work — no wasted re-orient time.
+- `/end-session` prevents "wait, what did I actually do today?" via the
+  ledger + surfacing what to remember.
+- `pe sync --dry-run` is the safe default — see what would change before
+  anything changes.
+- Neither skill auto-commits, auto-edits memory, or auto-pushes. You stay
+  in control of what lands.
+- This doc is the engine-repo's memory anchor. Small enough to read at
+  the top of every session.
+
+Full detail on both skills lives in `skills/start-session/` and
+`skills/end-session/`. The `BETA_TESTER_BRIEF.md` §"What to try first"
+walks through a 30-minute first session touching all the pieces.
 
 ## The only queued task
 
