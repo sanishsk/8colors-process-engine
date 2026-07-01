@@ -3,17 +3,81 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-02 (engine v0.9.0 shipped — reconciling
-> `pe install` closes #10; Semgrep MCP fixed via Python 3.12 pin;
-> both adopters healthy on v0.9.0)
+> **Last updated:** 2026-07-02 late (P0 audit bundle committed as
+> `3b43e03`; awaiting push + adopter sync; IMPROVEMENT_PLAN.md is the
+> active backlog going forward)
 
 ---
 
 ## One-line state
 
-Engine v0.9.0 is on `origin/master`. Both adopters (8CStudio, Origyn)
-report healthy on v0.9.0 via `pe doctor` (15/15 agents up to date,
-0 shadowed, 0 broken symlinks). Everything pushed. No dangling state.
+Engine v0.9.1 committed locally (`3b43e03`), **unpushed**. Contains
+all 12 P0 items from the 4-track audit + `docs/IMPROVEMENT_PLAN.md`
+as the new active roadmap. 52/52 tests pass. Adopters (8CStudio,
+Origyn) still on v0.9.0 until pushed + synced.
+
+## 🔴 RESUME HERE — first action next session
+
+1. **Push:** `git push origin master` — publishes `3b43e03` (v0.9.1)
+   + this HANDOFF refresh.
+2. **Propagate to adopters:**
+
+   ```bash
+   pe sync --dry-run /Users/sanishsasikumar/Documents/8Colors/8CStudio
+   pe sync --dry-run /Users/sanishsasikumar/Documents/Origyn
+   # then non-dry-run per HANDOFF Common operations
+   ```
+
+   Expect "0 changes" — install.sh changes propagate on the next
+   `pe install` at the adopter, not via sync (documented gotcha).
+   `pe doctor` should still report healthy on v0.9.1.
+
+3. **Read `docs/IMPROVEMENT_PLAN.md`** — 4-track audit consolidated
+   into ~45 items P0→P4 with file:line + severity + effort + fix.
+   This is the canonical roadmap now (supersedes BACKLOG.md's
+   carry-forward section).
+
+4. **Next active work:** P1 — deterministic enforcement of headline
+   promises (see three-findings section below). Do NOT start P3.x
+   (domain layer, native plugin) before P1 is in.
+
+## What the P0 bundle fixes (12 items — condensed)
+
+| Fix | Why it matters |
+|---|---|
+| `pe sync` crash at `scripts/pe:414` | `diff` exit 1 under `set -euo pipefail` killed sync on every customized file; overwrite-confirm prompt was unreachable dead code. Old test passed because of the crash — test hardened to assert exit 0. |
+| Router fail-safe hole | Schema-valid FAIL + `failure_class:"none"` routed to `continue` even with CRITICAL findings — **falsified the graduation signoff**. Now caught at 3 layers (schema conditional + `pe_gate` coherence check + `route()` guard) + regression test. |
+| Stacking pre-push hook | Silently blocked every push with no slot IDs. Fixed. |
+| `pe install` fork preservation | No longer clobbers operator-forked files. Preserves + reports + points at `pe sync` for review. |
+| Interpreter hardening | Stock macOS `python3` is 3.9 (no `tomllib`). `pe` now probes for 3.11+, orchestrator exits with actionable message, subprocesses use `sys.executable`. Orchestrator test suite **couldn't run on your machine** before this — now 33/33. |
+| Plus: `pe eject` bash-3.2 crash · BSD-sed doctor launchd bug · invalid-subset zero-install trap · breaker sidecar silent-corruption / non-atomic writes · gate cross-check ordering + retry bugs · brief-writer/architect missing Bash tool for MANDATORY Step 0 · version drift (0.7.0 badges vs 0.9.0, "9 agents" vs 15) |
+
+**Test totals:** 52 pass (9 sync + 10 install-reconcile + 33 orchestrator).
+All schema fixtures exit expected codes.
+
+## Three findings that reshape priorities (from the audit)
+
+These are P1–P3 in IMPROVEMENT_PLAN.md — do NOT start until P0 is
+committed + adopters synced, but keep them in view when planning.
+
+1. **Headline promises have no deterministic enforcement.**
+   Mandatory review + TDD are prompt-hope backed by self-attested git
+   trailers that aren't installed by default. There are NO Claude Code
+   hooks anywhere in the engine.
+   **→ P1: `hooks.json` commit gate, test-run hook, secrets scanner,
+   `/new-feature` chaining skill.** This is what makes the promises real.
+2. **The domain layer is missing entirely.**
+   100% of the engine governs *how you work*; 0% is *what SaaS apps
+   are made of*.
+   **→ P3.1 / P3.2: `pe new` scaffolding + extract tenancy / billing /
+   credentials modules that already exist in 8CStudio, Origyn, and
+   invoice-system.** Each ships with its tests + reviewing agent.
+   Highest-leverage move once P0/P1 are in.
+3. **Symlink distribution should become a native Claude Code plugin
+   before the beta widens.**
+   Two releases fought pathologies the plugin marketplace solved;
+   symlinks also have no version pinning.
+   **→ P3.3: convert to native plugin.**
 
 ## Session rituals — start and end
 
@@ -214,11 +278,13 @@ pe sync /Users/sanishsasikumar/Documents/Origyn              # Origyn
 
 ## What shipped in the last session (2026-07-02)
 
-1 commit on the engine + 2 config edits at Origyn (yaml placeholders +
+3 engine commits + 2 config edits at Origyn (yaml placeholders +
 Serena MCP) + 1 user-global MCP fix (Semgrep Python 3.12 pin):
 
 | Commit / change | Repo / scope | What |
 |---|---|---|
+| `3b43e03` | engine | 0.9.1 — P0 audit bundle (12 fixes: sync crash, router fail-safe, install clobber guard, interpreter + bash-3.2 portability, plus 7 more) + `docs/IMPROVEMENT_PLAN.md` as new active roadmap. 52/52 tests pass. **Not pushed yet.** |
+| `c229b8a` | engine | docs(HANDOFF): roll in v0.9.0 + adopter health + uvx-python-pin gotcha |
 | `f689895` | engine | 0.9.0 — reconciling `pe install` (silent broken-symlink cleanup), smoke test, BACKLOG housekeeping sweep, TROUBLESHOOTING §4 refresh. Closes #10. |
 | `.process-engine.yaml` | Origyn | replaced template placeholders (`acme` / `Acme Corp`) with real values (`origyn` / `Origyn` / real root) |
 | `.mcp.json` | Origyn | added Serena MCP scoped to Origyn (was missing) |
