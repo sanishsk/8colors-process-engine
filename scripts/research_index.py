@@ -712,10 +712,9 @@ def main() -> int:
     if args.cmd == "status":
         return cmd_status(db_path)
 
-    if args.cmd == "rebuild":
-        if not corpus.exists():
-            print(f"ERROR: corpus {corpus} does not exist", file=sys.stderr)
-            return 1
+    if args.cmd == "rebuild" and not corpus.exists():
+        print(f"ERROR: corpus {corpus} does not exist", file=sys.stderr)
+        return 1
 
     # Provider resolution: CLI → yaml → env → fastembed default
     provider_name, yaml_model = resolve_provider(args.provider, project_root)
