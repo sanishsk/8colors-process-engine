@@ -1,22 +1,24 @@
 # 8colors-process-engine — beta tester brief
 
 > Hand-out for the 2–3 beta cohort. Copy / paste / link as needed.
+> **Last updated 2026-06-30 for v0.8.0** (Phase 3 escalation router
+> graduated 2026-06-28; distribution bundle shipped 2026-06-30).
 
 ---
 
 ## TL;DR
 
 I built **`8colors-process-engine`** — a portable Claude Code plugin
-that drops 13 specialist agents, semantic search over your research
+that drops **15 specialist agents**, semantic search over your research
 docs, a weekly retro cron job, 5 slash commands, 2 session skills,
-and 6 pre-commit governance hooks into any project in **one install
-command**. Defaults need **zero API keys**. MIT-licensed. I want
-your hands on it for 2–4 weeks of real work, then I want to know
-what broke, what was confusing, and what you expected that wasn't
-there.
+6 pre-commit governance hooks, and a **verdict-blind gate escalation
+router** into any project in **one install command**. Defaults need
+**zero API keys**. MIT-licensed. I want your hands on it for 2–4
+weeks of real work, then I want to know what broke, what was
+confusing, and what you expected that wasn't there.
 
 Repo: <https://github.com/sanishsk/8colors-process-engine>
-Current version: **v0.7.0**
+Current version: **v0.8.0**
 
 ---
 
@@ -41,6 +43,9 @@ production system), the same pattern kept costing me time:
   auto-loaded `MEMORY.md` grows past 30 KB.
 - **Weekly retros never happen** because nothing fires them, and a
   promise to "do it Fridays" is a promise to no one.
+- **Gate agents disagree and you don't know when to actually halt.**
+  code-reviewer says HIGH; security-reviewer says MEDIUM; is it
+  really a stop? Answered by v0.7.
 
 The engine is the structural fix. **Doctrine, not a kit.** It
 ships opinionated rails that fail loud when skipped:
@@ -55,15 +60,19 @@ ships opinionated rails that fail loud when skipped:
   RAG over `docs/research/`)
 - **Weekly retro auto-fires** Friday 17:00 (via launchd / systemd
   / Task Scheduler)
+- **Verdict-blind halt on HIGH/CRITICAL** — the escalation router
+  reads gate envelopes, halts on any HIGH/CRITICAL regardless of
+  PASS/FAIL verdict, and escalates worker_quality failures up the
+  Haiku → Sonnet → Opus ladder (Phase 3, graduated 2026-06-28)
 
 If that doctrine isn't what you want, fork it. I won't water it
 down for adoption.
 
 ---
 
-## What's in the box (v0.7.0 inventory)
+## What's in the box (v0.8.0 inventory)
 
-### 13 specialist agents
+### 15 specialist agents
 
 Each has a single job, a model tier matched to that job, and
 explicit when-to-invoke rules:
@@ -74,19 +83,28 @@ explicit when-to-invoke rules:
 | `researcher` | Haiku | OSS / MCP scout; runs async, parallel with implementation |
 | `architect` | Opus | System design, scalability, integration patterns |
 | `planner` | Opus | Multi-slot implementation plans with dependency analysis |
-| `code-reviewer` | Haiku | MANDATORY before commit; CRITICAL findings block |
-| `security-reviewer` | Sonnet | OWASP top 10, secrets, auth, input handling |
-| `tdd-guide` | Sonnet | Write-tests-first; enforces 80%+ coverage |
+| `code-reviewer` | Haiku | MANDATORY before commit; emits gate envelope; CRITICAL findings block |
+| `security-reviewer` | Sonnet | OWASP top 10, secrets, auth, input handling; emits gate envelope |
+| `database-reviewer` | Sonnet | PostgreSQL schema / migration / RLS / tenant isolation; emits gate envelope |
+| `tdd-guide` | Sonnet | Write-tests-first; enforces 80%+ coverage; emits gate envelope |
+| `e2e-runner` | Sonnet | Generates + runs E2E tests; manages journeys + artifacts; emits gate envelope |
 | `doc-updater` | Haiku | Codemaps, READMEs, schema docs |
 | `build-error-resolver` | Haiku | Minimal-diff build / type-error fixes; no architectural edits |
 | `data-model-auditor` | Sonnet | Finds hardcoded business values; recommends moving them to data model |
-| `e2e-runner` | Sonnet | Generates + runs E2E tests; manages journeys + artifacts |
 | `retrospective-agent` | Sonnet | Daily / weekly / monthly retros from dev-log digests |
 | `ceo` | Opus | Friday weekly retro + next-week plan (auto-fires) |
 | `memory-consolidator` | Sonnet | Quarterly memory hygiene; archives historical resume blocks |
 
-All are user-global. You invoke them by name in Claude Code. The
-`brief-writer` and `architect` agents specifically query the
+The 5 agents marked "emits gate envelope" are the **gate agents** —
+their JSON output drives the escalation router. See **What's
+enforced** below.
+
+`pe install` symlinks all 15 by default. If you want a leaner
+install, `pe install --subset gate-only` gives you just the 5 gate
+agents; `--subset core` gives you gates + planner + brief-writer +
+architect (8 total). Default is `full`.
+
+The `brief-writer` and `architect` agents specifically query the
 semantic index in their Step 0 — that's where the Workbox-miss
 class gets structurally closed.
 
@@ -193,13 +211,63 @@ locally. Belt + suspenders.
 One entry point for everything:
 
 ```
-pe install <project>     # symlink agents/commands/skills into a project
-pe launchd <project>     # wire macOS launchd weekly retro
-pe upgrade               # git pull; symlinks auto-propagate
-pe status                # engine version + last commit + inventory
-pe doctor [<project>]    # diagnose install (broken symlinks, missing deps)
-pe eject <project>       # remove engine-managed symlinks
+pe install [--subset gate-only|core|full] <project>
+                          # symlink agents/commands/skills into a project;
+                          # --subset controls which agents (default: full)
+pe sync <project>         # re-point project symlinks at current engine
+                          # (diff-before-clobber: differing files NEVER
+                          #  overwritten without explicit confirmation)
+pe launchd <project>      # wire macOS launchd weekly retro
+pe upgrade                # git pull; symlinks auto-propagate
+pe status                 # engine version + last commit + inventory
+pe doctor [<project>]     # diagnose install (broken symlinks, missing deps,
+                          #  per-agent staleness against user-global agents)
+pe eject <project>        # remove engine-managed symlinks
+pe version                # print engine version
 ```
+
+Advanced (mostly for engine developers, not adopters):
+`pe baseline capture …` (slot baselines), `pe gate parse <file>`
+(validate gate envelope JSON), `pe shadow decide` / `shadow reconcile`
+(Phase 3 escalation-router tooling — enforce gated by `--enforce`;
+graduated 2026-06-28).
+
+---
+
+## What's enforced — the Phase 3 escalation router (graduated 2026-06-28)
+
+New in v0.7-v0.8, and the piece I'd most like beta feedback on.
+
+Gate agents (code-reviewer, security-reviewer, database-reviewer,
+tdd-guide, e2e-runner) each emit a **gate envelope** — a
+machine-parseable JSON block with:
+
+- `verdict`: PASS / FAIL / WARN
+- `failure_class`: `worker_quality` / `task_underspecified` /
+  `blocked` / `out_of_scope`
+- `findings[]`: severity ∈ CRITICAL / HIGH / MEDIUM / LOW
+- `confidence`, `model_used`
+
+The router reads envelopes and decides:
+
+- **Any finding with severity HIGH or CRITICAL → HALT**, regardless
+  of the verdict. This is the "verdict-blind severity floor" — the
+  answer to "gates disagree, when do I actually stop?"
+- **verdict=FAIL + failure_class=worker_quality → escalate** to the
+  next tier (Haiku → Sonnet → Opus). Cap of 6 iterations per slot,
+  then human halt.
+- **failure_class ∈ {task_underspecified, blocked, out_of_scope} →
+  human halt** (no amount of retry will fix an underspecified task)
+- **verdict=WARN → proceed, surface to human** for the next session
+
+Cohort-validated on 12 real slots in 8CStudio before flipping from
+shadow to enforce mode. See `docs/PHASE_3_ESCALATION_ROUTER.md` +
+`docs/E1_GATE_ENVELOPE.md` for the full contract.
+
+**Beta ask on this:** if a gate agent fires in your project, does
+its envelope look right? Are its findings severity levels
+calibrated to what YOUR domain considers HIGH? If not, that's the
+kind of tuning I need to know about.
 
 ---
 
@@ -218,6 +286,10 @@ pe eject <project>       # remove engine-managed symlinks
 - **The `8colors-process-engine` name** is the project name, not a
   white-label. Yes, it's a little weird. Yes, I'll consider renaming
   if there's a strong reason. The `pe` CLI is generic enough.
+- **HIGH/CRITICAL findings halt.** No override flag today. If a
+  gate agent flags something HIGH that you disagree with, the fix
+  is to tune the agent's rubric (fork or PR), not to override at
+  run time.
 
 If any of those bullets are dealbreakers for your workflow, please
 **still try it for an afternoon** and tell me — that's the most
@@ -233,11 +305,21 @@ git clone https://github.com/sanishsk/8colors-process-engine.git \
     ~/.local/share/8colors-process-engine
 
 # 2. Symlink the pe CLI onto your PATH
+mkdir -p ~/.local/bin
 ln -s ~/.local/share/8colors-process-engine/scripts/pe ~/.local/bin/pe
-# (ensure ~/.local/bin is on $PATH; add to ~/.zshrc / ~/.bashrc if not)
+
+# 2a. Verify ~/.local/bin is on $PATH (stock macOS zsh does not include it)
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) echo "OK — ~/.local/bin is on PATH" ;;
+  *) echo "MISSING — add this to ~/.zshrc, then open a new shell:"
+     echo '  export PATH="$HOME/.local/bin:$PATH"' ;;
+esac
 
 # 3. Install into a target project
 pe install /path/to/your/project
+# or, for a leaner install:
+#   pe install --subset gate-only /path/to/your/project   # 5 gate agents only
+#   pe install --subset core /path/to/your/project        # 8 agents
 
 # 4. Restart Claude Code in the target project.
 
@@ -245,6 +327,35 @@ pe install /path/to/your/project
 #    In Claude Code: type "/start-session" and see the orientation
 #    On the CLI: pe status, pe doctor /path/to/your/project
 ```
+
+### After an engine upgrade — `pe sync`
+
+When you `git pull` the engine and want a project to pick up the
+changes without a full re-install:
+
+```bash
+pe sync /path/to/your/project
+# or preview first:
+pe sync --dry-run /path/to/your/project
+```
+
+`pe sync` re-points project symlinks at the current engine with a
+**diff-before-clobber** safety contract:
+
+- Symlinks already pointing at the current engine → silent skip
+- Symlinks pointing at a stale/other engine → prompts to re-point
+- Regular files identical to the engine version → silently
+  upgraded to symlinks
+- **Regular files that DIFFER from the engine → shows unified
+  diff, prompts y/N, never overwrites without explicit
+  confirmation** (this is the safety contract)
+- Missing in-subset files → silently re-added
+- Orphan symlinks from a wider previous subset → prompted for
+  removal
+
+Ships with a smoke test (`tests/test_pe_sync.sh`) that gates the
+destructive path — the failure mode of untested = clobbered
+customized agent.
 
 ### Optional: wire the Friday weekly retro (macOS)
 
@@ -287,14 +398,17 @@ A sample first session that touches the most pieces:
 1. **`/start-session`** — see if it picks up your project's CLAUDE.md
    / README / git state cleanly. Note what it gets right, what it
    misses.
-2. **Invoke `code-reviewer`** before your next commit. See if its
-   findings match your own review priorities.
-3. **Invoke `brief-writer`** for a feature you're considering.
+2. **`pe sync --dry-run`** — see what the engine's diff-before-clobber
+   check reports for your project. Should be clean on a fresh install.
+3. **Invoke `code-reviewer`** before your next commit. See if its
+   findings match your own review priorities. Note the gate envelope
+   JSON at the bottom of its output — that's what the router reads.
+4. **Invoke `brief-writer`** for a feature you're considering.
    Compare its 1-page brief to what you'd write yourself.
-4. **Run `python3 scripts/research_index.py rebuild`** if you have
+5. **Run `python3 scripts/research_index.py rebuild`** if you have
    research docs. Try a query for a topic you know well — does the
    right doc come up?
-5. **`/end-session`** when you're done. See if the close-out report
+6. **`/end-session`** when you're done. See if the close-out report
    surfaces things you'd otherwise lose.
 
 If you want the full experience, also:
@@ -304,6 +418,8 @@ If you want the full experience, also:
   and try committing without trailers — see what blocks.
 - Run `pe launchd` and `--force` the weekly retro to see what the
   CEO agent produces for your project.
+- Trigger a gate to fail on purpose (e.g. commit something with a
+  hardcoded API key) and see the escalation router escalate or halt.
 
 ---
 
@@ -312,31 +428,56 @@ If you want the full experience, also:
 Specific questions are more useful than "any thoughts?":
 
 1. **Did `pe install` work first try?** If not, what broke?
-2. **Did `/start-session` make sense for your project?** What did
+2. **Did `pe sync --dry-run` report anything you weren't expecting?**
+3. **Did `/start-session` make sense for your project?** What did
    it miss?
-3. **Did `code-reviewer`'s findings match your priorities?** Was
+4. **Did `code-reviewer`'s findings match your priorities?** Was
    it too strict, too lax, weird in some specific way?
-4. **Did the semantic search surface useful prior work?** If you
+5. **Did any gate agent's severity calibration feel wrong** for
+   your domain? (This is the piece most likely to need tuning.)
+6. **Did the semantic search surface useful prior work?** If you
    don't have `docs/research/`, was that a blocker?
-5. **What pieces did you end up actually using vs ignoring?** This
+7. **What pieces did you end up actually using vs ignoring?** This
    is the most valuable feedback — pieces nobody uses should die.
-6. **What was the friction point that almost made you stop?**
-7. **What did you expect the engine to do that it didn't?**
-8. **If you ran `pe launchd`, did the weekly retro fire?** What did
-   the output look like?
+8. **What was the friction point that almost made you stop?**
+9. **What did you expect the engine to do that it didn't?**
+10. **If you ran `pe launchd`, did the weekly retro fire?** What did
+    the output look like?
 
 Open issues at <https://github.com/sanishsk/8colors-process-engine/issues>
 (I've added bug + feature templates), or DM me directly — both work.
 
 ---
 
+## Reference docs (in-repo, worth skimming)
+
+- `docs/CAPABILITY_CATALOG.md` — single reference of every tool +
+  agent evaluated, with adopt/reject/defer rationale
+- `docs/COUPLING_MAP.md` — module coupling analysis across the two
+  current adopter projects; useful if you're wondering "how should
+  I split sessions across coupled modules?"
+- `docs/PHASE_3_ESCALATION_ROUTER.md` — the router contract
+- `docs/E1_GATE_ENVELOPE.md` + `schemas/gate-envelope.schema.json` —
+  gate envelope JSON schema
+- `docs/RHYTHM.md` — the operating cadence doctrine
+- `docs/AGENT_INVOCATION_RULES.md` — the agent-chain matrix
+- `docs/OSS_SEARCH_ORDER.md` — the canonical search order for
+  `researcher`
+- `docs/RAG.md` — embedding-provider decisions
+- `CHANGELOG.md` — what's changed release-by-release
+
+---
+
 ## Honest disclaimers
 
 - **Single developer.** Bus factor of 1. You're helping that.
-- **Single project's distillation.** The doctrine is validated on
-  one production codebase (8CStudio: Flask + Postgres + Alpine +
-  Tailwind, ~75 tables, 18 modules, a year of shipped slots). Some
-  patterns may not transfer cleanly to other stacks. PRs welcome.
+- **Validated on two projects now.** Doctrine's primary distillation
+  is [8CStudio](https://8cs.io) (Flask + Postgres + Alpine +
+  Tailwind, ~75 tables, 19 modules, a year of shipped slots). Cross-
+  environment reusability proof came from Origyn (Flask + SQLite
+  fitness coaching platform) — the engine ran cleanly against a
+  second, differently-shaped codebase 2026-06-29. Some patterns may
+  still not transfer to your stack. PRs welcome.
 - **Alpha quality on cross-platform.** macOS is the most-tested
   path. Linux systemd + Windows Task Scheduler templates are
   written from documentation, not from my own daily use. If
@@ -348,6 +489,10 @@ Open issues at <https://github.com/sanishsk/8colors-process-engine/issues>
 - **Anthropic doesn't ship embedding models.** Default RAG provider
   is `fastembed` (BAAI/bge-small-en-v1.5), which runs locally.
   Voyage / Gemini / OpenAI are optional upgrades.
+- **The engine will never auto-modify itself.** No self-detected,
+  self-committed "improvements." Every engine change is human-
+  reviewed, versioned, and pulled by adopters. `pe sync` is the
+  pull mechanism.
 
 ---
 
@@ -367,15 +512,48 @@ The eject is reversible — `pe install` restores the symlinks.
 
 ---
 
-## What I'm planning for v0.8 (your feedback shapes this)
+## What shipped in v0.8.0 (2026-06-30)
 
+The distribution bundle: making "everyone gets engine improvements"
+real without the engine ever self-modifying.
+
+- **`pe sync <project>`** — diff-before-clobber re-pointer (details
+  above). Ships with a safety-contract smoke test.
+- **`pe install --subset {gate-only|core|full}`** — install presets.
+  Choice persisted to `.process-engine.yaml` so re-runs honor it.
+- **INSTALL.md PATH check** — quick-install now probes `$PATH` and
+  prints the exact export line for `~/.zshrc` if `~/.local/bin`
+  isn't on PATH (stock macOS zsh doesn't include it).
+- **`pe doctor` improvements** — reports engine version at the top
+  of self-check + project-check; adds an always-on per-agent
+  freshness summary (`N/M up to date`) so the check is visible
+  even on a clean install.
+- **CHANGELOG discipline** — every code change lands with a
+  changelog entry.
+
+## What's next (v0.9+ candidates, shaped by beta feedback)
+
+- **`docs/COUPLING_MAP.md` for your project** — the doctrine of
+  "split sessions by coupling cluster, not by module name" (§5 of
+  the map). If it clicks for you, tell me; if it's too abstract,
+  also tell me.
+- **Auto-update suggestion surfacer** — engine LOGS improvement
+  candidates (based on retro trends) without APPLYING them; you
+  review and apply via normal flow. Blocked on real adopter
+  signal for what "recurring pattern" looks like in the wild.
 - **Multi-project portfolio mode** — single dashboard / CEO across
   projects you maintain. Blocked on ≥2 multi-project adopters.
-- **Adopter telemetry opt-in** — anonymous, opt-in retro data shared
-  back. Blocked on real adopter signal.
+- **Anthropic Skills directory + Claude Code plugin marketplace
+  submission** — planned once v0.9 stabilizes.
 
-After v0.8, I plan to submit to the Anthropic Skills directory and
-the Claude Code plugin marketplace.
+Explicitly NOT on the runway:
+- **Dependency-aware DAG scheduler (Phase 4).** The Stage A
+  coupling map for both current adopters shows clean clusters, not
+  pervasive tangle — so session-per-cluster is the answer and no
+  scheduler build is justified today. Re-evaluation triggers in
+  `docs/COUPLING_MAP.md §7`.
+- **Engine self-improvement / auto-commit.** Never. One bad
+  auto-commit would propagate to every adopter via `pe sync`.
 
 ---
 
