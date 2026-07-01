@@ -164,6 +164,12 @@ in `scripts/pe` is the propagation-gap canary; do not weaken it.
 **Promoted from backlog 2026-06-29.** No longer premature. Real, justified
 problem surfaced by working sessions on 8CStudio + Origyn.
 
+**Stage A resolved 2026-06-30 — see `docs/COUPLING_MAP.md`.** Both 8CStudio
+and Origyn cluster cleanly. Stage B (Phase 4 build) is **NOT justified by
+current data** — parked with defined re-evaluation triggers in
+COUPLING_MAP.md §7. Stage A (session-per-cluster workflow) is the answer;
+the cluster table lives in COUPLING_MAP.md §5.
+
 ## The problem
 
 Modules aren't independent. Sales ↔ finance are coupled (quotes ↔ invoices),
@@ -175,28 +181,27 @@ COUPLED work. This is the genuine coordinated-parallelism wall.
 
 ## Two stages, cheapest first — do NOT jump straight to Phase 4
 
-### Stage A — Workflow fix (cheap, try FIRST)
+### Stage A — Workflow fix (cheap, try FIRST) — ✅ RESOLVED 2026-06-30
 
 Split sessions by COUPLING BOUNDARY, not by module name:
 - Coupled work in ONE session (sales+finance together; client+trainer
   interactions together — don't split what's coupled).
 - Only GENUINELY INDEPENDENT work goes to separate sessions.
 
-**Key diagnostic question:** do the couplings CLUSTER CLEANLY
-(sales+finance always together, production always separate → clean groups)
-or are they PERVASIVELY TANGLED (everything touches everything, no clean
-split)?
+**Diagnostic question answer:** both apps **CLUSTER CLEANLY** (parallel
+Explore-agent surveys of both repos, synthesized in `docs/COUPLING_MAP.md`).
 
-- Clusters cleanly → **Stage A solves it for FREE, no build.** Document
-  coupling clusters as the session-split guide.
-- Pervasively tangled → Stage A insufficient; Stage B justified.
+**Cluster table (session-split guide):**
+- **8CStudio:** 3 domain clusters (Production Pipeline, Money, Reporting) +
+  5 utilities/placeholders. 4 cross-cluster edges, all WEAK or intentional.
+- **Origyn:** 3 domain clusters (Coaching, Exercise library, Payment) +
+  shared infra. Client + Trainer merged into a single "Coaching" cluster
+  due to the STRONG unavoidable border edge `trainer → Lead` — this is the
+  most important operational finding.
 
-**Deliverable:** a COUPLING MAP of 8CStudio + Origyn modules — which modules
-are coupled to which, and whether they cluster or tangle. This map is:
-1. The decision input for Stage A vs Stage B.
-2. Exactly what Phase 4 would need as input anyway.
-
-Useful either way.
+Stage A verdict: session-per-cluster works for free, no build. **Rule of
+thumb:** "don't split what's coupled" now has a concrete cluster-membership
+answer per repo.
 
 ### Stage B — Phase 4 build (real engineering, ONLY if Stage A map shows pervasive tangle)
 
@@ -222,9 +227,12 @@ Three parts, **in order**:
 
 ### Stage B start conditions (BOTH must hold)
 
-- P1 distribution bundle SHIPPED and dogfooded.
-- Stage A coupling map confirms PERVASIVE TANGLE (not clean clusters). If
-  clusters cleanly, Stage A is the answer and Phase 4 waits.
+- P1 distribution bundle SHIPPED and dogfooded — ✅ done 2026-06-30
+  (engine v0.8.0 on origin/master).
+- Stage A coupling map confirms PERVASIVE TANGLE (not clean clusters).
+  ❌ **Current data shows clean clusters** (COUPLING_MAP.md §5). Stage B
+  is parked; re-evaluation triggers listed in COUPLING_MAP.md §7. Any of
+  those firing = re-open this block.
 
 ---
 
