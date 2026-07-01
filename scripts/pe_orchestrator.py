@@ -24,10 +24,19 @@ Exit codes:
 
 from __future__ import annotations
 
+import sys
+
+if sys.version_info < (3, 11):
+    sys.exit(
+        "pe shadow requires Python 3.11+ (tomllib); found "
+        f"{sys.version_info.major}.{sys.version_info.minor} at {sys.executable}.\n"
+        "Fix: install a newer Python (e.g. `brew install python@3.12`) or run "
+        "via a 3.11+ interpreter explicitly."
+    )
+
 import argparse
 import json
 import subprocess
-import sys
 import tomllib
 import uuid
 from dataclasses import asdict, dataclass
@@ -115,7 +124,9 @@ def parse_envelope_via_pe_gate(
     transcript path.
     """
     pe_gate = ENGINE_DIR / "scripts" / "pe_gate.py"
-    cmd = ["python3", str(pe_gate)]
+    # sys.executable, not "python3" — parent and child must not resolve to
+    # different interpreters via $PATH (stock macOS python3 is 3.9)
+    cmd = [sys.executable, str(pe_gate)]
     if bare:
         cmd.append("--bare")
     cmd.append(str(envelope_path))
@@ -239,6 +250,24 @@ def route(
             notes=f"failure_class={failure_class!r} not in policy",
         )
 
+    # 4.5. Fail-safe: a FAIL verdict must never resolve to "continue".
+    # failure_class="none" is only meaningful on PASS/WARN; a gate that
+    # emits FAIL+none (schema-valid but contradictory) gets a human,
+    # not a green light — otherwise FAIL+none+CRITICAL findings would
+    # sail through (falsified the graduation signoff's no-fallback claim).
+    if action == "continue":
+        return RouterDecision(
+            action="halt_to_human",
+            from_tier=current_worker_tier,
+            to_tier=None,
+            rule_matched=f"fail_verdict_contradiction:{failure_class}",
+            rule_source=rule_source,
+            notes=(
+                f"verdict=FAIL but failure_class={failure_class!r} routes to "
+                "'continue' — contradictory envelope, halting fail-safe"
+            ),
+        )
+
     # 5. Terminal-tier rule: top-tier worker_quality has nowhere to
     # escalate. Caught HERE in the policy layer, not by the breaker.
     if action == "escalate_one_tier":
@@ -322,9 +351,21 @@ def compute_breaker_state(
             data = json.loads(cumulative_state_path.read_text())
             worker_cum = data.get("worker_tokens_cumulative", 0)
             gate_cum = data.get("gate_tokens_cumulative", 0)
-        except (json.JSONDecodeError, OSError):
-            # Corrupted sidecar — treat as fresh.
-            pass
+        except (json.JSONDecodeError, OSError) as exc:
+            # This sidecar is the breaker's primary safety ledger — a
+            # silent reset would zero it invisibly. Preserve the corrupt
+            # content for forensics and warn loudly before starting fresh.
+            corrupt_path = cumulative_state_path.with_suffix(".json.corrupt")
+            try:
+                corrupt_path.write_bytes(cumulative_state_path.read_bytes())
+            except OSError:
+                pass
+            print(
+                f"WARNING: breaker sidecar {cumulative_state_path} is "
+                f"unreadable ({exc}); preserved to {corrupt_path} and "
+                "resetting cumulative token totals to 0",
+                file=sys.stderr,
+            )
 
     # Add this envelope's gate cost, if reported.
     if envelope and "cost" in envelope:
@@ -401,7 +442,10 @@ def update_cumulative_state(
         breaker_state.gate_tokens_cumulative or 0
     )
     data["last_updated"] = datetime.now(timezone.utc).isoformat()
-    cumulative_state_path.write_text(json.dumps(data, indent=2))
+    # Atomic replace — a kill mid-write must not corrupt the safety ledger.
+    tmp_path = cumulative_state_path.with_suffix(".json.tmp")
+    tmp_path.write_text(json.dumps(data, indent=2))
+    tmp_path.replace(cumulative_state_path)
 
 
 # ─── reconciliation ────────────────────────────────────────────────────────

@@ -246,10 +246,17 @@ def extract_crosscheck(text: str) -> dict | None:
     header line was not found. Stops at the first non-indented or blank
     line after at least one k:v line has been collected.
     """
-    m = CROSSCHECK_HEADER_RE.search(text)
-    if not m:
+    # Only cross-check blocks BEFORE the last fence count (the contract is
+    # "enumerate values, then emit"), and the LAST such block wins — a
+    # retry transcript legitimately contains a stale earlier block
+    # followed by the corrected one (E1.a §13 mandates up to 3 retries).
+    fences = list(FENCE_RE.finditer(text))
+    search_region = text[: fences[-1].start()] if fences else text
+    headers = list(CROSSCHECK_HEADER_RE.finditer(search_region))
+    if not headers:
         return None
-    rest = text[m.end():].lstrip("\n").splitlines()
+    m = headers[-1]
+    rest = search_region[m.end():].lstrip("\n").splitlines()
     out: dict[str, str] = {}
     for ln in rest:
         if not ln.strip():
@@ -337,6 +344,23 @@ def main(argv: list[str]) -> int:
         return EXIT_PARSE_ERROR
 
     validation_errors = _validate(envelope, schema, schema)
+
+    # Verdict/failure_class coherence — the hand-rolled validator has no
+    # if/then support, so enforce the schema's prose rule here: FAIL must
+    # carry a real failure_class (FAIL+none would route to 'continue'
+    # downstream), and PASS/WARN must carry 'none'.
+    verdict = envelope.get("verdict")
+    failure_class = envelope.get("failure_class")
+    if verdict == "FAIL" and failure_class == "none":
+        validation_errors.append(
+            "$.failure_class: 'none' is invalid when verdict=FAIL — pick "
+            "worker_quality / task_underspecified / blocked / out_of_scope"
+        )
+    elif verdict in ("PASS", "WARN") and failure_class not in ("none", None):
+        validation_errors.append(
+            f"$.failure_class: must be 'none' when verdict={verdict} "
+            f"(got {failure_class!r})"
+        )
 
     # Major version gate.
     schema_version = envelope.get("schema_version", "0.0.0")

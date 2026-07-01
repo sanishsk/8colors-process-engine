@@ -46,8 +46,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
     # Count distinct slot IDs (heuristic: tokens matching ^[0-9][A-Z]?(\.[0-9.]+)? in commit subjects)
     slot_ids=$(git log --format=%s "$range" 2>/dev/null \
-        | grep -oE '[0-9]+[A-Z]?\.[0-9][0-9.]*' \
-        | sort -u | wc -l | tr -d ' ')
+        | { grep -oE '[0-9]+[A-Z]?\.[0-9][0-9.]*' || true; } \
+        | sort -u | grep -c . || true)
 
     # Foundational paths changed in this range
     foundational_hits=$(git diff --name-only "$range" 2>/dev/null \

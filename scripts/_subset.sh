@@ -28,5 +28,6 @@ agent_in_subset() {
 read_subset_from_yaml() {
     local yaml="$1"
     [ -f "$yaml" ] || return 0
-    awk '/^install:/{f=1;next} f && /^  subset:/{print $2; exit} f && /^[^ ]/{exit}' "$yaml" 2>/dev/null || true
+    # gsub strips surrounding quotes — subset: "core" must read as core
+    awk '/^install:/{f=1;next} f && /^  subset:/{v=$2; gsub(/["\047]/,"",v); print v; exit} f && /^[^ ]/{exit}' "$yaml" 2>/dev/null || true
 }

@@ -14,6 +14,22 @@ set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_DIR="$(cd "$SELF_DIR/.." && pwd)"
 ORCH="$ENGINE_DIR/scripts/pe_orchestrator.py"
+
+# The orchestrator needs Python 3.11+ (tomllib); stock macOS python3 is 3.9.
+PY="${PE_PYTHON:-}"
+if [ -z "$PY" ]; then
+    for cand in python3 python3.13 python3.12 python3.11; do
+        if command -v "$cand" >/dev/null 2>&1 \
+           && "$cand" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+            PY="$cand"
+            break
+        fi
+    done
+fi
+if [ -z "$PY" ]; then
+    echo "SKIP: no Python 3.11+ interpreter found (set PE_PYTHON=/path/to/python3.11+)" >&2
+    exit 0
+fi
 FIX="$ENGINE_DIR/schemas/fixtures"
 TMP="$(mktemp -d -t pe_phase3_test.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
@@ -88,7 +104,7 @@ mk_envelope "$TMP/out-of-scope-highconf.json"   "out_of_scope"
 # ─── routing-policy paths ──────────────────────────────────────────────────
 
 echo "=== 1. worker_quality at haiku → escalate to sonnet ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$FIX/fail-escalate.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 1 --current-tier haiku --decisions-log "$LOG")"
@@ -96,7 +112,7 @@ assert_action "worker_quality at haiku" "escalate_one_tier" "$out"
 assert_rule   "worker_quality at haiku" "worker_quality -> escalate_one_tier" "$out"
 
 echo "=== 2. worker_quality at OPUS → terminal halt (operator refinement) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$FIX/fail-escalate.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 2 --current-tier opus --decisions-log "$LOG")"
@@ -104,7 +120,7 @@ assert_action "worker_quality at opus" "halt_to_human" "$out"
 assert_rule   "worker_quality at opus" "top_tier_worker_quality" "$out"
 
 echo "=== 3. low-confidence (0.55) → halt via confidence override ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$FIX/fail-halt.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 3 --current-tier haiku --decisions-log "$LOG")"
@@ -112,14 +128,14 @@ assert_action "low-confidence halt" "halt_to_human" "$out"
 assert_rule   "low-confidence halt" "confidence_below_0.6" "$out"
 
 echo "=== 4. PASS envelope → continue ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$FIX/pass.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 4 --current-tier haiku --decisions-log "$LOG")"
 assert_action "PASS continue" "continue" "$out"
 
 echo "=== 5. schema-invalid envelope → halt (never silent-pass) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$FIX/invalid-bad-enum.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 5 --current-tier sonnet --decisions-log "$LOG")"
@@ -127,7 +143,7 @@ assert_action "schema-invalid halt" "halt_to_human" "$out"
 assert_rule   "schema-invalid halt" "schema_error" "$out"
 
 echo "=== 5b. task_underspecified at conf=0.95 → halt (rule, not conf-override) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/task-underspec-highconf.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 1 --current-tier haiku --decisions-log "$LOG")"
@@ -135,7 +151,7 @@ assert_action "task_underspecified high-conf halt" "halt_to_human" "$out"
 assert_rule   "task_underspecified high-conf halt" "task_underspecified -> halt_to_human" "$out"
 
 echo "=== 5c. blocked at conf=0.95 → halt ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/blocked-highconf.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 1 --current-tier haiku --decisions-log "$LOG")"
@@ -143,15 +159,28 @@ assert_action "blocked halt" "halt_to_human" "$out"
 assert_rule   "blocked halt" "blocked -> halt_to_human" "$out"
 
 echo "=== 5d. out_of_scope at conf=0.95 → halt ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/out-of-scope-highconf.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 1 --current-tier haiku --decisions-log "$LOG")"
 assert_action "out_of_scope halt" "halt_to_human" "$out"
 assert_rule   "out_of_scope halt" "out_of_scope -> halt_to_human" "$out"
 
+echo "=== 5e. FAIL + failure_class=none (contradictory) → halt, never continue ==="
+# Regression guard: the "none -> continue" rule must never apply to a FAIL
+# verdict — before 2026-07-02 this envelope routed to continue (fail-safe hole).
+mk_envelope "$TMP/fail-none-contradiction.json" "none" "FAIL"
+out="$("$PY" "$ORCH" decide --bare \
+    --envelope "$TMP/fail-none-contradiction.json" \
+    --slot-id PHASE3.1 --slot-kind feature_incremental \
+    --iteration 1 --current-tier haiku --decisions-log "$LOG")"
+# Two defense layers can catch this (pe_gate coherence check → schema_error,
+# or route()'s fail_verdict_contradiction guard) — the contract under test is
+# only: action is halt_to_human, NEVER continue.
+assert_action "FAIL+none contradiction halt" "halt_to_human" "$out"
+
 echo "=== 6. real transcript (E1.d cross-check enforced) → escalate ==="
-out="$(python3 "$ORCH" decide \
+out="$("$PY" "$ORCH" decide \
     --envelope "$FIX/transcript-with-crosscheck.md" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 1 --current-tier haiku --decisions-log "$LOG")"
@@ -188,7 +217,7 @@ JSON
 mk_envelope_with_findings "$TMP/warn-1high.json" "WARN" \
     '[{"severity": "HIGH", "rule": "x", "message": "y"}]'
 echo "=== 6a. WARN + 1 HIGH finding → halt (severity override) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/warn-1high.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 6 --current-tier sonnet --decisions-log "$LOG")"
@@ -199,7 +228,7 @@ assert_rule   "WARN+HIGH halt" "severity_floor:HIGH" "$out"
 mk_envelope_with_findings "$TMP/pass-1critical.json" "PASS" \
     '[{"severity": "CRITICAL", "rule": "x", "message": "y"}]'
 echo "=== 6b. PASS + 1 CRITICAL → halt (severity override) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/pass-1critical.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 7 --current-tier sonnet --decisions-log "$LOG")"
@@ -210,7 +239,7 @@ assert_rule   "PASS+CRITICAL halt" "severity_floor:CRITICAL" "$out"
 mk_envelope_with_findings "$TMP/warn-medium-low.json" "WARN" \
     '[{"severity": "MEDIUM", "rule": "x", "message": "y"}, {"severity": "LOW", "rule": "z", "message": "w"}]'
 echo "=== 6c. WARN + only MEDIUM/LOW → continue (no false positive) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/warn-medium-low.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 8 --current-tier sonnet --decisions-log "$LOG")"
@@ -220,7 +249,7 @@ assert_rule   "WARN+MEDIUM/LOW continue" "none" "$out"
 # 6d. PASS + empty findings → continue (regression guard for §10.2).
 mk_envelope_with_findings "$TMP/pass-empty.json" "PASS" "[]"
 echo "=== 6d. PASS + empty findings → continue (regression guard) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/pass-empty.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 9 --current-tier sonnet --decisions-log "$LOG")"
@@ -240,7 +269,7 @@ d['failure_class'] = 'worker_quality'
 json.dump(d, open(p, 'w'))
 "
 echo "=== 6e. FAIL + HIGH → failure_class path wins (severity floor doesn't shadow FAIL) ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$TMP/fail-high.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 10 --current-tier haiku --decisions-log "$LOG")"
@@ -278,6 +307,7 @@ unexpected_files="$(find "$TMP" -type f \
     ! -path "$TMP/task-underspec-highconf.json" \
     ! -path "$TMP/blocked-highconf.json" \
     ! -path "$TMP/out-of-scope-highconf.json" \
+    ! -path "$TMP/fail-none-contradiction.json" \
     ! -path "$TMP/warn-1high.json" \
     ! -path "$TMP/pass-1critical.json" \
     ! -path "$TMP/warn-medium-low.json" \
@@ -333,7 +363,7 @@ fi
 # ─── breaker ───────────────────────────────────────────────────────────────
 
 echo "=== 7. iteration cap (iter=6 hits slot_iteration_cap=6) → breaker trips ==="
-out="$(python3 "$ORCH" decide --bare \
+out="$("$PY" "$ORCH" decide --bare \
     --envelope "$FIX/fail-escalate.json" \
     --slot-id PHASE3.1 --slot-kind feature_incremental \
     --iteration 6 --current-tier sonnet --decisions-log "$LOG")"
@@ -353,7 +383,7 @@ reconciliation_payload='{
     "notes": "test fixture"
   }
 }'
-echo "$reconciliation_payload" | python3 "$ORCH" reconcile \
+echo "$reconciliation_payload" | "$PY" "$ORCH" reconcile \
     --slot-id PHASE3.1 --decisions-log "$LOG" \
     --reconciliations-log "$REC_LOG" 2>/dev/null
 
@@ -384,7 +414,7 @@ fi
 
 echo "=== 9. reconcile on unknown slot → exit 2 ==="
 set +e
-echo '{}' | python3 "$ORCH" reconcile --slot-id NOSUCH \
+echo '{}' | "$PY" "$ORCH" reconcile --slot-id NOSUCH \
     --decisions-log "$LOG" \
     --reconciliations-log "$REC_LOG" 2>/dev/null
 rc=$?
@@ -399,7 +429,7 @@ fi
 
 echo "=== 10. decide on nonexistent envelope → exit 2 ==="
 set +e
-python3 "$ORCH" decide --bare \
+"$PY" "$ORCH" decide --bare \
     --envelope "$TMP/does-not-exist.json" \
     --slot-id PHASE3.1 --iteration 1 --current-tier haiku 2>/dev/null
 rc=$?

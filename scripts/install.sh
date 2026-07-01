@@ -72,6 +72,17 @@ if [ -z "$SUBSET" ]; then
 fi
 SUBSET="${SUBSET:-full}"
 
+# Re-validate AFTER resolution — a typo or quoted value in the yaml
+# (e.g. subset: ful, subset: "core") would otherwise make agent_in_subset
+# reject every agent and install ZERO agents while reporting "skipped".
+case "$SUBSET" in
+  gate-only|core|full) ;;
+  *)
+    echo "ERROR: install.subset in $TARGET/.process-engine.yaml is invalid" >&2
+    echo "  (got: '$SUBSET' — must be one of: gate-only, core, full, unquoted)" >&2
+    exit 2 ;;
+esac
+
 mkdir -p "$TARGET/.claude/agents"
 mkdir -p "$TARGET/.claude/commands"
 mkdir -p "$TARGET/docs/templates"
@@ -98,6 +109,21 @@ declare -a USER_GLOBAL_COLLISIONS=()
 declare -a INSTALLED_AGENTS=()
 declare -a SKIPPED_AGENTS=()
 declare -a REMOVED_BROKEN=()
+declare -a PRESERVED_FORKS=()
+
+# install_link ENGINE_SRC DST LABEL — symlink DST at ENGINE_SRC, but NEVER
+# clobber a regular file that differs from the engine (an operator fork).
+# ln -sf used to replace forks unconditionally — unrecoverable data loss,
+# and it contradicted pe sync's diff-before-clobber contract for the same
+# situation. Forks are preserved; `pe sync` reviews them interactively.
+install_link() {
+  local engine_src="$1" dst="$2" label="$3"
+  if [ -e "$dst" ] && [ ! -L "$dst" ] && ! cmp -s "$engine_src" "$dst"; then
+    PRESERVED_FORKS+=("$label")
+    return 0
+  fi
+  ln -sf "$engine_src" "$dst"
+}
 # Reconciliation split (E1.c.2):
 #   - install.sh silently removes BROKEN symlinks (target vanished from engine —
 #     e.g. operator switched engine branch and an agent was removed upstream).
@@ -122,7 +148,7 @@ for f in "$ENGINE_DIR"/agents/*.md; do
       USER_GLOBAL_COLLISIONS+=("$agent_name")
     fi
   fi
-  ln -sf "$f" "$TARGET/.claude/agents/$agent_name"
+  install_link "$f" "$TARGET/.claude/agents/$agent_name" "agents/$agent_name"
   INSTALLED_AGENTS+=("$agent_stem")
 done
 
@@ -139,7 +165,7 @@ done
 
 # Symlink commands
 for f in "$ENGINE_DIR"/commands/*.md; do
-  ln -sf "$f" "$TARGET/.claude/commands/$(basename "$f")"
+  install_link "$f" "$TARGET/.claude/commands/$(basename "$f")" "commands/$(basename "$f")"
 done
 
 # Reconcile broken command symlinks (E1.c.2): same shape as agents.
@@ -156,7 +182,7 @@ done
 for skill_dir in "$ENGINE_DIR"/skills/*/; do
   skill_name="$(basename "$skill_dir")"
   mkdir -p "$HOME/.claude/skills/$skill_name"
-  ln -sf "$skill_dir/SKILL.md" "$HOME/.claude/skills/$skill_name/SKILL.md"
+  install_link "$skill_dir/SKILL.md" "$HOME/.claude/skills/$skill_name/SKILL.md" "skills/$skill_name/SKILL.md"
 done
 
 # Symlink engine-owned scripts (currently just research_index.py for v0.3 RAG).
@@ -164,7 +190,7 @@ done
 # project needs to fork it, replace the symlink with a real file.
 for f in "$ENGINE_DIR"/scripts/research_index.py; do
   if [ -f "$f" ]; then
-    ln -sf "$f" "$TARGET/scripts/$(basename "$f")"
+    install_link "$f" "$TARGET/scripts/$(basename "$f")" "scripts/$(basename "$f")"
   fi
 done
 
@@ -222,6 +248,10 @@ echo "  Agents:    $(ls "$TARGET/.claude/agents" | wc -l | tr -d ' ') symlinked 
 echo "  Commands:  $(ls "$TARGET/.claude/commands" | wc -l | tr -d ' ') symlinked → $TARGET/.claude/commands/"
 if [ "${#REMOVED_BROKEN[@]}" -gt 0 ]; then
   echo "  Reconciled: ${#REMOVED_BROKEN[@]} broken symlink(s) removed (${REMOVED_BROKEN[*]})"
+fi
+if [ "${#PRESERVED_FORKS[@]}" -gt 0 ]; then
+  echo "  Preserved: ${#PRESERVED_FORKS[@]} customized file(s) NOT overwritten (${PRESERVED_FORKS[*]})"
+  echo "             Run 'pe sync $TARGET' to review them against the engine versions."
 fi
 SKILL_COUNT=$(ls "$HOME/.claude/skills" 2>/dev/null | grep -cE '^(start|end)-session$' || true)
 echo "  Skills:    ${SKILL_COUNT} symlinked → ~/.claude/skills/ (user-global)"

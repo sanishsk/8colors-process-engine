@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.7.0-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.9.0-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -58,8 +58,8 @@ pe install /path/to/your/project
 
 Restart Claude Code in `your-project`. You now have:
 
-- 9 specialist agents
-- 4 slash commands
+- 15 specialist agents (or a leaner set via `pe install --subset gate-only|core`)
+- 5 slash commands
 - 2 session skills (`/start-session`, `/end-session`)
 - Semantic search over `docs/research/`
 - An opinionated set of templates
@@ -311,8 +311,9 @@ See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
 - v0.4 — `pe` unified CLI, public-launch README, CHANGELOG, CONTRIBUTING ✅
 - v0.5 — Multi-provider embeddings (fastembed default + voyage / gemini / openai); zero-API-key adopter path ✅
 - v0.6 — `hooks/` directory (5 generalized pre-commit hooks) + `pe eject` + Linux systemd / cron / Windows Task Scheduler templates ✅
-- **v0.7 (current)** — Domain agents (data-model-auditor, build-error-resolver, e2e-runner, retrospective-agent) + memory-consolidator agent + `/memory-consolidate` command + CI gate template + stacking-rule pre-push hook ✅
-- v0.8 — Multi-project portfolio mode + adopter telemetry opt-in (blocked on ≥2 real adopters)
+- v0.7 — Domain agents (data-model-auditor, build-error-resolver, e2e-runner, retrospective-agent) + memory-consolidator agent + `/memory-consolidate` command + CI gate template + stacking-rule pre-push hook ✅
+- v0.8 — Distribution bundle: `pe sync` (diff-before-clobber), `pe install --subset`, version-aware `pe doctor`, PATH check ✅
+- **v0.9 (current)** — Reconciling `pe install` (silent broken-symlink cleanup) ✅
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
 ---

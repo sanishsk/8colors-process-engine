@@ -1,7 +1,7 @@
 {
   "name": "8colors-process-engine",
-  "version": "0.7.0",
-  "description": "Portable Claude Code process engine — 13 agents + 2 session skills + 5 commands + cross-platform schedulers + multi-provider RAG + 6 pre-commit hooks + CI gate template + unified pe CLI. OSS-first doctrine baked in.",
+  "version": "0.9.0",
+  "description": "Portable Claude Code process engine — 15 agents + 2 session skills + 5 commands + cross-platform schedulers + multi-provider RAG + 6 pre-commit hooks + CI gate template + unified pe CLI. OSS-first doctrine baked in.",
   "author": "8Colors",
   "license": "MIT",
   "homepage": "https://github.com/sanishsk/8colors-process-engine",

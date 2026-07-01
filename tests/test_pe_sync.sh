@@ -98,8 +98,12 @@ CUSTOM_MARKER="### LOCAL CUSTOMIZATION — DO NOT OVERWRITE ###"
 assert "before sync: tdd-guide.md is a regular file with the marker" \
        "[ ! -L \"$PROJECT_AGENT_2\" ] && grep -q \"$CUSTOM_MARKER\" \"$PROJECT_AGENT_2\""
 
-# Run sync with `n` on stdin to DECLINE the overwrite prompt
-echo "n" | bash "$PE" sync "$PROJECT" > "$TMP/sync2.out" 2>&1 || true
+# Run sync with `n` on stdin to DECLINE the overwrite prompt.
+# Capture the exit code — a crash mid-run (the historical diff|head
+# errexit bug) also leaves the file untouched, so file-preservation
+# assertions alone would pass on broken behavior.
+SYNC2_EXIT=0
+echo "n" | bash "$PE" sync "$PROJECT" > "$TMP/sync2.out" 2>&1 || SYNC2_EXIT=$?
 
 # After sync: file must still be a regular file and still contain the marker
 assert "after sync (declined): tdd-guide.md is STILL a regular file" \
@@ -110,6 +114,15 @@ assert "after sync (declined): tdd-guide.md still contains the local marker" \
 # Sanity check the output mentioned the diff prompt
 assert "sync output mentioned 'differs from engine' for the declined file" \
        "grep -q 'differs from engine' \"$TMP/sync2.out\""
+
+# The decline must be a clean decline, not a crash: sync ran to completion
+# (Summary printed), exited 0, and recorded the kept file.
+assert "sync ran to completion (Summary line present)" \
+       "grep -q 'Summary' \"$TMP/sync2.out\""
+assert "sync exited 0 after a declined overwrite" \
+       "[ \"$SYNC2_EXIT\" -eq 0 ]"
+assert "sync reported the file was kept" \
+       "grep -q 'kept project version' \"$TMP/sync2.out\""
 
 echo ""
 echo "Results: $pass passed, $fail failed"

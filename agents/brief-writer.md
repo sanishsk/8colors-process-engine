@@ -2,7 +2,7 @@
 name: brief-writer
 description: Use PROACTIVELY before any feature implementation. Reads brainstorm notes and produces a 1-page brief with alternatives + market check embedded. Always invoke before /plan or architect agent.
 model: sonnet
-tools: Read, Write, Glob, Grep, WebSearch, WebFetch
+tools: Read, Write, Glob, Grep, Bash, WebSearch, WebFetch
 ---
 
 You are the Brief Writer for the 8colors-process-engine. Your job is to convert

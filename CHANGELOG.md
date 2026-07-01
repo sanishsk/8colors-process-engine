@@ -7,6 +7,52 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.9.1] — 2026-07-02
+
+> P0 audit bundle. Consolidates a 4-track audit (shell layer, Python
+> core, agentic layer, architecture/strategy) into all 12 P0 fixes.
+> Full P0→P4 backlog lives in `docs/IMPROVEMENT_PLAN.md` (new).
+>
+> All 52 tests pass (9 sync + 10 install-reconcile + 33 orchestrator).
+
+### Fixed
+
+- **`pe sync` no longer crashes on customized files** (`scripts/pe:414`).
+  `diff` exiting 1 under `set -euo pipefail` killed sync on every
+  customized file, and the overwrite-confirm prompt was unreachable
+  dead code. Test hardened to assert exit 0 (old test passed
+  *because* of the crash).
+- **Router fail-safe hole closed.** A schema-valid `FAIL +
+  failure_class:"none"` envelope routed to `continue` even with
+  CRITICAL findings — falsifying the Phase 3 graduation signoff. Now
+  caught at three layers: schema conditional, `pe_gate` coherence
+  check, and a `route()` guard. Regression test added.
+- **Stacking pre-push hook** no longer silently blocks every push
+  with no slot IDs.
+- **`pe install` no longer clobbers operator-forked files** — new
+  `install_link` helper preserves them, reports them, and points
+  at `pe sync` for review.
+- **Interpreter hardening.** Stock macOS `python3` is 3.9 (no
+  `tomllib`). `pe` now probes for 3.11+; the orchestrator exits with
+  an actionable message; subprocesses use `sys.executable`. The
+  orchestrator test suite could not previously run on stock macOS —
+  now 33/33.
+- `pe eject` bash-3.2 crash · BSD-`sed` bug that made `doctor`'s
+  launchd check never fire · invalid-subset "installs zero agents"
+  trap (defensive re-validation after yaml resolution) · breaker
+  sidecar silent-corruption + non-atomic writes · gate cross-check
+  ordering + retry bugs · `brief-writer` / `architect` missing the
+  Bash tool their MANDATORY Step 0 requires · version drift (0.7.0
+  badges/manifest vs 0.9.0, "9 agents" vs 15).
+
+### Added
+
+- `docs/IMPROVEMENT_PLAN.md` — the canonical P0→P4 roadmap (~45
+  items, each with file:line, severity, effort, fix). Supersedes
+  `docs/BACKLOG.md`'s carry-forward section as the active worklist.
+
+---
+
 ## [0.9.0] — 2026-07-01
 
 > Single-item minor: reconciling `pe install`. Closes GitHub issue #10
