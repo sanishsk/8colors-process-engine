@@ -391,6 +391,87 @@ No API key. No signup. The first run downloads a ~33 MB model to
 
 ---
 
+## Daily rituals — how you actually use it
+
+Two skills ship with the engine — `/start-session` and `/end-session` —
+that are THE rituals. Learn these and everything else falls into place.
+
+### First time on a project (onboarding)
+
+Do this once per project, then you're in the daily flow below.
+
+```bash
+# 1. Install (see Install section above)
+pe install /path/to/your/project
+
+# 2. Edit the auto-created config with real values
+#    (do NOT commit the template placeholders: acme / Acme Corp / /Users/you/…)
+$EDITOR /path/to/your/project/.process-engine.yaml
+# Set: project.org_tag, project.display_name, project.root
+
+# 3. (Optional, macOS) Wire the Friday weekly retro
+pe launchd /path/to/your/project
+
+# 4. Verify install is healthy
+pe doctor /path/to/your/project
+```
+
+Create/grow `CLAUDE.md` and `MEMORY.md` in your project root as work
+happens. The session skills read them.
+
+### Every day (start → work → end)
+
+**Start of session:**
+
+1. Open Claude Code in the project directory.
+2. Type `/start-session`. The skill reads CLAUDE.md, MEMORY, weekly plan,
+   git state; surfaces active focus + stale plans + first-task
+   recommendation and **stops waiting for you.** It never starts work
+   autonomously.
+3. If you recently `git pull`-ed the engine, run
+   `pe sync --dry-run /path/to/project` first to preview any updates the
+   engine wants to propagate. Then `pe sync` (no `--dry-run`) if you want
+   them applied — **diff-before-clobber protects any customizations you
+   made.**
+4. Decide the task. Work.
+
+**End of session:**
+
+1. Type `/end-session`. The skill runs the close-out: git status, sync
+   check (ahead/behind origin), MEMORY banner updates (surfaces diffs —
+   **never auto-writes**), deliverables ledger (commits + hashes),
+   unresolved items, next-session pickup pointer.
+2. Review its output. Apply MEMORY updates it surfaces if you agree
+   (you commit them manually).
+3. Commit + push if you have work to ship. The skill never pushes for
+   you.
+
+Both skills are project-agnostic — they discover files via fallback
+chains. Tune per-project via `.claude/session.yaml`.
+
+### Rule of thumb
+
+| Situation | What to run |
+|---|---|
+| First time on a project | `pe install` + edit yaml + `/start-session` |
+| Daily start | `/start-session` |
+| After engine has new upstream commits | `pe sync --dry-run` → `pe sync` |
+| Daily end | `/end-session`, then commit + push if applicable |
+| Something's off (broken symlinks, wrong version) | `pe doctor /path/to/project` |
+
+### Why this works
+
+- `/start-session` does the "where was I?" work so you don't waste 10
+  minutes re-orienting.
+- `/end-session` prevents "wait, what did I actually do today?" via the
+  ledger + surfacing what to remember.
+- `pe sync --dry-run` is the safe default — see what would change before
+  anything changes.
+- **Neither skill auto-commits, auto-pushes, or auto-edits MEMORY.** You
+  stay in control of what lands. Every write is human-approved.
+
+---
+
 ## What to try first (30 minutes)
 
 A sample first session that touches the most pieces:
