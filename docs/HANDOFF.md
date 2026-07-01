@@ -3,15 +3,17 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-06-30 (engine v0.8.0 shipped + P2 Stage A complete
-> + both adopters synced + BETA_TESTER_BRIEF refreshed)
+> **Last updated:** 2026-07-02 (engine v0.9.0 shipped — reconciling
+> `pe install` closes #10; Semgrep MCP fixed via Python 3.12 pin;
+> both adopters healthy on v0.9.0)
 
 ---
 
 ## One-line state
 
-Engine v0.8.0 is on `origin/master`. Both adopters (8CStudio, Origyn)
-are synced and validated. Everything pushed. No dangling state.
+Engine v0.9.0 is on `origin/master`. Both adopters (8CStudio, Origyn)
+report healthy on v0.9.0 via `pe doctor` (15/15 agents up to date,
+0 shadowed, 0 broken symlinks). Everything pushed. No dangling state.
 
 ## Session rituals — start and end
 
@@ -170,6 +172,19 @@ that's the signal to promote it.
   yaml in a fresh project.
 - **`pe sync --dry-run` is the safe default** for investigating an
   adopter's state — never run non-dry-run without checking dry-run first.
+- **uvx-hosted MCPs may need an explicit `--python` pin.** As of
+  2026-07-02, `semgrep-mcp` (and any MCP that transitively imports
+  `google.protobuf`) crashes under Python 3.14 with
+  `TypeError: Metaclasses with custom tp_new are not supported`. Fix:
+  register the MCP with `uvx --python 3.12 <tool>` (see the semgrep
+  entry in `~/.claude.json` for the exact shape). Symptom in the wild:
+  `claude mcp list` shows `✗ Failed to connect`.
+- **Install-time engine improvements do NOT propagate via `pe sync`.**
+  `pe sync` re-points symlinks; it never re-runs `install.sh`. So
+  changes to `scripts/install.sh` (e.g. E1.c.2 reconciling) reach an
+  adopter the next time the adopter runs `pe install`, not on the next
+  `pe sync`. Don't be surprised when a `pe sync` post-`install.sh`-change
+  reports "0 changes" — that's correct.
 
 ## Common operations
 
@@ -197,9 +212,21 @@ pe sync /Users/sanishsasikumar/Documents/8Colors/8CStudio    # 8CStudio
 pe sync /Users/sanishsasikumar/Documents/Origyn              # Origyn
 ```
 
-## What shipped in the last session (2026-06-30)
+## What shipped in the last session (2026-07-02)
 
-7 commits on the engine + 2 commits on 8CStudio:
+1 commit on the engine + 2 config edits at Origyn (yaml placeholders +
+Serena MCP) + 1 user-global MCP fix (Semgrep Python 3.12 pin):
+
+| Commit / change | Repo / scope | What |
+|---|---|---|
+| `f689895` | engine | 0.9.0 — reconciling `pe install` (silent broken-symlink cleanup), smoke test, BACKLOG housekeeping sweep, TROUBLESHOOTING §4 refresh. Closes #10. |
+| `.process-engine.yaml` | Origyn | replaced template placeholders (`acme` / `Acme Corp`) with real values (`origyn` / `Origyn` / real root) |
+| `.mcp.json` | Origyn | added Serena MCP scoped to Origyn (was missing) |
+| `~/.claude.json` | user-global | Semgrep MCP re-registered with `uvx --python 3.12` — fixes `✗ Failed to connect` under Python 3.14 |
+
+## What shipped in the session before (2026-06-30)
+
+Retained for context — 10 commits on the engine + 2 on 8CStudio:
 
 | Commit | Repo | What |
 |---|---|---|
