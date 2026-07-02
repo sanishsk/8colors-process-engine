@@ -23,6 +23,22 @@ are **not optional advice** — each phase has a hard entry condition,
 a hard exit condition, and an artifact you must produce before
 advancing. Refusal to advance is the load-bearing property.
 
+## Before writing anything — Ponytail decision ladder (P6.1)
+
+If the **Ponytail** skill is installed at
+`~/.claude/skills/ponytail/`, invoke it explicitly before writing
+the RED tests OR the GREEN implementation. If not installed, walk
+the ladder yourself:
+
+> needs to exist? → stdlib? → platform-native? → installed dep? →
+> one line? → only then write minimum.
+
+Concretely: don't write a new helper if the codebase already has one.
+Don't write a class if a function works. Don't write a wrapper if
+you can call the wrapped thing directly. The size-budget and
+complexity gates (v0.13.0) will FAIL commits that ignore this —
+better to catch it here than at commit time.
+
 ## Phase 0 — Stack detection
 
 Detect the test framework by looking at project files:

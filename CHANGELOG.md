@@ -7,6 +7,91 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.13.0] — 2026-07-03
+
+> Simplicity toolchain — "less code" made deterministic. Ships the
+> P6 code-simplicity backlog + P5.4 duplication ratchet in one
+> coherent release. Five items land together because they share the
+> same story: gates that make brevity enforceable at commit time.
+>
+> All existing tests pass; the new hooks feature-detect their tools
+> and skip advisory-mode when unavailable — safe to install into any
+> adopter without breaking their pipeline.
+
+### Added
+
+- **`hooks/complexity-gate.sh`** (P6.2) — pre-commit hook that
+  feature-detects `ruff`, `xenon`, `vulture`, `knip`, and `eslint`;
+  runs each against staged files with engine-recommended rules
+  (`C901,PLR,B,SIM,RET,UP` for ruff; `--max-absolute B` for xenon;
+  `complexity`/`max-depth`/`max-lines-per-function` for eslint).
+  Advisory mode when a tool isn't installed; blocks the commit only
+  when the tool ran AND failed.
+- **`hooks/duplication-gate.sh`** (P5.4 / P6.5) — pre-commit hook
+  that runs `jscpd` project-wide and enforces a RATCHETING baseline
+  from `.jscpd-baseline.json`. Duplication % may only go DOWN;
+  raises are blocked. Handles missing jscpd via graceful skip.
+- **`hooks/size-budget.sh`** (P6.3) — pre-commit hook enforcing
+  net-LOC (WARN 250 / FAIL 600), per-file (FAIL >800 on source
+  paths), and per-function (FAIL >50 for `.py` via AST + `.js/.ts`
+  via regex-lite). Net-lines gate accepts a `Size-justified:`
+  trailer for legitimate large commits; per-file/per-function
+  always block. Tested in isolation — 4/4 threshold/bypass paths pass.
+- **`templates/complexity/`** — five config templates dropped into
+  every adopter at `docs/templates/complexity/`:
+  `ruff.toml.template`, `vulture-allowlist.txt.template`,
+  `knip.json.template`, `eslintrc-complexity.json.template`,
+  `jscpd.json.template`, plus a `README.md` explaining the ladder.
+- **`commands/simplify.md`** (P6.4) — new `/simplify` chain stage.
+  Runs AFTER green tests, BEFORE code review. Enforces the Ponytail
+  ladder + dead-code / reuse / altitude cleanups. Its envelope's
+  PASS condition is "tests still green AND diff ≤ input". FAIL
+  reverts its own changes.
+- **`commands/new-feature.md`** — Stage 6.5 (`/simplify`) inserted
+  into the pipeline; existing 7-stage chain becomes 8-stage.
+- **`scripts/install.sh`** `--with-ponytail` flag (P6.1) — clones
+  `github.com/DietrichGebert/ponytail` into
+  `~/.claude/skills/ponytail/`. Idempotent (git pull on re-run).
+  Graceful skip on missing git / offline.
+- **`agents/tdd-guide.md`** and **`agents/build-error-resolver.md`**
+  gained a Ponytail decision-ladder preamble (P6.1) referencing the
+  skill by path when installed, falling back to inline ladder prose
+  when not. Kept short — the skill owns the deep spec (P2.3 lesson).
+- **`templates/process-engine.yaml.template`** — four new opt-out-
+  able sections: `complexity_gate`, `duplication_gate`,
+  `size_budget`, `ponytail`. All default sensibly.
+
+### Changed
+
+- `hooks/.pre-commit-config.yaml.template` wires the three new
+  gates as pre-commit stages. Env-var comments updated with all
+  new `PE_SKIP_*` bypass keys.
+- `README.md` badge → 0.13.0. Slash-commands count corrected
+  9 (was stale at 5).
+- `plugin.json` description reflects the v0.13.0 additions:
+  9 commands, 11 git-side hooks, complexity/duplication/size gates,
+  Ponytail, `/simplify`.
+
+### Fixed
+
+- The "less code" narrative had NO deterministic backstop. Global
+  rules said 50-line functions, 800-line files, no dead code — but
+  nothing checked. v0.13.0 ships the checkers.
+- Duplication was invisible. First commit against a legacy project
+  self-baselines at whatever it finds; every subsequent commit is
+  gated on not raising it.
+
+### Session pickup (v0.14.0 next)
+
+Product-quality gates from the 8CStudio audit: P5.1 boot-smoke +
+P5.2 migration-lint + P5.3 design-lint + P5.5 Playwright console+
+route smoke + P5.6 confusion budget + P5.7 copy lint + P5.8
+auth-robustness + P5.9 AI-aesthetic rubric. All shippable now as
+generic scaffolds; 8CStudio-specific assertions parameterize when
+#227 lands.
+
+---
+
 ## [0.12.0] — 2026-07-02
 
 > P7.1 context diet (engine half) + P7.3 retro unstall. Both were

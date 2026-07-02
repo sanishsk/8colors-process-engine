@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "//": "knip config template — JS/TS dead-export + unused-dep detector (P6.2). Move to knip.json at project root and tweak entry globs.",
+
+  "entry": [
+    "src/index.{ts,tsx,js,jsx}",
+    "src/main.{ts,tsx,js,jsx}",
+    "app/**/page.{ts,tsx}",
+    "app/**/layout.{ts,tsx}",
+    "app/**/route.{ts,tsx}"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx,js,jsx}",
+    "app/**/*.{ts,tsx,js,jsx}"
+  ],
+
+  "ignore": [
+    "**/*.test.{ts,tsx,js,jsx}",
+    "**/*.spec.{ts,tsx,js,jsx}",
+    "**/__tests__/**",
+    "**/e2e/**"
+  ],
+
+  "ignoreDependencies": [],
+  "ignoreExportsUsedInFile": true
+}

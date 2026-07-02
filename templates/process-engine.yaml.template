@@ -110,3 +110,32 @@ hooks:
 # Lives at <project>/.claude/session.yaml — engine doesn't manage it,
 # but documents the contract here so adopters know it exists.
 session_yaml_path: ".claude/session.yaml"
+
+# ─── Simplicity toolchain (v0.13.0 — P6.2 / P6.3 / P5.4) ─────────────
+# All three gates feature-detect their tools; missing tool = advisory
+# skip. Config templates live at docs/templates/complexity/ after
+# `pe install` (README there explains the ladder).
+
+complexity_gate:
+  enabled: true                # false to skip entirely
+  strict: false                # true = xenon exit code becomes commit-blocking
+
+duplication_gate:
+  enabled: true
+  baseline: .jscpd-baseline.json
+  tolerance: 0.1               # allowed absolute % overshoot vs. baseline
+
+size_budget:
+  enabled: true
+  warn_net_lines: 250          # WARN if commit's net-LOC delta > this
+  fail_net_lines: 600          # FAIL unless `Size-justified:` trailer present
+  max_file_lines: 800          # per-file hard cap (source paths only)
+  max_function_lines: 50       # per-function cap (.py, .js/.ts best-effort)
+
+# ─── Ponytail decision-ladder skill (v0.13.0 — P6.1) ─────────────────
+# When true, `pe install --with-ponytail` (one-time) clones the Ponytail
+# skill into ~/.claude/skills/ponytail/. The tdd-guide and
+# build-error-resolver agents reference the ladder in their preambles.
+# See: https://github.com/DietrichGebert/ponytail
+ponytail:
+  enabled: false               # opt-in — flip after `pe install --with-ponytail`

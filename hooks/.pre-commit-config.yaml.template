@@ -71,6 +71,28 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # Pre-commit (simplicity toolchain — v0.13.0 / P6.2 / P6.3 / P5.4)
+      - id: complexity-gate
+        name: Complexity + dead-code (ruff C901/PLR, xenon, vulture, knip, eslint)
+        entry: hooks/complexity-gate.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: size-budget
+        name: Net-LOC + per-file + per-function size budgets
+        entry: hooks/size-budget.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: duplication-gate
+        name: Duplication ratchet (jscpd — must not raise baseline %)
+        entry: hooks/duplication-gate.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
       # Pre-push (push-time gates)
       - id: stacking-rule-check
         name: Block foundational changes inside a slot-stack
@@ -90,6 +112,10 @@ repos:
 #   ENGINE_CLAUDE_MD_LIMIT=NNNNN   # DEPRECATED: legacy single-threshold var,
 #                                  # mapped to FAIL if only this is set.
 #   PE_SKIP_CLAUDE_MD_SIZE=1       # one-shot bypass (logged in commit output)
+#   PE_SKIP_COMPLEXITY=1           # bypass complexity-gate for one commit
+#   PE_SKIP_SIZE_BUDGET=1          # bypass size-budget for one commit
+#   PE_SKIP_DUPLICATION=1          # bypass duplication-gate for one commit
+#   # size-budget net-lines gate accepts a `Size-justified: <reason>` trailer
 #   ENGINE_FOUNDATIONAL_REGEX=...  # regex of paths counted as "foundational"
 #   ENGINE_TEST_CMD=...            # explicit test command override (skips auto-detect)
 #   ENGINE_TEST_FULL=1             # run full test suite instead of scoped

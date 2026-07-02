@@ -1,0 +1,53 @@
+# ruff config template — engine complexity + refactor rules (P6.2).
+#
+# Move to `ruff.toml` at your project root (or merge into pyproject.toml
+# `[tool.ruff]`). complexity-gate.sh feature-detects this file; if
+# absent, it falls back to the engine defaults below via `--config`.
+#
+# Rules enabled beyond ruff's defaults:
+#   C901  — mccabe cyclomatic complexity (max 10)
+#   PLR   — pylint refactor rules (magic values, too many branches, etc.)
+#   PL    — full pylint conventions (superset of PLR; enable one)
+#   B     — bugbear (real bugs, not stylistic)
+#   SIM   — simplify (dead alternations, unnecessary comparisons)
+#   RET   — return-value hygiene (unreachable return, unnecessary else)
+#   UP    — pyupgrade (dead syntax for the project's Python version)
+#
+# The engine's baseline is complexity-only; the extras are opinionated
+# but proven catches. Comment out any category you don't want.
+
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = [
+    "C901",   # mccabe complexity
+    "PLR",    # pylint refactor
+    "B",      # bugbear
+    "SIM",    # simplify
+    "RET",    # returns
+    "UP",     # pyupgrade
+    "F",      # pyflakes (ruff default; explicit)
+    "E",      # pycodestyle errors (default)
+    "W",      # pycodestyle warnings (default)
+    "I",      # isort
+]
+
+# The important knob: mccabe max = 10 per function.
+mccabe.max-complexity = 10
+
+# PLR tuning — the two rules almost every project needs to tune:
+[lint.pylint]
+max-args = 8          # PLR0913 — long param lists
+max-branches = 15     # PLR0912 — deeply-nested control flow
+max-returns = 6       # PLR0911
+max-statements = 60   # PLR0915
+
+# Ignore migration files from PLR / complexity (data migrations are
+# lists-of-statements by nature — they'd all fire otherwise).
+[lint.per-file-ignores]
+"migrations/**" = ["PLR", "C901"]
+"tests/**"      = ["PLR2004"]   # magic values are the entire point of test fixtures
+
+[format]
+quote-style = "double"

@@ -22,6 +22,7 @@ stage checks for it and STOPS if missing.
 | 4. Plan | `planner` agent | `docs/research/plan-<topic>.md` (task list + risks) | ✓ |
 | 5. TDD | `tdd-guide` agent | RED tests written + failing output pasted verbatim | ✓ |
 | 6. Implementation | worker (haiku/sonnet/opus by tier) | Code + passing tests | Gate-blocked |
+| 6.5. Simplify | `/simplify` — Ponytail ladder + dead-code + reuse | Envelope PASS (tests still green, diff ≤ same) | Advisory but recommended |
 | 7. Code review | `code-reviewer` agent | Envelope PASS/WARN → `.claude/gates/last-gate.json` | Commit-blocked |
 
 ## Procedure
@@ -75,6 +76,16 @@ order:
 - Only advance here after Stages 1-5 artifacts exist.
 - Implement to make tests pass (GREEN), then refactor.
 - Coverage floor: read `ENGINE_COVERAGE_MIN` (default 80).
+
+### Stage 6.5 — Simplify (P6.4)
+
+- Run `/simplify` after tests are green, BEFORE code-review.
+- The pass follows the Ponytail decision ladder + a dead-code /
+  reuse / altitude cleanup. Tests must stay green — that's its
+  envelope's PASS condition.
+- If tests break: `/simplify` MUST revert its own changes.
+- Rationale: asking the implementer to be brief mid-task fails; a
+  dedicated pass with green tests as the safety net works.
 
 ### Stage 7 — Code review + commit
 

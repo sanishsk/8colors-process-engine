@@ -1,0 +1,20 @@
+{
+  "//": "eslint complexity rule fragment (P6.2). Merge into your project's eslint config (.eslintrc.json / eslint.config.js) — don't replace it.",
+  "rules": {
+    "complexity": ["error", { "max": 10 }],
+    "max-depth": ["error", { "max": 4 }],
+    "max-lines": ["error", { "max": 800, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": ["error", { "max": 50, "skipBlankLines": true, "skipComments": true, "IIFEs": true }],
+    "max-params": ["warn", { "max": 5 }],
+    "no-nested-ternary": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.*", "**/*.spec.*", "**/__tests__/**"],
+      "rules": {
+        "max-lines-per-function": "off"
+      }
+    }
+  ]
+}

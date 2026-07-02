@@ -539,15 +539,18 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   `docs/PIXIESET_REPLACEMENT_PLAN.md`), each with its own token allowlist.
   One token system, two configs, path-scoped.
 
-### P5.4 Duplication budget (jscpd)
+### P5.4 Duplication budget (jscpd) — ✅ SHIPPED in v0.13.0 (2026-07-03)
 - **Severity:** HIGH · **Effort:** S · **Files:** pre-commit + CI templates
 - **What happened:** the 159-button/77-modal explosion is *measurable*
   copy-paste. AI agents duplicate rather than extract — every adopter will
   hit this.
-- **Generic check:** `jscpd` (works on HTML/Jinja/JS/Python) with a ratcheting
-  threshold: record current duplication % as baseline; fail any commit that
-  RAISES it. New projects start at ≤3%. Add to `pe baseline` metrics so the
-  retro sees the trend.
+- **Delivered:** `hooks/duplication-gate.sh` runs jscpd project-wide,
+  compares current % against baseline in `.jscpd-baseline.json`
+  (default 3.0% + 0.1% tolerance for new projects). Any commit that
+  RAISES the ratio is blocked. `templates/complexity/jscpd.json.template`
+  seeds format allowlist (Python + JS/TS + HTML/Jinja + CSS) with
+  standard ignore paths (node_modules, dist, migrations, tests).
+  Graceful advisory-skip when jscpd not installed.
 
 ### P5.5 Runtime-console + route-integrity smoke (Playwright)
 - **Severity:** MEDIUM-HIGH · **Effort:** M · **New file:** `templates/e2e/smoke.spec.ts` template
@@ -609,41 +612,56 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
 > commit time (deterministic gates). AI agents reliably fail at brevity when
 > asked; they comply when the environment refuses verbose output.
 
-### P6.1 Adopt **Ponytail** at generation time
+### P6.1 Adopt **Ponytail** at generation time — ✅ SHIPPED in v0.13.0 (2026-07-03)
 - **Effort:** S · **Where:** engine install step + agent preambles
 - [Ponytail](https://github.com/DietrichGebert/ponytail) is an open-source
   Claude Code skill forcing a decision ladder before code: *needs to exist? →
   stdlib? → platform-native? → installed dep? → one line? → only then write
   minimum*. Published evals: ~54% avg LOC reduction, 100% safety held.
-- **Fix:** `pe install --with-ponytail` (git clone / plugin add + verify);
-  reference the ladder in tdd-guide + build-error-resolver preambles
-  ("apply the Ponytail ladder before implementing"). Keep it a *skill*, not
-  prose duplicated into agents (P2.3 lesson).
+- **Delivered:** `pe install --with-ponytail` (via `scripts/install.sh`
+  flag) — idempotent git clone into `~/.claude/skills/ponytail/`;
+  graceful skip on missing git / offline. tdd-guide + build-error-
+  resolver preambles reference the ladder in a short paragraph that
+  points at the skill path when installed and falls back to inline
+  prose when not. Kept short — the skill owns the deep spec.
 
-### P6.2 Deterministic complexity + dead-code gates
+### P6.2 Deterministic complexity + dead-code gates — ✅ SHIPPED in v0.13.0 (2026-07-03)
 - **Effort:** S-M · **Files:** pre-commit + CI templates
-- Python: `ruff` with `C901` (mccabe ≤ 10) + `PLR` pylint-refactor rules
-  enabled; **xenon** `--max-absolute B` (fails on any function worse than
-  grade B); **vulture** for dead code (allowlist file for false positives).
-  JS/TS: **knip** (dead exports/files/unused deps) + eslint `complexity` rule.
-  All config-templated, all opt-out-able per project, all wired by
-  `pe install` like the P1.2 test hook.
+- **Delivered:** `hooks/complexity-gate.sh` feature-detects and runs:
+  * Python: `ruff check --select C901,PLR,B,SIM,RET,UP` (mccabe ≤ 10 +
+    pylint refactor + bugbear + simplify + returns + pyupgrade),
+    `xenon --max-absolute B`, `vulture` (with allowlist file support).
+  * JS/TS: `knip` (dead exports/files/unused deps) + `eslint`
+    (`complexity` ≤ 10 + `max-depth` 4 + `max-lines-per-function` 50).
+  Config templates ship at `templates/complexity/{ruff,vulture-
+  allowlist,knip,eslintrc-complexity}.*` and get copied to
+  `docs/templates/complexity/` by `pe install`. Toggle via
+  `.process-engine.yaml → complexity_gate.enabled` (default true) +
+  `complexity_gate.strict` (default false — xenon exit code becomes
+  blocking only under strict).
 
-### P6.3 Net-LOC + size budgets in CI
-- **Effort:** S — CI step computes the PR's net LOC delta and per-file sizes:
-  WARN >250 net new lines, FAIL >600 without a `size-justified:` trailer;
-  FAIL any source file crossing 800 lines or function >50 (matches the
-  operator's global rules, which today are prose only). Report goes into the
-  gate envelope so the retro can trend it.
+### P6.3 Net-LOC + size budgets in CI — ✅ SHIPPED in v0.13.0 (2026-07-03)
+- **Effort:** S
+- **Delivered:** `hooks/size-budget.sh` — pre-commit hook enforcing
+  net-LOC WARN 250 / FAIL 600 (bypass via `Size-justified:` trailer),
+  per-file FAIL 800 lines (only on source paths — `src/`, `app/`,
+  `modules/`, `lib/`, `scripts/`, `hooks/`, `agents/`, `commands/`,
+  `internal/`, `pkg/`, `cmd/`), per-function FAIL 50 lines for
+  `.py` (AST-based, exact) and `.js/.ts` (regex-lite, under-catches
+  but never over-catches). Toggle + tune via
+  `.process-engine.yaml → size_budget.*`. Bypass one commit:
+  `PE_SKIP_SIZE_BUDGET=1`. 4/4 threshold + bypass paths tested.
 
-### P6.4 `/simplify` stage in the slot pipeline
-- **Effort:** S — extend `/new-feature` chain: brainstorm → brief → architect
-  → plan → tdd → impl → **simplify** → code-review. The simplify pass runs
-  AFTER green tests, BEFORE review: reuse/dead-code/altitude cleanups only
-  (Claude Code's built-in `/simplify` where available, else refactor-cleaner
-  agent). Tests must stay green — that's its envelope's PASS condition.
-  Rationale: asking the implementer to be brief mid-task fails; a dedicated
-  pass with green tests as the safety net works.
+### P6.4 `/simplify` stage in the slot pipeline — ✅ SHIPPED in v0.13.0 (2026-07-03)
+- **Effort:** S
+- **Delivered:** new `commands/simplify.md` — Post-GREEN cleanup
+  pass. Precondition: tests pass. Postcondition: tests still pass
+  AND diff is smaller or the same (net_lines_delta > 0 = FAIL).
+  Five-step scan (dead code → reuse over rewrite → altitude → size
+  cross-check → re-run tests). Envelope goes into
+  `.claude/gates/last-gate.json` like other stages.
+  `/new-feature` chain updated: brainstorm → brief → architect →
+  plan → tdd → impl → **simplify** → code-review.
 
 ### P6.5 Duplication ratchet
 - Covered by P5.4 — listed here because it's also the strongest simplicity

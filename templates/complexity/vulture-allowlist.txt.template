@@ -1,0 +1,25 @@
+# vulture allowlist — one identifier per line, or one line of
+# `# type: ignore[unused]` pointing at an intentional false positive.
+#
+# vulture is a Python dead-code detector. It's noisy on any project
+# with dynamic dispatch (Flask/Django views, pytest fixtures, entry
+# points). The allowlist is how you tell it what's actually reachable.
+#
+# Common categories (uncomment + tune):
+
+# — pytest fixtures + Django/Flask decorated views —
+# fixture_*
+# view_*
+# api_*
+
+# — CLI subcommand handlers auto-discovered by name —
+# cmd_*
+
+# — dunder methods sometimes flagged as unused —
+# __init_subclass__
+# __post_init__
+
+# — SQLAlchemy / ORM columns referenced via string names —
+# id
+# created_at
+# updated_at

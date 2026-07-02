@@ -35,8 +35,11 @@ ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # ─── Arg parsing hook flags (P1.4) ────────────────────────────────────────
 # --no-claude-hooks — skip the .claude/settings.json merge
 # --no-git-hooks    — skip .pre-commit-config.yaml + pre-commit install
+# --with-ponytail   — clone the Ponytail decision-ladder skill into
+#                     ~/.claude/skills/ponytail (P6.1)
 NO_CLAUDE_HOOKS=0
 NO_GIT_HOOKS=0
+WITH_PONYTAIL=0
 
 # ─── Arg parsing ───────────────────────────────────────────────────────────
 # Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project
@@ -48,12 +51,13 @@ while [ $# -gt 0 ]; do
     --subset=*)     SUBSET="${1#--subset=}"; shift ;;
     --no-claude-hooks) NO_CLAUDE_HOOKS=1; shift ;;
     --no-git-hooks)    NO_GIT_HOOKS=1; shift ;;
+    --with-ponytail)   WITH_PONYTAIL=1; shift ;;
     -h|--help)
-      echo "Usage: ./install.sh [--subset gate-only|core|full] [--no-claude-hooks] [--no-git-hooks] /path/to/target-project"
+      echo "Usage: ./install.sh [--subset gate-only|core|full] [--no-claude-hooks] [--no-git-hooks] [--with-ponytail] /path/to/target-project"
       exit 0 ;;
     --*)
       echo "Unknown flag: $1" >&2
-      echo "Usage: ./install.sh [--subset ...] [--no-claude-hooks] [--no-git-hooks] /path/to/target-project" >&2
+      echo "Usage: ./install.sh [--subset ...] [--no-claude-hooks] [--no-git-hooks] [--with-ponytail] /path/to/target-project" >&2
       exit 2 ;;
     *)
       if [ -z "$TARGET" ]; then TARGET="$1"; else
@@ -235,6 +239,50 @@ for f in "$ENGINE_DIR"/templates/*.md; do
     cp "$f" "$TARGET/docs/templates/$(basename "$f")"
   fi
 done
+
+# Copy complexity/duplication/size config templates (v0.13.0 — P6.2/P5.4/P6.3).
+# Dropped into docs/templates/complexity/ as read-only-ish references;
+# operator promotes selectively into the project root (README in that dir
+# explains the ladder). Copy is idempotent — never overwrites operator edits.
+if [ -d "$ENGINE_DIR/templates/complexity" ]; then
+    mkdir -p "$TARGET/docs/templates/complexity"
+    for f in "$ENGINE_DIR"/templates/complexity/*; do
+        [ -f "$f" ] || continue
+        dst="$TARGET/docs/templates/complexity/$(basename "$f")"
+        if [ ! -f "$dst" ]; then
+            cp "$f" "$dst"
+        fi
+    done
+fi
+
+# ─── --with-ponytail (P6.1) ─────────────────────────────────────────
+# Clone/refresh Ponytail decision-ladder skill into user-global skills
+# directory. Idempotent: git pull if already present. Silently skips if
+# git is missing (unlikely but graceful).
+if [ "$WITH_PONYTAIL" -eq 1 ]; then
+    PONY_DIR="$HOME/.claude/skills/ponytail"
+    if ! command -v git >/dev/null 2>&1; then
+        echo "  ⚠ Ponytail: git not on PATH — skipping (install git and re-run --with-ponytail)"
+    else
+        mkdir -p "$HOME/.claude/skills"
+        if [ -d "$PONY_DIR/.git" ]; then
+            if git -C "$PONY_DIR" pull --ff-only --quiet 2>/dev/null; then
+                echo "  ✓ Ponytail: refreshed $PONY_DIR"
+            else
+                echo "  ⚠ Ponytail: could not fast-forward $PONY_DIR (local changes?) — left untouched"
+            fi
+        elif [ -e "$PONY_DIR" ]; then
+            echo "  ⚠ Ponytail: $PONY_DIR exists but isn't a git checkout — left untouched"
+        else
+            if git clone --quiet --depth 1 \
+                https://github.com/DietrichGebert/ponytail "$PONY_DIR" 2>/dev/null; then
+                echo "  ✓ Ponytail: cloned to $PONY_DIR"
+            else
+                echo "  ⚠ Ponytail: clone failed (no network / repo moved?) — skipping"
+            fi
+        fi
+    fi
+fi
 
 # Copy .process-engine.yaml template if the project doesn't already have one
 if [ ! -f "$TARGET/.process-engine.yaml" ]; then

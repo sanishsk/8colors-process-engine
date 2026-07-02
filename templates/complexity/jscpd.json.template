@@ -1,0 +1,28 @@
+{
+  "//": "jscpd config template — copy-paste detector for HTML/Jinja/JS/Python (P5.4). Move to .jscpd.json at project root.",
+
+  "threshold": 3,
+  "reporters": ["consoleFull", "json"],
+  "output": ".jscpd-report/",
+  "gitignore": true,
+
+  "format": ["python", "html", "javascript", "typescript", "css"],
+
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/__pycache__/**",
+    "**/*.min.js",
+    "**/migrations/**",
+    "**/tests/**",
+    "**/test_*.py",
+    "**/*.test.*",
+    "**/*.spec.*"
+  ],
+
+  "min-lines": 5,
+  "min-tokens": 50,
+  "absolute": false,
+  "silent": false
+}
