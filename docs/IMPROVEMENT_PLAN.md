@@ -340,24 +340,43 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   plugin.json / `pe docs check` all consistent. Adopters re-installed;
   zero collision warnings.
 
-### P2.11 Python hygiene batch — ⏸️ DEFERRED (Session 5)
-- **Effort:** S each — pe_gate: engine version from schema `examples`
-  (IndexError if empty; move to const); `--bare` must precede path
-  (argparse-ify); `utf-8-sig`; missing failure_class defaults to
-  escalate (make explicit). Orchestrator: budget `isinstance(int)` only
-  (float silently disables enforcement); `campaign` scope never resets
-  (add campaign-id + `pe shadow reset` + idempotency); policy KeyError →
-  exit 4 with message; reconcile accepts all-null payload (validate
-  required keys + enum); `--iteration` accepts 0/negative; cache_read
-  tokens counted at full weight. baseline.py: `chore(fix)` never counted
-  (housekeeping regex short-circuits — dead alternation); git errors are
-  raw tracebacks with stderr swallowed; docstring/code mismatch on
-  file-overlap. research_index: catch TypeError from protobuf-on-3.14
-  (documented incident!) not just ImportError; don't record doc row when
-  chunks failed to embed (permanent index holes); compare model not just
-  dim; split oversized paragraphs (BGE truncates ~512 tokens — long code
-  blocks are silently unindexed); batch embedding calls; dedupe before
-  top-K; wrong-parent YAML key matching.
+### P2.11 Python hygiene batch — ✅ SHIPPED in v0.15.0 (2026-07-03)
+- **Effort:** S each. Twenty fixes across four files landed together
+  with 22 unittest cases (`tests/test_p2_11_python_hygiene.py`).
+  Total suite now: 86 pass.
+- **Delivered — pe_gate.py:** `ENGINE_SCHEMA_MAJOR` const replaces
+  the fragile `schema.examples[0]` (`IndexError` on empty examples);
+  argparse-based CLI (flag order-independent); `utf-8-sig` decode
+  (Notepad BOM tolerated); FAIL + missing `failure_class` explicitly
+  defaults to `worker_quality` (escalate) via
+  `DEFAULT_FAIL_FAILURE_CLASS`.
+- **Delivered — pe_orchestrator.py:** new `PolicyError` +
+  `KeyError → exit 4` path (actionable errors instead of tracebacks);
+  budget-trip check accepts `int`/`float` (rejects `bool`); cache_read
+  tokens weighted at `cumulative.cache_read_weight` (default 0.1)
+  instead of full-price; `reconcile` validates
+  `merge_commit`/`ultimate_outcome` + enum
+  `{success, merged, reverted, abandoned, pending}`; `--iteration ≥ 1`
+  enforced via custom argparse type; new `--campaign-id` on `decide`
+  + new `pe shadow reset` subcommand (idempotent, per-campaign
+  sidecar).
+- **Delivered — baseline.py:** `HOUSEKEEPING_PREFIX_RE` gained
+  `chore(?!\(fix\))` negative lookahead so `chore(fix):` reaches the
+  rework detector; `FIX_PREFIX_RE` replaced `\b` (which never matched
+  between two non-word chars) with `(?=[:(\s]|$)` lookahead — two
+  latent bugs together had made the `chore(fix)` alternation fully
+  dead; new `GitError` wraps `CalledProcessError` and surfaces `git`'s
+  stderr in the message.
+- **Delivered — research_index.py:** `FastEmbedEmbedder.__init__`
+  catches `ImportError` AND `TypeError` (Python-3.14 protobuf
+  incident); `chunk_markdown` pre-splits paragraphs larger than
+  `MAX_PARA_CHARS` (BGE 512-token truncation fix); new
+  `Embedder.embed_docs_batch` + fastembed override; rebuild loop
+  embeds FIRST, only inserts the doc row on ≥ 1 successful chunk
+  (kills permanent index holes); query check compares `MODEL` in
+  addition to `DIM`; dedupe happens before top-K trim; `read_yaml_
+  field` bails out when subsequent indent goes shallower than target
+  (no more wrong-parent matches).
 
 ---
 

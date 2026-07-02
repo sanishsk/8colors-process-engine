@@ -59,24 +59,57 @@ SCHEMA_VERSION = "1.1.0"
 
 REWORK_WINDOW_SECONDS = 72 * 3600
 SENTRY_WINDOW_SECONDS = 7 * 24 * 3600  # for docs only — script doesn't call Sentry
-FIX_PREFIX_RE = re.compile(r"^(?:fix|hotfix|patch|chore\(fix\)|revert)\b", re.IGNORECASE)
+# P2.11: the previous pattern `^(...|chore\(fix\)|...)\b` had a latent
+# bug: `\b` requires a word/non-word boundary AFTER the alternation,
+# but `chore(fix)` ends in `)` (non-word) and every valid conventional-
+# commit separator (`:` or ` `) is also non-word. Between two non-word
+# chars there is no `\b` — so `chore(fix)` never matched even in the
+# absence of the housekeeping regex bug. Replaced with a positive
+# lookahead for the actual valid separators (`:` for `fix:`,  `(` for
+# `fix(scope):`, or whitespace/end for looser subject styles).
+FIX_PREFIX_RE = re.compile(
+    r"^(?:fix|hotfix|patch|chore\(fix\)|revert)(?=[:(\s]|$)",
+    re.IGNORECASE,
+)
 # Subjects matching this pattern are housekeeping (docs, tests-only, chore,
 # style) that follow a slot rather than rework it. Excluded from the
 # slot_id_in_subject rule so the baseline isn't inflated by post-ship
 # documentation commits.
+#
+# P2.11: the previous regex matched `chore(fix):` under the `chore` branch,
+# which silently pre-empted the `chore(fix)` alternation in FIX_PREFIX_RE —
+# a documented fix prefix never fired. Negative lookahead `(?!\(fix\))`
+# after `chore` reserves `chore(fix)` for the fix detector.
 HOUSEKEEPING_PREFIX_RE = re.compile(
-    r"^(?:docs|doc|test|tests|style|chore|refactor|ci|build|perf)(?:\([^)]*\))?:",
+    r"^(?:docs|doc|test|tests|style|chore(?!\(fix\))|refactor|ci|build|perf)(?:\([^)]*\))?:",
     re.IGNORECASE,
 )
 
 
+class GitError(RuntimeError):
+    """Structured git-invocation failure with stderr preserved (P2.11)."""
+
+
 def git(repo: Path, *args: str) -> str:
-    out = subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    """Run a git command and return stripped stdout.
+
+    P2.11: previously used `check=True`, which raised `CalledProcessError`
+    with git's stderr captured but never surfaced — the operator saw a
+    raw Python traceback with no hint what git actually said. Now catches
+    the failure, wraps it in `GitError`, and includes the stderr text.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise GitError(
+            f"git {' '.join(args)} failed (exit {exc.returncode}) in {repo}:\n"
+            f"  stderr: {(exc.stderr or '').strip() or '(empty)'}"
+        ) from exc
     return out.stdout.strip()
 
 
@@ -197,23 +230,32 @@ def rework_window(repo: Path, merge_commit: str, slot_id: str) -> dict:
     if not commits_meta:
         return {"count": 0, "commits": []}
 
+    # Rule cascade (docs/baselines/README.md §"Detection rules"):
+    #   1. slot_id_in_subject  — commit subject mentions the slot ID.
+    #   2. file_overlap        — fix-prefix (fix|hotfix|patch|chore(fix)|
+    #                             revert) AND touches ≥1 file the slot
+    #                             touched.
+    #   3. fix_prefix_in_window — fix-prefix but no file overlap.
+    # Housekeeping prefixes (docs:/test:/style:/chore:/refactor:/ci:/
+    # build:/perf:) are excluded FIRST — completion rituals aren't
+    # rework. Since P2.11 the housekeeping regex uses a negative
+    # lookahead for `chore(fix)` so the documented `chore(fix)` fix
+    # prefix reaches this cascade.
     flagged = []
     seen = set()
     for sha, _ts, subject in commits_meta:
-        # Skip housekeeping prefixes — docs, tests, chores referencing a
-        # slot are completion rituals, not rework.
         if HOUSEKEEPING_PREFIX_RE.match(subject):
             continue
         rule = None
         if slot_id and slot_id.lower() in subject.lower():
             rule = "slot_id_in_subject"
-        else:
+        elif FIX_PREFIX_RE.match(subject):
             files_in_commit = set(
                 git(repo, "show", "--name-only", "--format=", sha).splitlines()
             )
-            if FIX_PREFIX_RE.match(subject) and touched & files_in_commit:
+            if touched & files_in_commit:
                 rule = "file_overlap"
-            elif FIX_PREFIX_RE.match(subject):
+            else:
                 rule = "fix_prefix_in_window"
         if rule and sha not in seen:
             seen.add(sha)

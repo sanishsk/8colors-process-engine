@@ -7,6 +7,125 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.15.0] — 2026-07-03
+
+> Python hygiene batch — P2.11. Twenty targeted fixes across
+> `pe_gate.py`, `pe_orchestrator.py`, `baseline.py`, and
+> `research_index.py`, each addressing a latent bug that would
+> silently corrupt data or mis-route control flow. Ships with 22 new
+> unittest cases (86 total tests pass).
+>
+> Last item on the "make engine perfect" backlog. P3.x stays parked
+> per plan. Next: 8CStudio #227.
+
+### Fixed
+
+**pe_gate.py:**
+- `ENGINE_SCHEMA_MAJOR` const replaces
+  `schema.properties.schema_version.examples[0]` — an empty
+  `examples` array would `IndexError` and kill the validator.
+- `argparse`-based CLI replaces the hand-rolled flag loop; `--bare`
+  can now appear after the positional path (`pe gate parse foo.txt
+  --bare`) and vice-versa.
+- Transcripts read with `utf-8-sig` — Windows Notepad-saved
+  transcripts with a leading BOM used to parse-fail cryptically.
+- `classify_exit` on `verdict=FAIL` with missing/None
+  `failure_class` now explicitly defaults to `worker_quality`
+  (escalate) via a named constant. Defaulting to a non-escalating
+  class would silently absorb genuine worker failures.
+
+**pe_orchestrator.py:**
+- New `PolicyError` exception + `KeyError → PolicyError → exit 4`
+  path. Previously a missing key in `circuit_breaker.toml` bubbled
+  as a raw Python `KeyError` traceback with no fix-it hint.
+- Budget-trip check accepts `int` OR `float` (rejects `bool`). A
+  float budget in TOML used to silently disable enforcement.
+- `cache_read_tokens` counted at 10 % weight (Anthropic's
+  documented cache-read cost). Full-weight previously overcharged
+  the gate budget and tripped the breaker early on cache-heavy runs.
+  Weight configurable via `cumulative.cache_read_weight`.
+- `reconcile` now validates the stdin payload: both `merge_commit`
+  and `ultimate_outcome` are required; `ultimate_outcome` must be
+  one of `{success, merged, reverted, abandoned, pending}`. All-null
+  payloads used to be written to the reconciliations log silently.
+- `--iteration` now enforced `>= 1` via a custom argparse type.
+  Zero and negative iterations silently disabled the cap check.
+- New `--campaign-id` flag on `decide`; new `pe shadow reset`
+  subcommand. Cumulative breaker sidecar is now per-campaign, and
+  can be reset idempotently. Pre-P2.11 cross-campaign runs
+  contaminated each other's budgets forever.
+
+**baseline.py:**
+- `HOUSEKEEPING_PREFIX_RE` gained a negative lookahead
+  `chore(?!\(fix\))` so `chore(fix): …` reaches the rework
+  detector instead of being filtered as housekeeping. Documented
+  `chore(fix)` fix prefix was silently dead.
+- `FIX_PREFIX_RE` replaced `\b` (which never matched between two
+  non-word chars — `)` and `:` are both non-word) with a positive
+  lookahead `(?=[:(\s]|$)`. This was a pre-P2.11 latent bug that
+  meant `chore(fix)` couldn't have matched even without the
+  housekeeping regex bug. Both bugs together made the alternation
+  fully dead.
+- New `GitError` exception wraps `CalledProcessError` and surfaces
+  git's `stderr` in the message. Previously raw tracebacks bubbled
+  with stderr captured but never surfaced.
+
+**research_index.py:**
+- `FastEmbedEmbedder.__init__` catches `ImportError` AND `TypeError`
+  (the protobuf-under-Python-3.14 incident). Actionable fix-it
+  message includes both root cause and version-compat note.
+- `chunk_markdown` splits paragraphs longer than `MAX_PARA_CHARS`
+  (= `CHUNK_SIZE`, 800) before assembly. BGE-small silently
+  truncated at ~512 tokens; long code blocks lost their tail from
+  the embedding.
+- New `Embedder.embed_docs_batch` interface + FastEmbed override.
+  Rebuild loop now batches instead of one-embed-per-chunk.
+- Rebuild loop embeds FIRST, then decides whether to insert the
+  doc row. Previously the doc row was inserted before embedding, so
+  if every chunk failed, an empty doc row with correct sha256 stayed
+  forever — subsequent rebuilds skipped it (sha match), leaving a
+  permanent index hole.
+- Query-time embedder check now compares `MODEL` in addition to
+  `DIM`. Two different models with the same dim used to silently
+  mix embedding spaces.
+- Result dedupe happens BEFORE trimming to top-K. "Top 5 all from
+  doc X" used to collapse to 1 visible result; now the walk yields
+  distinct docs up to top-K.
+- `read_yaml_field` bails out when a subsequent line's indent goes
+  shallower than the target indent — used to descend into sibling
+  top-level blocks looking for a child key, matching wrong-parent
+  values.
+
+### Added
+
+- **`tests/test_p2_11_python_hygiene.py`** — 22 unittest cases
+  covering every listed P2.11 fix. Zero external dependencies
+  (stdlib `unittest` + `unittest.mock`). Runs via
+  `python3 tests/test_p2_11_python_hygiene.py` or via the shell
+  wrapper `tests/test_p2_11_python_hygiene.sh` alongside the other
+  4 test scripts.
+
+### Test totals
+
+86 pass (9 sync + 10 install-reconcile + 12 hooks + 33 orchestrator
+shell + 22 P2.11 unittest).
+
+### Backlog after v0.15.0
+
+**P3.x stays parked** per the original plan:
+- P3.1 `pe new <app>` scaffold — L effort, multi-week
+- P3.2 3 SaaS modules (`8c-tenancy`, `8c-billing`, `8c-credentials`)
+  — L effort each; needs 8CStudio settled after #227 to know the
+  final module shape
+- P3.3 Native Claude Code plugin migration
+- P3.4 Telemetry
+
+Next: switch to 8CStudio for #227 dev-env repair — the true
+critical-path blocker. Engine returns for P3.x after #227 lands
+and 8CStudio is stable.
+
+---
+
 ## [0.14.0] — 2026-07-03
 
 > Product-quality gates. Every finding from the 8CStudio audit gets a

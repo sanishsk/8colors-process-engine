@@ -60,6 +60,19 @@ EXIT_FAIL_HALT = 2
 EXIT_WARN = 3
 EXIT_PARSE_ERROR = 4
 
+# Envelope schema major version the engine speaks. P2.11 (v0.15.0):
+# previously read from schema.properties.schema_version.examples[0]
+# with a naked [0] index — an empty `examples` array would crash the
+# validator with IndexError. The schema major is a load-bearing engine
+# contract; pin it here.
+ENGINE_SCHEMA_MAJOR = "1"
+
+# Default failure_class assumed when a FAIL envelope omits it. P2.11
+# makes this explicit: worker_quality is the ONLY class that escalates,
+# and defaulting an omission to non-escalating would silently continue
+# past a broken run.
+DEFAULT_FAIL_FAILURE_CLASS = "worker_quality"
+
 FENCE_RE = re.compile(
     r"```json\s+gate-envelope\s*\n(.*?)\n```",
     re.DOTALL,
@@ -302,7 +315,11 @@ def classify_exit(envelope: dict) -> int:
     if verdict == "WARN":
         return EXIT_WARN
     if verdict == "FAIL":
-        klass = envelope.get("failure_class", "worker_quality")
+        # P2.11 explicit default: an envelope missing failure_class
+        # under a FAIL verdict escalates (worker_quality). Defaulting
+        # to a non-escalating class would silently absorb genuine
+        # worker failures.
+        klass = envelope.get("failure_class") or DEFAULT_FAIL_FAILURE_CLASS
         if klass == "worker_quality":
             return EXIT_FAIL_ESCALATE
         return EXIT_FAIL_HALT
@@ -313,45 +330,70 @@ def classify_exit(envelope: dict) -> int:
 # CLI entrypoint
 # ────────────────────────────────────────────────────────────────────
 
+def _build_parser() -> "argparse.ArgumentParser":
+    """argparse-based CLI (P2.11).
+
+    Replaces the previous hand-rolled loop that required flags to
+    appear before the positional path; argparse accepts flags in any
+    order (`--bare file` and `file --bare` both work).
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="pe gate parse",
+        description=(
+            "Parse + validate a gate-envelope transcript (default) or a "
+            "bare JSON fixture (--bare). Exit code 0/1/2/3/4 encodes "
+            "verdict + failure_class per the orchestrator contract."
+        ),
+    )
+    parser.add_argument(
+        "path",
+        help="path to the transcript file (or bare JSON with --bare)",
+    )
+    parser.add_argument(
+        "--bare",
+        action="store_true",
+        help="tolerate raw JSON with no fence or cross-check (fixtures only)",
+    )
+    parser.add_argument(
+        "--record",
+        metavar="PATH",
+        help="on PASS/WARN, write an evidence sidecar to this path",
+    )
+    parser.add_argument(
+        "--diff-sha",
+        metavar="SHA",
+        help="pin the recorded envelope to a specific staged-diff SHA",
+    )
+    return parser
+
+
 def main(argv: list[str]) -> int:
-    # Surface flags before the positional path.
-    args = list(argv[1:])
-    if args and args[0] in ("-h", "--help"):
+    # argparse handles both `--flag path` and `path --flag` (P2.11).
+    if len(argv) > 1 and argv[1] in ("-h", "--help"):
         print(__doc__)
         return 0
-    bare = False
-    record_path: Path | None = None
-    diff_sha: str | None = None
-    while args and args[0].startswith("--"):
-        flag = args.pop(0)
-        if flag == "--bare":
-            bare = True
-        elif flag == "--record":
-            if not args:
-                print("ERROR: --record requires a path argument", file=sys.stderr)
-                return EXIT_PARSE_ERROR
-            record_path = Path(args.pop(0))
-        elif flag == "--diff-sha":
-            if not args:
-                print("ERROR: --diff-sha requires a value", file=sys.stderr)
-                return EXIT_PARSE_ERROR
-            diff_sha = args.pop(0)
-        else:
-            print(f"ERROR: unknown flag: {flag}", file=sys.stderr)
-            return EXIT_PARSE_ERROR
-    if not args:
-        print(
-            "usage: pe gate parse [--bare] [--record <path>] [--diff-sha <sha>] <file>",
-            file=sys.stderr,
-        )
-        return EXIT_PARSE_ERROR
+    try:
+        args = _build_parser().parse_args(argv[1:])
+    except SystemExit as exc:
+        # argparse writes to stderr already; keep the parse-error exit
+        return EXIT_PARSE_ERROR if exc.code not in (0, None) else 0
 
-    target = Path(args[0])
+    bare = args.bare
+    record_path = Path(args.record) if args.record else None
+    diff_sha = args.diff_sha
+
+    target = Path(args.path)
     if not target.exists():
         print(f"ERROR: file not found: {target}", file=sys.stderr)
         return EXIT_PARSE_ERROR
 
-    text = target.read_text(encoding="utf-8")
+    # utf-8-sig transparently strips a UTF-8 BOM if the transcript was
+    # saved by an editor that added one (Windows Notepad, some Mac
+    # editors under certain settings). Files without a BOM decode
+    # identically to utf-8. P2.11 fix.
+    text = target.read_text(encoding="utf-8-sig")
     envelope, err = extract_envelope(text, bare=bare)
     if envelope is None:
         print(f"ERROR: {err}", file=sys.stderr)
@@ -382,14 +424,16 @@ def main(argv: list[str]) -> int:
             f"(got {failure_class!r})"
         )
 
-    # Major version gate.
+    # Major version gate — pinned to ENGINE_SCHEMA_MAJOR const (P2.11).
+    # Previously read schema.properties.schema_version.examples[0]
+    # with a naked [0]; an empty examples array would IndexError here
+    # and the whole validator would crash before reporting anything.
     schema_version = envelope.get("schema_version", "0.0.0")
     schema_major = schema_version.split(".", 1)[0] if isinstance(schema_version, str) else "0"
-    expected_major = schema.get("properties", {}).get("schema_version", {}).get("examples", ["1.0.0"])[0].split(".", 1)[0]
-    if schema_major != expected_major:
+    if schema_major != ENGINE_SCHEMA_MAJOR:
         validation_errors.insert(
             0,
-            f"$.schema_version: envelope major {schema_major} != engine major {expected_major}",
+            f"$.schema_version: envelope major {schema_major} != engine major {ENGINE_SCHEMA_MAJOR}",
         )
 
     # E1.d cross-check (transcript mode only). The cross-check exists to

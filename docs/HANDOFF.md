@@ -3,84 +3,75 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-02 late evening (v0.12.0 P7.1 context-diet
-> engine half + P7.3 retro unstall shipped in the same sitting —
-> ROADMAP Wave 0.2/0.3. `claude-md-size.sh` now dual-mode (PostToolUse
-> + pre-commit) with WARN 12KB / FAIL 20KB thresholds. `pe collect`
-> + `scripts/dev-log-collect.sh` are the new portable git-derived
-> collector; retrospective-agent Step 0 runs it. Model pins dropped
-> across yaml + Run-Weekly templates — `install_launchd.sh` now
-> threads `ceo_weekly.model` as `{{CEO_MODEL}}`. 64/64 tests pass.
-> Ready to commit + push.)
+> **Last updated:** 2026-07-03 (v0.13.0 + v0.14.0 + v0.15.0 shipped
+> back-to-back in one sitting per operator direction "finish
+> everything on engine side". Every S/M item on the P5+P6+P2.11
+> backlog is now in main. **Engine work is complete against the
+> full audit + hygiene backlog.** P3.x (domain layer / plugin
+> migration / telemetry) stays parked per plan; next: switch to
+> 8CStudio for #227.)
 
 ---
 
 ## One-line state
 
-Engine v0.12.0 in the working tree — **uncommitted**. v0.11.1 landed
-earlier (commit `62b7d35`) with P2.10 agent reconcile. This session
-shipped **P7.1 context-diet engine half + P7.3 retro unstall** —
-both ROADMAP Wave 0.2/0.3, both save tokens on every future session.
-Adopters need `pe install` to pick up the new PostToolUse hook wiring
-+ `pe collect` subcommand + updated Run-Weekly templates.
+Engine v0.15.0 committed and pushed. Three consecutive releases this
+sitting:
+- **v0.13.0** (`3f13653`) — simplicity toolchain: P6.1 Ponytail,
+  P6.2 complexity + dead-code (ruff/xenon/vulture/knip/eslint), P6.3
+  net-LOC + file/function size, P6.4 `/simplify` chain stage, P5.4
+  duplication ratchet (jscpd).
+- **v0.14.0** (`2465bee`) — product-quality gates from 8CStudio
+  audit: P5.1 boot-smoke, P5.2 migration-lint, P5.3 design-lint
+  (multi-theme), P5.5 Playwright smoke template, P5.6 confusion-
+  budget test, P5.7 copy-lint, P5.8 auth-robustness (security-
+  reviewer + pytest template), P5.9 AI-aesthetic rubric in code-
+  reviewer.
+- **v0.15.0** (this commit) — P2.11 Python hygiene batch: 20 targeted
+  fixes across pe_gate / pe_orchestrator / baseline / research_index,
+  22 new unittest cases, 86 tests pass overall.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Commit + push v0.12.0:**
-
-   ```bash
-   git add -A
-   git commit -m "feat(0.12.0): P7.1 context diet + P7.3 retro unstall (ROADMAP Wave 0.2/0.3)"
-   git push origin master
-   ```
-
-2. **Re-install adopters** — the new PostToolUse `claude-md-size`
-   wiring rides in `hooks/hooks.json` (merged into
-   `.claude/settings.json` by `pe install`); the `{{CEO_MODEL}}`
-   template variable requires re-render via `pe launchd <project>`
-   if the operator wants launchd retros using the new
-   `ceo_weekly.model` value.
+1. **Re-install adopters against v0.15.0 (optional confirmation).**
+   The new hooks (complexity-gate, size-budget, duplication-gate,
+   migration-lint, design-lint, copy-lint, boot-smoke) + config
+   templates (`complexity/`, `design-lint.config.template`, `e2e/`,
+   `tests/`) ride in the installer.
 
    ```bash
    pe install /Users/sanishsasikumar/Documents/8Colors/8CStudio
    pe install /Users/sanishsasikumar/Documents/Origyn
-   # Optional (only if launchd already wired):
-   pe launchd /Users/sanishsasikumar/Documents/8Colors/8CStudio
+   # Optional Ponytail:
+   pe install --with-ponytail /Users/sanishsasikumar/Documents/8Colors/8CStudio
    ```
 
-3. **Switch to the product track — 8CStudio #227 dev-env repair.**
+2. **Switch to the product track — 8CStudio #227 dev-env repair.**
    Per ROADMAP + operator direction, #227 is the true critical-path
    blocker (nothing downstream can be verified until the app boots
-   locally). Engine track resumes with P5.1 boot-smoke + P5.2
-   migration-lint **after #227 lands** so the gates encode the
-   actual fixes rather than guesses.
+   locally).
 
-4. **Session 6 (engine) — parked until #227 lands:**
+   The engine now has generic gates for P5.1 boot-smoke, P5.2
+   migration-lint, and P5.3 design-lint. Once #227 lands, the
+   8CStudio-side work is to POINT these gates at the actual fixes:
+   fill in `boot_check.{setup, run, probe_url}` in
+   `8CStudio/.process-engine.yaml`, configure the design-lint
+   themes, wire the auth-robustness pytest template, etc.
 
-   1. **P6.1 Ponytail adoption** — `pe install --with-ponytail`
-      (skill, not prose per P2.3 lesson).
-   2. **P6.2 Deterministic complexity + dead-code gates** — ruff
-      C901/PLR + xenon `--max-absolute B` + vulture (Python); knip
-      + eslint complexity (JS/TS). Wired by `pe install` like P1.2.
-   3. **P5.1 App-boot smoke gate** — seeded from #227's actual
-      fixes.
-   4. **P5.2 Migration-contract lint** — same.
-   5. **P5.3 Deterministic design lint** — once tokens v2 locks in
-      Wave 1.
+3. **Engine backlog after #227 — P3.x (parked):**
 
-6. **Higher latency (do NOT jump to these first):**
-
-   - **P5.4-P5.9** — duplication ratchet, Playwright console-error
-     + route-integrity smoke, nav confusion-budget, in-app copy
-     lint, auth-robustness, AI-aesthetic rubric.
-   - **P6.3-P6.4** — net-LOC budgets, `/simplify` stage in the
-     `/new-feature` chain.
-   - **P2.11** — Python hygiene batch (pe_gate + orchestrator +
-     baseline + research_index) (deferred from v0.11.0). Best done
-     in a focused Python session with pytest coverage in the same
-     commit. (P2.10 shipped in v0.11.1; P7.1+P7.3 in v0.12.0.)
-   - **P3.x** — domain layer (`pe new`), plugin migration,
-     telemetry, execution loop. Stays parked until P5-P7 land.
+   1. **P3.1 `pe new <app>` scaffold** — Flask/Postgres/pytest
+      skeleton, CI gate pre-wired, engine pre-installed. L effort,
+      multi-week. Waits until 8CStudio settles so the scaffold
+      matches the actual proven stack.
+   2. **P3.2 Extract 3 SaaS modules** — `8c-tenancy` (from
+      8CStudio's RLS), `8c-billing` (from Origyn's payment stack),
+      `8c-credentials` (from invoice-system). Each ships with its
+      tests + reviewing agent.
+   3. **P3.3 Migrate distribution to native Claude Code plugin** —
+      `plugin.json` → real plugin marketplace entry.
+   4. **P3.4 Telemetry** — feed retrospective-agent + ceo agent
+      real numbers instead of just git-derived signals.
 
 ## What the v0.10.0 P1 bundle ships (6 items — condensed)
 

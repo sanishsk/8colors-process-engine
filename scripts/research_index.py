@@ -81,11 +81,52 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
 MIN_CHUNK = 100
 
+# P2.11: BGE-small (fastembed default) truncates at ~512 tokens ≈
+# 2000 chars. Long code blocks or wall-of-text paragraphs above this
+# would be silently truncated, dropping the tail from the embedding.
+# Split oversized paragraphs before chunking so every produced chunk
+# fits within CHUNK_SIZE.
+MAX_PARA_CHARS = CHUNK_SIZE
+
+
+def _split_oversized_para(para: str, max_chars: int) -> list[str]:
+    """Split a single oversized paragraph into ≤ max_chars slices at
+    the nearest sentence / newline / word boundary (P2.11)."""
+    out: list[str] = []
+    remaining = para
+    while len(remaining) > max_chars:
+        # Prefer boundaries in this order: sentence, newline, space.
+        window = remaining[:max_chars]
+        cut = max(
+            window.rfind(". "),
+            window.rfind("\n"),
+            window.rfind(" "),
+        )
+        if cut <= max_chars // 2:
+            cut = max_chars  # hard split — para has no boundaries
+        out.append(remaining[:cut].rstrip())
+        remaining = remaining[cut:].lstrip()
+    if remaining:
+        out.append(remaining)
+    return out
+
 
 def chunk_markdown(text: str) -> list[str]:
-    """Paragraph-aware chunking with overlap."""
-    paras = re.split(r"\n\s*\n", text.strip())
-    paras = [p.strip() for p in paras if p.strip()]
+    """Paragraph-aware chunking with overlap.
+
+    P2.11: pre-splits paragraphs larger than MAX_PARA_CHARS so
+    long code blocks aren't silently truncated by the embedder.
+    """
+    raw_paras = re.split(r"\n\s*\n", text.strip())
+    paras: list[str] = []
+    for p in raw_paras:
+        p = p.strip()
+        if not p:
+            continue
+        if len(p) > MAX_PARA_CHARS:
+            paras.extend(_split_oversized_para(p, MAX_PARA_CHARS))
+        else:
+            paras.append(p)
     if not paras:
         return []
 
@@ -125,6 +166,11 @@ class Embedder(ABC):
     def embed_query(self, text: str) -> list[float]:
         """Embed a query string. Providers with asymmetric task_types use them here."""
 
+    def embed_docs_batch(self, texts: list[str]) -> list[list[float]]:
+        """Default batching: loop over embed_doc. Providers can
+        override with a real batch API (see FastEmbedEmbedder)."""
+        return [self.embed_doc(t) for t in texts]
+
 
 class FastEmbedEmbedder(Embedder):
     """Fully local. Default. No API key required.
@@ -138,13 +184,22 @@ class FastEmbedEmbedder(Embedder):
     DIM = 384
 
     def __init__(self, model: Optional[str] = None) -> None:
+        # P2.11: catch both ImportError AND TypeError. Protobuf under
+        # Python 3.14 raises TypeError from within fastembed's transit
+        # deps ("Descriptors cannot not be created directly …") — the
+        # old handler let that traceback through raw. The documented
+        # incident under Python 3.14 was invisible from the user's POV.
         try:
             from fastembed import TextEmbedding
-        except ImportError as exc:
+        except (ImportError, TypeError) as exc:
             raise RuntimeError(
-                "fastembed not installed. Run: pip install fastembed\n"
-                "        (Adds ~150 MB of ONNX runtime + downloads a ~33 MB "
-                "model on first use to ~/.cache/fastembed/.)"
+                "fastembed not installed OR incompatible with this Python.\n"
+                f"  Root cause: {type(exc).__name__}: {exc}\n"
+                "  Fix: pip install --upgrade fastembed protobuf, or run\n"
+                "       against a Python version where fastembed builds\n"
+                "       cleanly (3.11–3.13 known-good as of 2026-07).\n"
+                "  (fastembed adds ~150 MB of ONNX runtime + downloads a\n"
+                "  ~33 MB model on first use to ~/.cache/fastembed/.)"
             ) from exc
 
         self.MODEL = model or self.MODEL
@@ -161,6 +216,15 @@ class FastEmbedEmbedder(Embedder):
     def embed_query(self, text: str) -> list[float]:
         # BGE benefits from a "query:" prefix on retrieval queries.
         return self._embed(f"query: {text}")
+
+    def embed_docs_batch(self, texts: list[str]) -> list[list[float]]:
+        """P2.11: batch embedding for the rebuild loop. Single-text
+        `embed()` calls in a loop create per-chunk overhead that
+        dominates rebuild time on large corpora."""
+        if not texts:
+            return []
+        vecs = list(self._embedding_model.embed(texts))
+        return [v.tolist() for v in vecs]
 
 
 class GeminiEmbedder(Embedder):
@@ -295,27 +359,55 @@ PROVIDERS = {
 
 
 def read_yaml_field(path: Path, *keys: str) -> Optional[str]:
-    """Minimal YAML reader — scalar values under nested keys only."""
+    """Minimal YAML reader — scalar values under nested keys only.
+
+    P2.11: previously would descend into sibling top-level blocks when
+    the expected child was missing. Concretely, for keys=("rag",
+    "provider") against:
+
+        some_block:
+          provider: A       # wrong parent, but same indent
+        rag:
+          model: bge-small  # no `provider:` here
+
+    the old walker would happily match `some_block.provider` because
+    it kept scanning past `some_block:` without noticing it exited the
+    parent scope. Fix: bail out when a subsequent line's indent is
+    < the target indent (means we've left the parent block).
+    """
     if not path.exists():
         return None
     text = path.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines()
     indent = 0
     i = 0
-    for part in keys:
+    for depth, part in enumerate(keys):
+        found = False
         while i < len(lines):
             line = lines[i]
+            # Skip blank / comment-only lines cheaply.
+            if not line.strip() or line.lstrip().startswith("#"):
+                i += 1
+                continue
             stripped = line.lstrip(" ")
             line_indent = len(line) - len(stripped)
+
+            # If we've gone SHALLOWER than the target indent while
+            # searching for a child, the parent block ended — the
+            # child key doesn't exist.
+            if depth > 0 and line_indent < indent:
+                return None
+
             if line_indent == indent and stripped.startswith(part + ":"):
                 rest = stripped[len(part) + 1 :].strip().strip('"').strip("'")
                 if rest and part == keys[-1]:
                     return rest
                 indent += 2
                 i += 1
+                found = True
                 break
             i += 1
-        else:
+        if not found:
             return None
     return None
 
@@ -500,6 +592,48 @@ def cmd_rebuild(
             skipped_count += 1
             continue
 
+        # P2.11: embed FIRST, then decide whether to record the doc.
+        # The previous flow inserted the doc row, then embedded — if
+        # every chunk failed (rate limit, dead network, provider bug),
+        # a stale/empty doc row was left with the correct sha256, and
+        # every subsequent rebuild would SKIP it (sha match), leaving
+        # a permanent hole in the index. Now: nothing gets inserted
+        # unless at least one chunk embedded successfully.
+        successful: list[tuple[int, str, list[float]]] = []
+        try:
+            vecs = embedder.embed_docs_batch(chunks)
+            if len(vecs) != len(chunks):
+                raise RuntimeError(
+                    f"embedder returned {len(vecs)} vectors for "
+                    f"{len(chunks)} chunks — refusing partial index"
+                )
+            successful = list(zip(range(len(chunks)), chunks, vecs))
+        except Exception as exc:
+            # Fall back to per-chunk with fault isolation.
+            print(
+                f"  ⚠ batch embed failed on {rel} ({exc}); "
+                "falling back to per-chunk",
+                file=sys.stderr,
+            )
+            for idx, chunk_text in enumerate(chunks):
+                try:
+                    vec = embedder.embed_doc(chunk_text)
+                    successful.append((idx, chunk_text, vec))
+                except Exception as sub_exc:
+                    print(
+                        f"    ⚠ embed failed on {rel} chunk {idx}: {sub_exc}",
+                        file=sys.stderr,
+                    )
+
+        if not successful:
+            print(
+                f"  ✗ SKIPPING {rel} — every chunk failed to embed "
+                "(no doc row inserted; run again after fixing the embedder)",
+                file=sys.stderr,
+            )
+            skipped_count += 1
+            continue
+
         if row:
             doc_id = row[0]
             conn.execute("DELETE FROM chunks WHERE doc_id = ?", (doc_id,))
@@ -516,12 +650,7 @@ def cmd_rebuild(
             doc_id = cur.lastrowid
             new_count += 1
 
-        for idx, chunk_text in enumerate(chunks):
-            try:
-                vec = embedder.embed_doc(chunk_text)
-            except Exception as exc:
-                print(f"  ⚠ embed failed on {rel} chunk {idx}: {exc}", file=sys.stderr)
-                continue
+        for idx, chunk_text, vec in successful:
             conn.execute(
                 "INSERT INTO chunks (doc_id, chunk_idx, text, embedding) VALUES (?, ?, ?, ?)",
                 (doc_id, idx, chunk_text, pack_embedding(vec)),
@@ -530,7 +659,7 @@ def cmd_rebuild(
 
         conn.commit()
         action = "updated" if row else "new    "
-        print(f"  {action} {rel}  ({len(chunks)} chunks)")
+        print(f"  {action} {rel}  ({len(successful)}/{len(chunks)} chunks)")
 
     set_meta(conn, "last_rebuild", time.strftime("%Y-%m-%dT%H:%M:%S%z"))
     set_meta(conn, "embedding_provider", embedder.NAME)
@@ -574,7 +703,11 @@ def cmd_query(
 
     conn = open_db(db_path)
 
-    # Verify the current embedder matches the indexed one
+    # Verify the current embedder matches the indexed one.
+    # P2.11: previously only checked dim. Two different models with
+    # the same dim (e.g. two 768d providers) would silently mix
+    # embedding spaces — queries would return junk with no error.
+    # Now: dim AND model must match.
     stored_dim = get_meta(conn, "embedding_dim")
     stored_model = get_meta(conn, "embedding_model")
     if stored_dim and int(stored_dim) != embedder.DIM:
@@ -584,6 +717,15 @@ def cmd_query(
             f"{stored_model}. Either:\n"
             f"  - Use the same provider as the index, or\n"
             f"  - Run 'rebuild --force' to re-embed with the new provider.",
+            file=sys.stderr,
+        )
+        return 2
+    if stored_model and stored_model != embedder.MODEL:
+        print(
+            f"ERROR: query embedder model ({embedder.MODEL}) doesn't match "
+            f"indexed model ({stored_model}) — same dim, different space.\n"
+            f"  - Use the same model as the index, or\n"
+            f"  - Run 'rebuild --force' to re-embed with the new model.",
             file=sys.stderr,
         )
         return 2
@@ -605,22 +747,30 @@ def cmd_query(
     embs_n = embs / norms
     sims = embs_n @ qvec
 
-    top_idx = np.argsort(-sims)[:top_k]
+    # P2.11: dedupe BEFORE trimming to top_k. Previously took top_k
+    # by similarity and then deduped, which meant "top 5 all from
+    # doc X" collapsed to a single visible result. Now: sort all,
+    # walk in order collecting distinct dedupe_keys, stop at top_k.
+    sorted_idx = np.argsort(-sims)
 
-    print(f"# Top {len(top_idx)} matches for: {query!r}")
+    print(f"# Top matches for: {query!r}")
     print(f"# (provider: {embedder.NAME}, model: {embedder.MODEL}, dim: {embedder.DIM})\n")
     seen_docs: set[str] = set()
-    for rank, i in enumerate(top_idx, 1):
+    shown = 0
+    for i in sorted_idx:
+        if shown >= top_k:
+            break
         chunk_id, path, chunk_idx, text, _ = rows[i]
-        score = float(sims[i])
         dedupe_key = f"{path}:{chunk_idx // 3}"
         if dedupe_key in seen_docs:
             continue
         seen_docs.add(dedupe_key)
+        shown += 1
+        score = float(sims[i])
         snippet = text[:snippet_chars].rstrip()
         if len(text) > snippet_chars:
             snippet += "…"
-        print(f"## [{rank}] `{path}` (chunk {chunk_idx}, score {score:.3f})\n")
+        print(f"## [{shown}] `{path}` (chunk {chunk_idx}, score {score:.3f})\n")
         print(snippet)
         print()
 

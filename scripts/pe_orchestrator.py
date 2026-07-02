@@ -323,6 +323,10 @@ def route(
 # ─── circuit breaker (shadow accounting) ───────────────────────────────────
 
 
+class PolicyError(Exception):
+    """Raised when a policy file is missing a required key (P2.11)."""
+
+
 def compute_breaker_state(
     iteration: int,
     slot_kind: str | None,
@@ -335,10 +339,18 @@ def compute_breaker_state(
     Cumulative state is read from a sidecar JSON to keep the
     accounting honest across slots in a campaign.
     """
-    per_slot = breaker_policy["per_slot"]
-    cumulative = breaker_policy["cumulative"]
-
-    slot_cap = per_slot["slot_iteration_cap"]
+    try:
+        per_slot = breaker_policy["per_slot"]
+        cumulative = breaker_policy["cumulative"]
+        slot_cap = per_slot["slot_iteration_cap"]
+    except KeyError as e:
+        # P2.11: previously bubbled as a bare KeyError with no
+        # context — hard to debug when the policy TOML got a typo.
+        # Convert to a structured PolicyError caught by cmd_decide.
+        raise PolicyError(
+            f"breaker policy missing required key: {e.args[0]!r} "
+            f"(check policy/circuit_breaker.toml)"
+        ) from e
     overrides = per_slot.get("overrides", {})
     if slot_kind and slot_kind in overrides:
         slot_cap = overrides[slot_kind]
@@ -368,25 +380,36 @@ def compute_breaker_state(
             )
 
     # Add this envelope's gate cost, if reported.
+    # P2.11: cache_read tokens billed at ~10% of full read cost by
+    # Anthropic. Counting them at full weight silently overcharged
+    # the gate-tokens budget and would trip the breaker early on
+    # cache-heavy runs. Weight is policy-configurable
+    # (breaker.cumulative.cache_read_weight); default 0.1.
     if envelope and "cost" in envelope:
         cost = envelope["cost"]
         in_tokens = cost.get("input_tokens", 0) or 0
         out_tokens = cost.get("output_tokens", 0) or 0
         cache_tokens = cost.get("cache_read_tokens", 0) or 0
-        gate_cum += in_tokens + out_tokens + cache_tokens
+        cache_weight = cumulative.get("cache_read_weight", 0.1)
+        gate_cum += int(in_tokens + out_tokens + cache_tokens * cache_weight)
 
-    worker_budget: str | int = cumulative.get(
+    worker_budget: str | int | float = cumulative.get(
         "worker_tokens_budget", "inf"
     )
-    gate_budget: str | int = cumulative.get("gate_tokens_budget", "inf")
+    gate_budget: str | int | float = cumulative.get("gate_tokens_budget", "inf")
 
     # Iteration cap check
     iteration_trip = iteration >= slot_cap
-    # Token budget checks (only when budgets are integers)
-    worker_trip = (
-        isinstance(worker_budget, int) and worker_cum >= worker_budget
-    )
-    gate_trip = isinstance(gate_budget, int) and gate_cum >= gate_budget
+
+    # Token budget checks (only when budgets are numeric).
+    # P2.11: previously `isinstance(int)` only — a float in the TOML
+    # (e.g. 20000000.0) silently disabled enforcement. Accept int and
+    # float; reject bool (which is a subclass of int).
+    def _is_numeric_budget(v: Any) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    worker_trip = _is_numeric_budget(worker_budget) and worker_cum >= worker_budget
+    gate_trip = _is_numeric_budget(gate_budget) and gate_cum >= gate_budget
 
     trip_reason: str | None = None
     if iteration_trip:
@@ -509,11 +532,36 @@ def reconcile(slot_id: str, decisions_path: Path, reconciliations_path: Path) ->
         print(f"ERROR: stdin is not valid JSON: {e}", file=sys.stderr)
         return 4
 
+    # P2.11: previously accepted an all-null payload silently. Now
+    # validates required keys + enum. Reconciliation records without
+    # merge_commit / ultimate_outcome are meaningless for downstream
+    # analysis and must be rejected at write time.
+    if not isinstance(payload, dict):
+        print("ERROR: reconciliation payload must be a JSON object.", file=sys.stderr)
+        return 4
+    required = ("merge_commit", "ultimate_outcome")
+    missing = [k for k in required if payload.get(k) in (None, "")]
+    if missing:
+        print(
+            f"ERROR: reconciliation payload missing required keys: {missing} "
+            "(both merge_commit and ultimate_outcome are load-bearing).",
+            file=sys.stderr,
+        )
+        return 4
+    valid_outcomes = {"success", "merged", "reverted", "abandoned", "pending"}
+    if payload["ultimate_outcome"] not in valid_outcomes:
+        print(
+            f"ERROR: ultimate_outcome must be one of {sorted(valid_outcomes)} "
+            f"(got {payload['ultimate_outcome']!r}).",
+            file=sys.stderr,
+        )
+        return 4
+
     reconciliation = {
         "slot_id": slot_id,
         "ts": datetime.now(timezone.utc).isoformat(),
-        "merge_commit": payload.get("merge_commit"),
-        "ultimate_outcome": payload.get("ultimate_outcome"),
+        "merge_commit": payload["merge_commit"],
+        "ultimate_outcome": payload["ultimate_outcome"],
         "actual_iterations_used": payload.get("actual_iterations_used"),
         "actual_tier_progression": payload.get("actual_tier_progression"),
         "router_decisions": [
@@ -568,15 +616,32 @@ def cmd_decide(args: argparse.Namespace) -> int:
     )
 
     decisions_path = Path(args.decisions_log)
-    cumulative_state_path = decisions_path.parent / "breaker-cumulative.json"
+    # P2.11: campaign scope. Cumulative state was pinned to a single
+    # file per project — cross-campaign runs contaminated each other's
+    # budgets forever. Now the sidecar path includes an optional
+    # --campaign-id suffix; default "default" preserves the old path
+    # for backwards compat.
+    campaign_id = getattr(args, "campaign_id", None) or "default"
+    if campaign_id == "default":
+        cumulative_state_path = decisions_path.parent / "breaker-cumulative.json"
+    else:
+        cumulative_state_path = (
+            decisions_path.parent / f"breaker-cumulative-{campaign_id}.json"
+        )
 
-    breaker_state = compute_breaker_state(
-        iteration=args.iteration,
-        slot_kind=args.slot_kind,
-        envelope=envelope,
-        breaker_policy=breaker_policy,
-        cumulative_state_path=cumulative_state_path,
-    )
+    try:
+        breaker_state = compute_breaker_state(
+            iteration=args.iteration,
+            slot_kind=args.slot_kind,
+            envelope=envelope,
+            breaker_policy=breaker_policy,
+            cumulative_state_path=cumulative_state_path,
+        )
+    except PolicyError as e:
+        # P2.11: structured policy-missing-key error → exit 4 with
+        # actionable message instead of raw KeyError traceback.
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 4
     update_cumulative_state(breaker_state, cumulative_state_path)
 
     record = ShadowDecisionRecord(
@@ -630,7 +695,28 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--envelope", required=True, help="Path to gate envelope or transcript file")
     d.add_argument("--slot-id", required=True)
     d.add_argument("--slot-kind", default=None)
-    d.add_argument("--iteration", type=int, required=True, help="Iteration number within the slot (1-indexed)")
+    def _positive_int(val: str) -> int:
+        # P2.11: iteration must be >= 1. Previously accepted 0 and
+        # negative values, which silently disabled the iteration cap
+        # check downstream (iter >= slot_cap was never true).
+        n = int(val)
+        if n < 1:
+            raise argparse.ArgumentTypeError(
+                f"iteration must be >= 1 (got {n})"
+            )
+        return n
+
+    d.add_argument("--iteration", type=_positive_int, required=True, help="Iteration number within the slot (1-indexed)")
+    d.add_argument(
+        "--campaign-id",
+        default=None,
+        help=(
+            "P2.11: campaign scope for the cumulative breaker sidecar. "
+            "Different campaigns get separate budget accounting. Omit "
+            "or pass 'default' to preserve the pre-P2.11 single-file "
+            "behaviour."
+        ),
+    )
     d.add_argument("--current-tier", required=True, choices=["haiku", "sonnet", "opus"])
     d.add_argument("--routing-policy", default=str(DEFAULT_ROUTING_POLICY))
     d.add_argument("--breaker-policy", default=str(DEFAULT_BREAKER_POLICY))
@@ -667,6 +753,40 @@ def build_parser() -> argparse.ArgumentParser:
         "--reconciliations-log", default=".pe/reconciliations.jsonl"
     )
     r.set_defaults(func=cmd_reconcile)
+
+    # P2.11: `pe shadow reset` — remove the cumulative breaker sidecar
+    # for a campaign. Idempotent (no error if the file doesn't exist).
+    def _cmd_reset(args_: argparse.Namespace) -> int:
+        decisions_path = Path(args_.decisions_log)
+        campaign_id = args_.campaign_id or "default"
+        if campaign_id == "default":
+            sidecar = decisions_path.parent / "breaker-cumulative.json"
+        else:
+            sidecar = (
+                decisions_path.parent
+                / f"breaker-cumulative-{campaign_id}.json"
+            )
+        if sidecar.exists():
+            sidecar.unlink()
+            print(f"✓ removed {sidecar}", file=sys.stderr)
+        else:
+            print(
+                f"✓ {sidecar} already absent (idempotent)",
+                file=sys.stderr,
+            )
+        return 0
+
+    rs = sub.add_parser(
+        "reset",
+        help="Remove the breaker cumulative sidecar for a campaign (idempotent).",
+    )
+    rs.add_argument("--decisions-log", default=".pe/decisions.jsonl")
+    rs.add_argument(
+        "--campaign-id",
+        default=None,
+        help="Campaign scope; omit for the default (pre-P2.11) file.",
+    )
+    rs.set_defaults(func=_cmd_reset)
 
     return p
 
