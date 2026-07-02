@@ -41,9 +41,26 @@ ceo_weekly:
     minute: 0
   # Watchdog freshness window in days (default 8 = weekly + 1 grace).
   staleness_days: 8
-  # Headless model. Default: opus for strategic synthesis.
-  # Set to "sonnet" if you need faster/cheaper retros.
-  model: claude-opus-4-7
+  # Headless model for the CEO weekly retro. The retro is strategic
+  # synthesis over the past week's git + gate + memory signals — the
+  # "foundational" tier of your model routing.
+  #
+  # Recommended ladder (Claude 5 era — 2026):
+  #   Fable            — top-of-line judgment / hardest architectural calls
+  #   claude-opus-4-8  — foundational (default for this field; strategic synthesis)
+  #   claude-sonnet-5  — default working tier (feature implementation)
+  #   claude-haiku-4-5 — mechanical passes with verifier gates
+  #
+  # If your Claude Code install doesn't yet have opus-4-8, drop to
+  # sonnet-5 rather than pinning a deprecated version. Read the actual
+  # model ID via `claude --list-models` (or your equivalent) and commit
+  # what your install serves — don't inherit a stale pin from this
+  # template.
+  #
+  # install_launchd.sh substitutes this into the rendered
+  # run_weekly.sh templates (macOS/Linux/Windows). Fallback if
+  # unset: claude-opus-4-8.
+  model: claude-opus-4-8
 
 # Session skills (start-session / end-session) installation
 session_skills:

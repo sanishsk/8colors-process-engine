@@ -3,75 +3,72 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-02 evening (v0.11.1 P2.10 operator-machine
-> agent reconcile shipped — 14 stale user-global agent copies
-> replaced with symlinks; 3 promoted into engine; 8CStudio's
-> ui-ux-design-agent moved to project-local. Engine agent surface
-> 15 → 18. Adopters re-installed against v0.11.1 with zero collision
-> warnings. 64/64 tests pass. Ready to commit + push.)
+> **Last updated:** 2026-07-02 late evening (v0.12.0 P7.1 context-diet
+> engine half + P7.3 retro unstall shipped in the same sitting —
+> ROADMAP Wave 0.2/0.3. `claude-md-size.sh` now dual-mode (PostToolUse
+> + pre-commit) with WARN 12KB / FAIL 20KB thresholds. `pe collect`
+> + `scripts/dev-log-collect.sh` are the new portable git-derived
+> collector; retrospective-agent Step 0 runs it. Model pins dropped
+> across yaml + Run-Weekly templates — `install_launchd.sh` now
+> threads `ceo_weekly.model` as `{{CEO_MODEL}}`. 64/64 tests pass.
+> Ready to commit + push.)
 
 ---
 
 ## One-line state
 
-Engine v0.11.1 in the working tree — **uncommitted**. v0.11.0 landed
-earlier (commit `b6c566e`) with 9 P2 items. This session added
-**P2.10 operator-machine agent reconcile**: `~/.claude/agents/` no
-longer holds any stale regular-file copies (14 symlinks to engine +
-0 regular files); 3 genuinely-global agents (`tenant-isolation-
-auditor`, `project-kickstarter`, `project-onboarder`) promoted into
-`agents/`; `ui-ux-design-agent.md` moved to 8CStudio project-local;
-`pe docs check` cleaned (INSTALL.md v0.2.0 heading false-positive
-fixed). Adopters re-installed cleanly. Kills the E1_b propagation
-gap for good.
+Engine v0.12.0 in the working tree — **uncommitted**. v0.11.1 landed
+earlier (commit `62b7d35`) with P2.10 agent reconcile. This session
+shipped **P7.1 context-diet engine half + P7.3 retro unstall** —
+both ROADMAP Wave 0.2/0.3, both save tokens on every future session.
+Adopters need `pe install` to pick up the new PostToolUse hook wiring
++ `pe collect` subcommand + updated Run-Weekly templates.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Commit + push v0.11.1:**
+1. **Commit + push v0.12.0:**
 
    ```bash
    git add -A
-   git commit -m "fix(0.11.1): P2.10 reconcile ~/.claude/agents/ — kill E1_b propagation gap"
+   git commit -m "feat(0.12.0): P7.1 context diet + P7.3 retro unstall (ROADMAP Wave 0.2/0.3)"
    git push origin master
    ```
 
-2. **Adopters already re-installed this session** — no `pe install` needed
-   unless you want to double-check (`pe doctor <adopter>` will confirm
-   symlinks resolve).
+2. **Re-install adopters** — the new PostToolUse `claude-md-size`
+   wiring rides in `hooks/hooks.json` (merged into
+   `.claude/settings.json` by `pe install`); the `{{CEO_MODEL}}`
+   template variable requires re-render via `pe launchd <project>`
+   if the operator wants launchd retros using the new
+   `ceo_weekly.model` value.
 
-3. **Session 5 pickup order (per updated IMPROVEMENT_PLAN.md §Suggested execution order + OPERATOR_WORKFLOW_V3.md):**
+   ```bash
+   pe install /Users/sanishsasikumar/Documents/8Colors/8CStudio
+   pe install /Users/sanishsasikumar/Documents/Origyn
+   # Optional (only if launchd already wired):
+   pe launchd /Users/sanishsasikumar/Documents/8Colors/8CStudio
+   ```
 
-   1. **P7.1 Context diet** — 8CStudio CLAUDE.md is 74KB / ~19k
-      tokens reloaded every turn. Target ≤300 lines / ≤12KB;
-      milestones → `PHASE_HISTORY.md`; rules → skills. Wire
-      `hooks/claude-md-size.sh` as a real hook (it exists but isn't
-      wired).
-   2. **P7.3 Retro unstall** — last dev-log digest is 2026-W21,
-      ~6 weeks stale. Fix the collector OR confirm the degraded-mode
-      path (already partially in v0.11.0 P2.5) fires cleanly next
-      Friday.
-   3. **P6.1 Ponytail adoption** — `pe install --with-ponytail`
-      (git clone / plugin add); reference the decision ladder in
-      tdd-guide + build-error-resolver preambles. Keep it a skill,
-      not prose (P2.3 lesson).
-   4. **P6.2 Deterministic complexity + dead-code gates** — ruff
+3. **Switch to the product track — 8CStudio #227 dev-env repair.**
+   Per ROADMAP + operator direction, #227 is the true critical-path
+   blocker (nothing downstream can be verified until the app boots
+   locally). Engine track resumes with P5.1 boot-smoke + P5.2
+   migration-lint **after #227 lands** so the gates encode the
+   actual fixes rather than guesses.
+
+4. **Session 6 (engine) — parked until #227 lands:**
+
+   1. **P6.1 Ponytail adoption** — `pe install --with-ponytail`
+      (skill, not prose per P2.3 lesson).
+   2. **P6.2 Deterministic complexity + dead-code gates** — ruff
       C901/PLR + xenon `--max-absolute B` + vulture (Python); knip
       + eslint complexity (JS/TS). Wired by `pe install` like P1.2.
+   3. **P5.1 App-boot smoke gate** — seeded from #227's actual
+      fixes.
+   4. **P5.2 Migration-contract lint** — same.
+   5. **P5.3 Deterministic design lint** — once tokens v2 locks in
+      Wave 1.
 
-   All four are S-effort; one sitting → v0.12.0.
-
-4. **Then:**
-
-   5. **P5.1 App-boot smoke gate** — 4 of the 8CStudio audit bugs
-      would have been caught by "fresh clone boots". Config-driven
-      `boot_check` in `.process-engine.yaml`; CI job + `pe doctor`.
-   6. **P5.2 Migration-contract lint** — forbid `sys.exit` in
-      migrations; CI runs full chain against empty DB.
-   7. **P5.3 Deterministic design lint** — config-driven allowlists
-      for tokens/radius/spacing; deny raw `style=`, deny raw modal
-      markup when a macro exists.
-
-5. **Higher latency (do NOT jump to these first):**
+6. **Higher latency (do NOT jump to these first):**
 
    - **P5.4-P5.9** — duplication ratchet, Playwright console-error
      + route-integrity smoke, nav confusion-budget, in-app copy
@@ -81,7 +78,7 @@ gap for good.
    - **P2.11** — Python hygiene batch (pe_gate + orchestrator +
      baseline + research_index) (deferred from v0.11.0). Best done
      in a focused Python session with pytest coverage in the same
-     commit. (P2.10 shipped in v0.11.1 this session.)
+     commit. (P2.10 shipped in v0.11.1; P7.1+P7.3 in v0.12.0.)
    - **P3.x** — domain layer (`pe new`), plugin migration,
      telemetry, execution loop. Stays parked until P5-P7 land.
 

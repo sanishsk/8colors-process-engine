@@ -4,7 +4,7 @@ Generic cadence. Project-specific bits (Role.ALL_MODULES, sidebar wiring,
 double-margin gate, etc.) stay in the target project's docs.
 
 ## Monday — Brainstorm + Plan
-- 08:00 — dev-log auto-runs (project's existing tooling)
+- 08:00 — `pe collect --window 1` auto-runs (via cron/launchd — see "Wiring the collector" below)
 - 08:35 — researcher agent runs weekly market scan (awesome-mcp-servers, Glama)
 - 20:00 — voice/text brainstorm with user on top-priority feature (60 min)
 - 21:00 — brief-writer produces draft brief overnight (async)
@@ -33,3 +33,29 @@ double-margin gate, etc.) stay in the target project's docs.
 - User reads retro (10 min)
 
 ## Total user time: ~4 hours/week
+
+---
+
+## Wiring the collector (P7.3)
+
+The retrospective-agent runs `pe collect` in its Step 0, so the
+weekly retro will always produce a digest as long as `pe` is on PATH.
+For richer trend data, wire a daily run so 7 fresh daily JSONs are
+sitting in `docs/dev-log/daily/` when Friday rolls around.
+
+**macOS (launchd):** create
+`~/Library/LaunchAgents/com.<org>.devlog-collect.plist` invoking
+`~/.local/bin/pe collect /absolute/path/to/project` at 07:55 daily
+(RunAtLoad = true).
+
+**Linux (cron):**
+
+```
+55 7 * * * cd /path/to/project && $HOME/.local/bin/pe collect
+```
+
+**Manual (any platform):** run `pe collect` before the retro.
+
+The collector is pure git — no Claude tokens, no external services,
+runs in seconds. Failure is silent (exit 2 on non-git dirs, exit 3
+on git errors); the retrospective-agent degrades gracefully.

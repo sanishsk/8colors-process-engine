@@ -657,23 +657,37 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
 > Full analysis + the new operating model: **`docs/OPERATOR_WORKFLOW_V3.md`**
 > (written 2026-07-02). Headline findings, kept here for the checklist:
 
-- **P7.1 Context diet (CRITICAL for cost):** 8CStudio `CLAUDE.md` is **74KB
-  (~19k tokens)** + 22KB global rules — ~25k tokens re-processed EVERY turn.
-  This, not session length, is the root cause of the weekly-cap incidents the
-  token-discipline section fights. Target ≤300 lines / ≤12KB; milestones →
-  `PHASE_HISTORY.md`; rules → skills (loaded on demand). Enforce with the
-  existing `hooks/claude-md-size.sh` wired as a real hook (it exists but
-  isn't wired — same P1 class).
+- **P7.1 Context diet (engine half) — ✅ SHIPPED in v0.12.0 (2026-07-02)**
+  `hooks/claude-md-size.sh` rewritten as dual-mode guard: PostToolUse
+  (fires the instant CLAUDE.md is edited in a Claude Code session) +
+  pre-commit (blocks at hard limit). Thresholds split: WARN=12KB,
+  FAIL=20KB. Wired in `hooks/hooks.json` PostToolUse chain +
+  `hooks/.pre-commit-config.yaml.template`. Model-tier updates:
+  `templates/process-engine.yaml.template` swapped the `claude-opus-4-7`
+  pin for `claude-opus-4-8` + a documented Claude 5 era ladder;
+  `install_launchd.sh` threads `ceo_weekly.model` through as
+  `{{CEO_MODEL}}`; the 3 Run-Weekly templates (launchd/systemd/Windows)
+  no longer hardcode. Illustrative examples across 5 gate agents +
+  gate-envelope schema updated to `sonnet-5` / `opus-4-8` / `haiku-4-5`.
+  (Product half — trimming 8CStudio CLAUDE.md from 74KB → ≤12KB — is
+  8CStudio-side work and stays with the product track.)
 - **P7.2 Model routing is stale:** operator global rules still route to
   "Sonnet 4.6 / Opus 4.5 / Haiku 4.5" and yaml pins `claude-opus-4-7`.
   Update to the Claude 5 era: Fable 5 (audits/architecture/design
   direction/hard debugging), Opus 4.8 (foundational slots: RLS, auth, money),
   Sonnet 5 (default dev), Haiku 4.5 (mechanical batches). See V3 doc §3.
-- **P7.3 Retro pipeline stalled:** last dev-log digest is 2026-W21 (~6 weeks
-  stale) — the Friday retro has been running on empty input (matches P2.5).
-  Fix the collector OR make retrospective-agent derive from
-  `git log --numstat` + decisions.jsonl (degraded mode) — P2.5 fix, raised
-  to do-now.
+  (Engine yaml pin already dropped in v0.12.0 P7.1; global rules
+  update stays operator-side.)
+- **P7.3 Retro unstall — ✅ SHIPPED in v0.12.0 (2026-07-02)**
+  New `scripts/dev-log-collect.sh` + `pe collect` subcommand — portable,
+  git-derived, zero Claude tokens. Reads `git log --numstat` +
+  `.claude/gates/*.json` in the window; writes
+  `docs/dev-log/daily/<date>.{json,md}`. `retrospective-agent` Step 0
+  now runs `pe collect` before reading anything, guaranteeing a fresh
+  digest even in adopters that never wired the previous private
+  collector. Degraded-mode fallback documented + strengthened.
+  `docs/RHYTHM.md` gained a "Wiring the collector" section (launchd /
+  cron / manual). Every adopter now has the same working feedback loop.
 - **P7.4 Skills/agents sprawl:** 67 global skills + duplicated
   project/user copies (data-audit, health, kickstart, onboard each appear
   twice) + stale `~/.claude/agents` forks (P2.10). Run a skills stocktake;

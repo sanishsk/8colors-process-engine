@@ -30,7 +30,7 @@ cd "$PROJECT_ROOT"
     "$CLAUDE_BIN" \
         --print \
         --permission-mode bypassPermissions \
-        --model claude-opus-4-7 \
+        --model {{CEO_MODEL}} \
         "/weekly-retro --force" 2>&1
     echo "---"
     echo "=== Exit: $? ==="

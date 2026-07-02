@@ -27,20 +27,33 @@ The dev-log system already collected the raw data (zero token cost). Your one jo
 
 ## Inputs You Read
 
-**Preferred (rich mode) — if dev-log collector is installed:**
+**Step 0 (MANDATORY):** before reading anything else, ensure a fresh
+digest exists for the retro window. Run:
+
+```bash
+pe collect --window 7   # weekly retro
+pe collect              # daily retro (window=1)
+```
+
+This is the P7.3 portable git-derived collector — zero Claude tokens,
+runs in seconds, writes `docs/dev-log/daily/<date>.{json,md}`. If it
+fails (not a git repo, no commits in window), fall through to
+**degraded mode** below and note it in the report header.
+
+**Preferred (rich mode) — collector output present:**
 
 ```
-docs/dev-log/daily/<YYYY-MM-DD>.json      — current period's raw metrics
+docs/dev-log/daily/<YYYY-MM-DD>.json      — current period's raw metrics (this run)
 docs/dev-log/daily/<YYYY-MM-DD>.md         — pre-formatted digest
 docs/dev-log/daily/<last 7 days>.json     — for trend comparison
 docs/dev-log/monthly/retrospectives/<previous retros> — carry-over action item check (CRITICAL)
-docs/dev-log/frequency-state.json         — adaptive frequency state
+docs/dev-log/frequency-state.json         — adaptive frequency state (optional)
 ```
 
-**Always read (universal):**
+**Always read (universal, in both modes):**
 
 ```
-git log --since='<window>' --numstat        — commit velocity + churn
+git log --since='<window>' --numstat        — commit velocity + churn (redundant with digest, use as cross-check)
 .pe/decisions.jsonl (last N in window)      — shadow router decisions + failure_class distribution
 .pe/reconciliations.jsonl                   — actual vs shadow router disagreement
 .claude/gates/*.json                        — envelope verdict distribution (PASS/WARN/FAIL rates)
@@ -49,12 +62,14 @@ docs/baselines/*.json                       — Phase 0 slot baselines for the w
 CLAUDE.md                                    — current process spec (to spot drift)
 ```
 
-**Degraded mode (dev-log absent):** if `docs/dev-log/daily/` doesn't
-exist, derive metrics from the "Always read" inputs alone. Note the
-degradation in the report header ("dev-log collector not installed —
-metrics derived from git + gates + baselines only"). Do NOT skip the
-retro just because the collector is missing — velocity, gate-verdict
-distribution, and churn hotspots are still computable.
+**Degraded mode (collector unavailable):** if `pe collect` failed OR
+the outputs are absent AND cannot be created (`pe` not on PATH, not a
+git repo), derive metrics from the "Always read" inputs alone. Note
+the degradation in the report header (**"collector unavailable —
+metrics derived from git + gates + baselines only"**). Do NOT skip
+the retro just because the collector didn't run — velocity, gate-
+verdict distribution, and churn hotspots are still computable via
+inline `git log --since=... --numstat`.
 
 **Mode Detection:** The folder you write output to determines mode:
 - daily mode (1-day lookback): `docs/dev-log/monthly/retrospectives/daily/<date>.md`

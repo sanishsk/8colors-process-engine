@@ -59,6 +59,9 @@ SUBCOMMANDS
     doctor [<project>]    Diagnose install (broken symlinks, missing deps)
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
     baseline capture ...  Record a Phase 0 slot baseline (speed / size / quality)
+    collect [<project>] [--window N] [--date YYYY-MM-DD]
+                          Portable git-derived dev-log digest for retrospective-agent
+                          (P7.3: replaces the ambient collector that went stale)
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
@@ -837,6 +840,24 @@ pe_python() {
 cmd="${1:-help}"
 shift || true
 
+cmd_collect() {
+    # Portable git-derived dev-log digest. Zero Claude tokens.
+    # Passes through to scripts/dev-log-collect.sh; if the first arg is
+    # a bare project path (no leading -), it's translated to --project.
+    local collector="$ENGINE_DIR/scripts/dev-log-collect.sh"
+    if [ ! -x "$collector" ]; then
+        echo "ERROR: $collector not found or not executable" >&2
+        exit 1
+    fi
+    local first="${1:-}"
+    if [ -n "$first" ] && [ "${first#-}" = "$first" ]; then
+        # bare path → prepend --project
+        shift
+        exec "$collector" --project "$first" "$@"
+    fi
+    exec "$collector" "$@"
+}
+
 cmd_baseline() {
     local sub="${1:-}"
     shift || true
@@ -1049,6 +1070,7 @@ case "$cmd" in
     doctor)     cmd_doctor "$@" ;;
     eject)      cmd_eject "$@" ;;
     baseline)   cmd_baseline "$@" ;;
+    collect)    cmd_collect "$@" ;;
     gate)       cmd_gate "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;

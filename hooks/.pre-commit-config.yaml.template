@@ -10,7 +10,7 @@ repos:
     hooks:
       # Pre-commit (file content)
       - id: claude-md-size
-        name: CLAUDE.md size guard (warns at 40 KB)
+        name: CLAUDE.md size guard (warns >12 KB, fails >20 KB)
         entry: hooks/claude-md-size.sh
         language: script
         pass_filenames: false
@@ -85,7 +85,11 @@ repos:
 #   ENGINE_STRUCTURAL_FILES=...    # regex of paths counted as "structural"
 #   ENGINE_SECURITY_PATHS=...      # regex of paths requiring Security-reviewed trailer
 #   ENGINE_UI_FILES=...            # regex of paths counted as "UI"
-#   ENGINE_CLAUDE_MD_LIMIT=40000   # CLAUDE.md warning threshold
+#   ENGINE_CLAUDE_MD_WARN=12000    # CLAUDE.md soft threshold (advisory)
+#   ENGINE_CLAUDE_MD_FAIL=20000    # CLAUDE.md hard threshold (blocks commit)
+#   ENGINE_CLAUDE_MD_LIMIT=NNNNN   # DEPRECATED: legacy single-threshold var,
+#                                  # mapped to FAIL if only this is set.
+#   PE_SKIP_CLAUDE_MD_SIZE=1       # one-shot bypass (logged in commit output)
 #   ENGINE_FOUNDATIONAL_REGEX=...  # regex of paths counted as "foundational"
 #   ENGINE_TEST_CMD=...            # explicit test command override (skips auto-detect)
 #   ENGINE_TEST_FULL=1             # run full test suite instead of scoped

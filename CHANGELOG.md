@@ -7,6 +7,92 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.12.0] — 2026-07-02
+
+> P7.1 context diet (engine half) + P7.3 retro unstall. Both were
+> ROADMAP Wave 0.2/0.3. Pays off every subsequent session — the
+> context-size guard cuts per-turn tokens, the collector restores
+> the feedback loop that catches drift.
+>
+> All 64 tests pass.
+
+### Added
+
+- **`hooks/claude-md-size.sh`** rewritten as dual-mode guard (P7.1).
+  - **Pre-commit mode:** invoked by git-side pre-commit framework.
+  - **PostToolUse mode:** invoked by Claude Code after Edit/Write/
+    MultiEdit; auto-detects when the edited path is `CLAUDE.md`.
+  - Two thresholds instead of one:
+    `ENGINE_CLAUDE_MD_WARN=12000` (advisory, exit 0) /
+    `ENGINE_CLAUDE_MD_FAIL=20000` (blocks commit, exit 1).
+  - Legacy `ENGINE_CLAUDE_MD_LIMIT` still respected (maps to FAIL).
+  - Bypass via `PE_SKIP_CLAUDE_MD_SIZE=1`.
+- **`hooks/hooks.json`** now wires `claude-md-size.sh` as a
+  PostToolUse hook alongside `post-edit-lint.sh` (P7.1). Fires the
+  size warning the moment CLAUDE.md crosses the soft limit —
+  operators no longer wait until commit time to notice bloat.
+- **`scripts/dev-log-collect.sh`** — new portable git-derived
+  daily digest collector (P7.3). Reads `git log --numstat` +
+  `.claude/gates/*.json` in the window; writes JSON + Markdown to
+  `docs/dev-log/daily/<date>.{json,md}`. Zero Claude tokens.
+  Replaces the 8CStudio-specific ambient collector that went stale
+  after 2026-W21.
+- **`pe collect`** subcommand — thin wrapper over the collector,
+  bare-path positional syntax supported (`pe collect <project>`).
+- **`agents/retrospective-agent.md`** — Step 0 now runs
+  `pe collect` before reading anything; degraded-mode fallback
+  strengthened ("collector unavailable" instead of "collector not
+  installed" — accurate given the collector now always ships).
+- **`docs/RHYTHM.md`** — "Wiring the collector" section documents
+  daily launchd/cron wiring; retro sequence updated to include the
+  Step 0 run.
+
+### Changed
+
+- **`templates/process-engine.yaml.template`** — `ceo_weekly.model`
+  pin `claude-opus-4-7` → `claude-opus-4-8` + inline Claude 5 era
+  ladder comment (Fable / Opus 4.8 / Sonnet 5 / Haiku 4.5) and
+  explicit instruction to `claude --list-models` before adopting.
+- **`scripts/install_launchd.sh`** — `ceo_weekly.model` now threads
+  through as a template variable (`{{CEO_MODEL}}`) with charset
+  validation. Templates no longer hardcode model IDs — one source
+  of truth, adopter-controlled.
+- **`templates/{launchd,systemd,windows-task-scheduler}/Run-Weekly.{sh,ps1}.template`**
+  — `--model claude-opus-4-7` → `--model {{CEO_MODEL}}`.
+- Illustrative model examples in prose across the 5 gate agents
+  (`code-reviewer`, `security-reviewer`, `database-reviewer`,
+  `tdd-guide`, `e2e-runner`) + `schemas/gate-envelope.schema.json`
+  updated to Claude 5 era (`sonnet-5` / `opus-4-8` / `haiku-4-5`).
+  Contract is unchanged: agents still report the runtime model ID,
+  never hardcode.
+- **`hooks/.pre-commit-config.yaml.template`** — hook name reflects
+  new thresholds; env var comments updated (WARN/FAIL split;
+  LIMIT deprecated with mapping note).
+- **`.gitignore`** — `docs/dev-log/daily/`, `weekly/`, `monthly/`
+  (regenerable, per-machine snapshots — not source).
+
+### Fixed
+
+- Retro feedback loop restored. Before: retrospective-agent
+  expected `docs/dev-log/daily/*.json` files that were only
+  produced by 8CStudio's private tooling — every other adopter
+  ran degraded. After: `pe collect` ships with the engine, works
+  identically in every adopter, and the agent's Step 0 guarantees
+  a fresh digest.
+
+### Session 6 pickup (per IMPROVEMENT_PLAN)
+
+- **P6.1 Ponytail adoption** — `pe install --with-ponytail`
+  (skill, not prose per P2.3 lesson).
+- **P6.2 Deterministic complexity + dead-code gates** — ruff C901
+  + xenon + vulture (Python) / knip + eslint complexity (JS/TS).
+  ROADMAP Wave 1.4.
+- Then #227 dev-env repair in the 8CStudio repo (product track,
+  the true critical-path blocker) — engine returns for P5.1/P5.2
+  after #227 lands so the gates encode the actual fixes.
+
+---
+
 ## [0.11.1] — 2026-07-02
 
 > P2.10 reconcile-operator-machine-agents follow-up. Structural fix,

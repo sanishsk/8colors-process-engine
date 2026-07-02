@@ -12,3 +12,8 @@ __pycache__/
 # Phase 3 shadow-mode runtime logs (never commit — written to consumer repos via pe shadow decide)
 .pe/
 .env.local
+
+# Dev-log collector outputs — regenerable, per-machine snapshots
+docs/dev-log/daily/
+docs/dev-log/weekly/
+docs/dev-log/monthly/

@@ -47,6 +47,12 @@ PROJECT_ROOT=$(yaml_get "project.root" "$CONFIG")
 CEO_ENABLED=$(yaml_get "ceo_weekly.enabled" "$CONFIG")
 [ -z "$CEO_ENABLED" ] && CEO_ENABLED="true"
 
+# CEO retro model — read from yaml; fall back to a current-era default
+# (P7.1 model-tier update). Adopter overrides via ceo_weekly.model in
+# .process-engine.yaml. Charset-guarded below alongside other values.
+CEO_MODEL=$(yaml_get "ceo_weekly.model" "$CONFIG")
+[ -z "$CEO_MODEL" ] && CEO_MODEL="claude-opus-4-8"
+
 # ─── Actionable errors on missing fields (P2.7 fix) ───────────────────
 if [ -z "$ORG_TAG" ]; then
     cat >&2 <<EOF
@@ -90,6 +96,11 @@ fi
 # allowlist).
 case "$ORG_TAG" in *'{{'*|*'}}'*|*'|'*) echo "ERROR: org_tag contains reserved characters" >&2; exit 1 ;; esac
 case "$PROJECT_ROOT" in *'{{'*|*'}}'*) echo "ERROR: project.root contains reserved characters" >&2; exit 1 ;; esac
+case "$CEO_MODEL" in *'{{'*|*'}}'*|*'|'*|*' '*) echo "ERROR: ceo_weekly.model '$CEO_MODEL' contains reserved characters or whitespace" >&2; exit 1 ;; esac
+if ! echo "$CEO_MODEL" | grep -qE '^[A-Za-z0-9._-]+$'; then
+    echo "ERROR: ceo_weekly.model '$CEO_MODEL' must match ^[A-Za-z0-9._-]+\$" >&2
+    exit 1
+fi
 
 # Capture environment values for templates
 CLAUDE_BIN=$(command -v claude || true)
@@ -111,17 +122,18 @@ mkdir -p "$BIN_DIR" "$LOG_DIR" "$LAUNCH_DIR"
 # above; this is the belt to sed's suspenders.
 render() {
     local src="$1" dst="$2"
-    "${PE_PYTHON:-python3}" - "$src" "$dst" "$ORG_TAG" "$PROJECT_ROOT" "$HOME" "$CLAUDE_BIN" <<'PY'
+    "${PE_PYTHON:-python3}" - "$src" "$dst" "$ORG_TAG" "$PROJECT_ROOT" "$HOME" "$CLAUDE_BIN" "$CEO_MODEL" <<'PY'
 import sys
 from pathlib import Path
 
-src, dst, org_tag, project_root, home, claude_bin = sys.argv[1:7]
+src, dst, org_tag, project_root, home, claude_bin, ceo_model = sys.argv[1:8]
 
 text = Path(src).read_text(encoding="utf-8")
 text = text.replace("{{ORG_TAG}}", org_tag)
 text = text.replace("{{PROJECT_ROOT}}", project_root)
 text = text.replace("{{HOME}}", home)
 text = text.replace("{{CLAUDE_BIN}}", claude_bin)
+text = text.replace("{{CEO_MODEL}}", ceo_model)
 
 Path(dst).write_text(text, encoding="utf-8")
 PY

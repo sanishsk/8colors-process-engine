@@ -85,7 +85,7 @@
     "model_used": {
       "type": "string",
       "description": "Model identifier that produced this envelope. Used by the orchestrator to enforce the gate-agent paradox rule (gates must run at Sonnet+).",
-      "examples": ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"]
+      "examples": ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"]
     },
     "tier": {
       "type": "string",

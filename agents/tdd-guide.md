@@ -161,7 +161,7 @@ For release-critical paths:
 >
 > **Model-id placeholder:** every `<your-model-id>` below is a
 > placeholder — replace with the actual model running you at invocation
-> time (e.g. `claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-opus-4-7`).
+> time (e.g. `claude-sonnet-5`, `claude-haiku-4-5`, `claude-opus-4-8`).
 > Never emit the literal string `<your-model-id>` in an envelope.
 
 > **This section is the contract. Every other instruction in this

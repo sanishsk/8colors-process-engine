@@ -31,7 +31,7 @@ try {
     & $ClaudeBin `
         --print `
         --permission-mode bypassPermissions `
-        --model claude-opus-4-7 `
+        --model {{CEO_MODEL}} `
         "/weekly-retro --force" 2>&1 | Tee-Object -FilePath $RunLog -Append
 
     "=== Exit: $LASTEXITCODE ===" | Tee-Object -FilePath $RunLog -Append
