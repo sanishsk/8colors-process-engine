@@ -62,6 +62,9 @@ SUBCOMMANDS
     collect [<project>] [--window N] [--date YYYY-MM-DD]
                           Portable git-derived dev-log digest for retrospective-agent
                           (P7.3: replaces the ambient collector that went stale)
+    skills-audit [--project <path>]
+                          Inventory ~/.claude/skills/ + ~/.claude/commands/ sprawl;
+                          flag duplicates + classify against engine core-20 (P7.4)
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
@@ -858,6 +861,13 @@ cmd_collect() {
     exec "$collector" "$@"
 }
 
+cmd_skills_audit() {
+    # P7.4: inventory ~/.claude/skills/ + ~/.claude/commands/, flag
+    # duplicates, classify against the engine's core-20 (docs/SKILLS.md).
+    local py; py="$(pe_python)" || exit 1
+    exec "$py" "$ENGINE_DIR/scripts/skills_audit.py" "$@"
+}
+
 cmd_baseline() {
     local sub="${1:-}"
     shift || true
@@ -1071,6 +1081,7 @@ case "$cmd" in
     eject)      cmd_eject "$@" ;;
     baseline)   cmd_baseline "$@" ;;
     collect)    cmd_collect "$@" ;;
+    skills-audit) cmd_skills_audit "$@" ;;
     gate)       cmd_gate "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;

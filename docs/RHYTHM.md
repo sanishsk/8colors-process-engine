@@ -36,6 +36,23 @@ double-margin gate, etc.) stay in the target project's docs.
 
 ---
 
+## Execution patterns (v0.16.0 / P7.5)
+
+For any given piece of work, first classify the **lane** (see
+`OPERATOR_WORKFLOW_V3.md` §4 + `docs/EXECUTION_PATTERNS.md`):
+
+| Lane | Pattern |
+|---|---|
+| Judgment | Interactive session, plan mode, Fable/Opus |
+| Standard slot | Interactive OR background; engine chain |
+| Mechanical batch | Headless `claude -p` per item OR worktree fleet |
+
+The four concrete recipes live in `docs/EXECUTION_PATTERNS.md`
+(Pattern 1 interactive, Pattern 2 worktree, Pattern 3 headless,
+Pattern 4 background). Wire the mechanical work through the
+deterministic gates (`hooks/*.sh`) — a cheap model plus a strong
+verifier beats an expensive model with no verifier.
+
 ## Wiring the collector (P7.3)
 
 The retrospective-agent runs `pe collect` in its Step 0, so the

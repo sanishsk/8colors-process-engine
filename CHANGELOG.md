@@ -7,6 +7,70 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.16.0] — 2026-07-03
+
+> P7.4 skills stocktake tooling + P7.5 execution-patterns docs.
+> Closes the operator-workflow chapter of the plan honestly — every
+> P7 item is now shipped or explicitly documented as out-of-engine-
+> scope. Engine work against the full plan (excluding P3.x
+> strategic and P4 parked) is complete.
+
+### Added
+
+- **`scripts/skills_audit.py`** + **`pe skills-audit`** subcommand
+  (P7.4). Zero-mutation inventory + classification of the operator's
+  `~/.claude/skills/` and `~/.claude/commands/`:
+  - Flags name collisions across skills and commands.
+  - Classifies skills as engine-shipped / core-recommended /
+    engine-command-shadowed / external.
+  - With `--project <path>`, flags project-local duplicates.
+  - Exits 1 on collisions or command-shadowed skills so it can slot
+    into pre-commit or CI.
+- **`docs/SKILLS.md`** (P7.4). The engine's opinionated **core-20**
+  skill list with rationale per row. Pairs with `pe skills-audit`.
+  Documents the "prune everything else" principle without touching
+  the operator's machine.
+- **`docs/EXECUTION_PATTERNS.md`** (P7.5). Concrete recipes for the
+  four execution patterns referenced in `OPERATOR_WORKFLOW_V3.md`
+  §4:
+  1. Interactive judgment session
+  2. Worktree fleet for parallel slots
+  3. Headless `claude -p` batches
+  4. Background agents (launchd / cron / ad-hoc)
+  Includes decision tree for lane classification, failure modes to
+  avoid, and cross-refs to hooks/agents that make each pattern safe.
+
+### Changed
+
+- **`docs/RHYTHM.md`** gained an "Execution patterns" section
+  cross-referencing the new `EXECUTION_PATTERNS.md` recipes. The
+  three-lane classification (Judgment / Standard slot / Mechanical
+  batch) is now visible in the weekly-rhythm doc.
+- **`scripts/install.sh`** doc-allowlist gained `SKILLS.md` and
+  `EXECUTION_PATTERNS.md` so adopters receive both on `pe install`.
+- **`plugin.json`** version → 0.16.0. **`README.md`** badge → 0.16.0.
+
+### Engine work complete against the audit + hygiene backlog
+
+Every P0/P1/P2/P5/P6/P7 item on `docs/IMPROVEMENT_PLAN.md` is now
+either **✅ SHIPPED** or explicitly documented as **out-of-engine-
+scope** (P7.2 global-rules half — operator's `~/.claude/rules/`,
+not engine repo).
+
+**Deliberately parked (per plan):**
+- **P3.1–P3.12** — L-effort strategic (`pe new`, SaaS module
+  extraction, native plugin migration, telemetry, eval harness,
+  execution loop, doc consolidation, SaaS review coverage, Python
+  test suite parity, hybrid RAG, fleet ops). Sequence after
+  8CStudio settles post-#227.
+- **P4** — "Deliberately NOT now" (Phase 4 DAG, auto-tier-routing,
+  engine self-mod, vector DB, pe_core pkg).
+
+Next: switch to 8CStudio for **#227 dev-env repair** — the true
+critical-path blocker. Engine returns for P3.x after #227 lands.
+
+---
+
 ## [0.15.0] — 2026-07-03
 
 > Python hygiene batch — P2.11. Twenty targeted fixes across

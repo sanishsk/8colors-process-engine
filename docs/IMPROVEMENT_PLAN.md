@@ -741,13 +741,28 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   collector. Degraded-mode fallback documented + strengthened.
   `docs/RHYTHM.md` gained a "Wiring the collector" section (launchd /
   cron / manual). Every adopter now has the same working feedback loop.
-- **P7.4 Skills/agents sprawl:** 67 global skills + duplicated
-  project/user copies (data-audit, health, kickstart, onboard each appear
-  twice) + stale `~/.claude/agents` forks (P2.10). Run a skills stocktake;
-  keep <20 curated; engine owns the rest via subset.
-- **P7.5 Missing modern primitives:** no worktree parallelism, no headless
-  `claude -p` batch runs for mechanical slots, no background-agent usage in
-  the documented workflow. V3 doc §4 defines when each applies.
+- **P7.4 Skills/agents sprawl — ✅ SHIPPED in v0.16.0 (2026-07-03)**
+  Agents half already covered by P2.10 (v0.11.1). Skills half now
+  addressed via **`pe skills-audit`** (`scripts/skills_audit.py`) —
+  zero-mutation inventory + classification of `~/.claude/skills/`
+  and `~/.claude/commands/`. Flags name collisions, classifies each
+  as engine-shipped / core-recommended / external, optionally flags
+  project-local duplicates via `--project`. Paired with **`docs/
+  SKILLS.md`** which documents the engine's opinionated **core-20**
+  list with per-row rationale. Zero mutation on operator machine —
+  the tool surfaces the sprawl; the operator prunes.
+- **P7.5 Missing modern primitives — ✅ SHIPPED in v0.16.0 (2026-07-03)**
+  New **`docs/EXECUTION_PATTERNS.md`** — concrete recipes for the
+  four execution patterns V3 §4 defines:
+    (1) Interactive judgment session,
+    (2) Worktree fleet for parallel slots,
+    (3) Headless `claude -p` batches (with the "brief + reference +
+        DoD + verifier" contract),
+    (4) Background agents (launchd / cron / ad-hoc `nohup`).
+  Includes the decision tree for lane classification and the common
+  failure modes. `docs/RHYTHM.md` gained an "Execution patterns"
+  section cross-referencing the four recipes so the weekly rhythm
+  doc surfaces the primitives directly.
 
 ---
 

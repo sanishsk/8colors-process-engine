@@ -348,6 +348,8 @@ DOC_ALLOWLIST=(
     "E1_GATE_ENVELOPE.md"
     "COUPLING_MAP.md"
     "PHASE_3_ESCALATION_ROUTER.md"
+    "SKILLS.md"
+    "EXECUTION_PATTERNS.md"
 )
 for doc in "${DOC_ALLOWLIST[@]}"; do
     src="$ENGINE_DIR/docs/$doc"

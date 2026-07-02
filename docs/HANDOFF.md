@@ -3,19 +3,19 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.13.0 + v0.14.0 + v0.15.0 shipped
-> back-to-back in one sitting per operator direction "finish
-> everything on engine side". Every S/M item on the P5+P6+P2.11
-> backlog is now in main. **Engine work is complete against the
-> full audit + hygiene backlog.** P3.x (domain layer / plugin
-> migration / telemetry) stays parked per plan; next: switch to
-> 8CStudio for #227.)
+> **Last updated:** 2026-07-03 (v0.13.0 + v0.14.0 + v0.15.0 + v0.16.0
+> shipped back-to-back this sitting per operator direction "finish
+> everything on engine side". After a plan audit, **P7.4 skills
+> stocktake tooling + P7.5 execution-patterns docs** landed in
+> v0.16.0. **Every P0/P1/P2/P5/P6/P7 item on IMPROVEMENT_PLAN.md is
+> now shipped or explicitly out-of-engine-scope.** P3.x + P4 stay
+> parked per plan. Next: switch to 8CStudio for #227.)
 
 ---
 
 ## One-line state
 
-Engine v0.15.0 committed and pushed. Three consecutive releases this
+Engine v0.16.0 committed and pushed. Four consecutive releases this
 sitting:
 - **v0.13.0** (`3f13653`) — simplicity toolchain: P6.1 Ponytail,
   P6.2 complexity + dead-code (ruff/xenon/vulture/knip/eslint), P6.3
@@ -27,9 +27,12 @@ sitting:
   budget test, P5.7 copy-lint, P5.8 auth-robustness (security-
   reviewer + pytest template), P5.9 AI-aesthetic rubric in code-
   reviewer.
-- **v0.15.0** (this commit) — P2.11 Python hygiene batch: 20 targeted
+- **v0.15.0** (`4ee7b0c`) — P2.11 Python hygiene batch: 20 targeted
   fixes across pe_gate / pe_orchestrator / baseline / research_index,
   22 new unittest cases, 86 tests pass overall.
+- **v0.16.0** (this commit) — P7.4 skills-audit tool + `docs/
+  SKILLS.md` core-20 curation; P7.5 `docs/EXECUTION_PATTERNS.md`
+  with worktree / headless / background recipes; RHYTHM.md refs.
 
 ## 🔴 RESUME HERE — first action next session
 
