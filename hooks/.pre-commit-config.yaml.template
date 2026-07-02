@@ -93,6 +93,28 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # Pre-commit (product-quality gates — v0.14.0 / P5.x)
+      - id: migration-lint
+        name: Migration contract (no sys.exit, entrypoint signature)
+        entry: hooks/migration-lint.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: design-lint
+        name: Deterministic design lint (multi-theme allowlists)
+        entry: hooks/design-lint.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: copy-lint
+        name: In-app copy lint (AI-manifesto phrases, emoji-icons)
+        entry: hooks/copy-lint.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
       # Pre-push (push-time gates)
       - id: stacking-rule-check
         name: Block foundational changes inside a slot-stack
@@ -115,6 +137,10 @@ repos:
 #   PE_SKIP_COMPLEXITY=1           # bypass complexity-gate for one commit
 #   PE_SKIP_SIZE_BUDGET=1          # bypass size-budget for one commit
 #   PE_SKIP_DUPLICATION=1          # bypass duplication-gate for one commit
+#   PE_SKIP_MIGRATION_LINT=1       # bypass migration-lint for one commit
+#   PE_SKIP_DESIGN_LINT=1          # bypass design-lint for one commit
+#   PE_SKIP_COPY_LINT=1            # bypass copy-lint for one commit
+#   PE_SKIP_BOOT_SMOKE=1           # bypass boot-smoke (used by pe doctor + CI)
 #   # size-budget net-lines gate accepts a `Size-justified: <reason>` trailer
 #   ENGINE_FOUNDATIONAL_REGEX=...  # regex of paths counted as "foundational"
 #   ENGINE_TEST_CMD=...            # explicit test command override (skips auto-detect)

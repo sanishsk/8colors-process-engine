@@ -22,6 +22,10 @@
         {
           "type": "command",
           "command": "{{ENGINE_DIR}}/hooks/claude-md-size.sh"
+        },
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/design-lint.sh"
         }
       ]
     }

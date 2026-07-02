@@ -7,6 +7,106 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.14.0] — 2026-07-03
+
+> Product-quality gates. Every finding from the 8CStudio audit gets a
+> generic, config-driven gate that ships to every adopter. Eight P5.x
+> items land together — four new pre-commit hooks, four new templates,
+> two agent updates.
+>
+> Product-specific assertions (like #227's exact fixes) parameterize
+> later; the scaffolds ship now.
+
+### Added
+
+- **`hooks/boot-smoke.sh`** (P5.1) — "fresh clone boots" gate.
+  Reads `.process-engine.yaml → boot_check.{setup, run, probe_url,
+  timeout_seconds, expected_max_status}`, brings up a throwaway env,
+  probes the URL, kills the app. Fails on missing probe response,
+  probe status ≥ configured max, OR any `^ERROR` / `^CRITICAL` line
+  during startup. Wired for `pe doctor` + CI (NOT pre-commit — boot
+  is slow).
+- **`hooks/migration-lint.sh`** (P5.2) — pre-commit hook enforcing
+  the migration contract. Forbids `sys.exit|os._exit|SystemExit`
+  in migration files (the exact class that hid 107 unapplied
+  8CStudio migrations for months). Optional entrypoint-regex check
+  for adopters that want it. Path prefix configurable.
+- **`hooks/design-lint.sh`** (P5.3) — multi-theme deterministic
+  design lint. Pre-commit + PostToolUse dual-mode. Config at
+  `.design-lint.yaml` with per-theme `path_patterns` +
+  `forbid_class_fragments` + `forbid_inline_regex` + `color_tokens`
+  allowlist. Enforces: no inline `style=`, no raw `<div class="…
+  fixed inset-0"` modals, no `gradient-`/`blur-`/`backdrop-blur`
+  class fragments, colors within the theme's allowlist (WARN or
+  FAIL under strict).
+- **`hooks/copy-lint.sh`** (P5.7) — in-app copy lint. Regex-driven
+  banned-phrase list (default: `Imagine. Create. Together.`,
+  `Innovate`, `Boundless`, `Unleash`, `Empower`, `Elevate`,
+  `Seamless`, `Reimagine`, "Transform the …"), emoji-in-`<button>` /
+  emoji-in-heading detection, Title-Case button-label detector.
+  Default WARN; adopter flips `copy_lint.strict=true` to enforce.
+- **`templates/design-lint.config.template`** — multi-theme schema
+  starter. Three example themes (studio / delivery / _default) with
+  commented-out token/allowlist blocks ready to fill.
+- **`templates/e2e/smoke.spec.ts.template`** (P5.5) — Playwright
+  spec that iterates the app's nav registry and asserts: page <500,
+  zero `console.error`, zero 404/5xx in network log, no horizontal
+  scroll at 375px on list/table pages. Two nav-discovery patterns
+  supported (endpoint + static fallback).
+- **`templates/tests/nav-confusion-budget.test.py.template`**
+  (P5.6) — pytest template. Loads project nav registry, asserts per-
+  group item count ≤ budget (from `.process-engine.yaml →
+  confusion_budget.per_group`, default 5), verifies every non-hidden
+  route resolves.
+- **`templates/tests/auth-robustness.test.py.template`** (P5.8) —
+  pytest template covering: wrong-password → 401, unknown-user → 401,
+  malformed bcrypt hash → 401/400 (the exact 8CStudio audit case),
+  empty stored hash, null bytes in password, oversized email,
+  oversized password, null password, user-existence leak comparator.
+
+### Changed
+
+- **`agents/security-reviewer.md`** — OWASP §2 "Broken Auth" gained
+  the P5.8 auth-path robustness checklist. Any 500 on an auth
+  endpoint from the standard adversarial cases is now a CRITICAL
+  finding, not HIGH.
+- **`agents/code-reviewer.md`** — new "UI review — AI-aesthetic tells
+  rubric (P5.9)" section under the v1.8 AI-Generated addendum. Nine
+  telltales (stock-token palette, glow effects, manifesto copy,
+  card-grid-as-menu, emoji-as-icon, over-padding, default fonts,
+  word-chip UI, no signature element). ≥3 tells on a new/reworked
+  screen → FAIL verdict, rule `p59.ai_aesthetic_rubric.tells_exceeded`,
+  instruction to match a locked reference screen.
+- **`hooks/.pre-commit-config.yaml.template`** — wires
+  `migration-lint`, `design-lint`, `copy-lint` (boot-smoke is NOT in
+  pre-commit — slow). Env-var comment updated with new `PE_SKIP_*`
+  bypass keys.
+- **`hooks/hooks.json`** — `design-lint.sh` added to the PostToolUse
+  Edit|Write|MultiEdit chain so template edits surface violations
+  during the same session turn.
+- **`templates/process-engine.yaml.template`** — five new opt-in
+  sections: `boot_check`, `migration_lint`, `design_lint`,
+  `copy_lint`, `confusion_budget`. All configured with safe defaults;
+  `boot_check` requires the operator to fill in commands (starts
+  disabled).
+- **`scripts/install.sh`** — copies `templates/design-lint.config.template`,
+  `templates/e2e/*`, `templates/tests/*` into
+  `<project>/docs/templates/`. Idempotent — never overwrites edits.
+- **`plugin.json`** description reflects v0.14.0 additions
+  (15 git-side hooks now; product-quality gates listed).
+
+### Session pickup (v0.15.0 next, this session)
+
+**P2.11 Python hygiene batch** — pe_gate + orchestrator + baseline +
+research_index. ~15 sub-fixes; focused pytest coverage in the same
+commit per the plan's own note. Last item on the "make engine
+perfect" backlog.
+
+Then P3.x parked as planned. Switch to 8CStudio for #227 after
+v0.15.0 lands.
+
+---
+
 ## [0.13.0] — 2026-07-03
 
 > Simplicity toolchain — "less code" made deterministic. Ships the

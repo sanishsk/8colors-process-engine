@@ -139,3 +139,45 @@ size_budget:
 # See: https://github.com/DietrichGebert/ponytail
 ponytail:
   enabled: false               # opt-in — flip after `pe install --with-ponytail`
+
+# ─── Product-quality gates (v0.14.0 — P5.x) ──────────────────────────
+
+# P5.1 — "fresh clone boots" smoke check. Runs at CI + `pe doctor` (NOT
+# on every commit — boot is slow). Adopter declares HOW to boot.
+boot_check:
+  enabled: false               # flip to true once you fill in the commands
+  setup:     ""                # e.g. 'flask db upgrade' (create DB + migrate + seed)
+  run:       ""                # e.g. 'flask run --port 5555' (long-running)
+  probe_url: ""                # e.g. 'http://127.0.0.1:5555/login'
+  timeout_seconds: 30
+  expected_max_status: 500     # any HTTP < this counts as pass
+
+# P5.2 — pre-commit lint of migration files. Forbids sys.exit + checks
+# optional entrypoint regex. The definitive gate is CI-side ("run full
+# chain against empty DB"); this hook is fail-fast.
+migration_lint:
+  enabled: true
+  path_prefix: "migrations"    # relative to project root
+  entrypoint_regex: ""         # e.g. '^def upgrade\(' + '^def downgrade\('
+
+# P5.3 — deterministic design lint (multi-theme). Reads the theme
+# spec from the file at design_lint.config (default .design-lint.yaml).
+# A starter is at docs/templates/design-lint.config.template.
+design_lint:
+  enabled: true
+  strict: false                # true = color-hex outside allowlist becomes FAIL
+  config: ".design-lint.yaml"
+
+# P5.7 — in-app copy lint. Flags AI-manifesto verbs, emoji-in-buttons,
+# Title Case button labels. Default is WARN-only; flip strict=true to
+# block commits.
+copy_lint:
+  enabled: true
+  strict: false
+  banned_phrases: ""           # semicolon-separated extra regexes
+
+# P5.6 — nav confusion budget (used by the test template
+# templates/tests/nav-confusion-budget.test.py). Import the file, wire
+# the loader, and this number becomes the enforced cap.
+confusion_budget:
+  per_group: 5                 # max items per nav group before the test FAILs

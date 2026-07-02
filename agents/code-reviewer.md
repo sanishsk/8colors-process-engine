@@ -286,6 +286,35 @@ Cost-awareness check:
 - Flag workflows that escalate to higher-cost models without clear reasoning need.
 - Recommend defaulting to lower-cost tiers for deterministic refactors.
 
+## UI review — AI-aesthetic tells rubric (P5.9 / v0.13.0+)
+
+When the diff touches `.html`, `.jinja`, `.jinja2`, `.tsx`, `.jsx`,
+`.vue`, `.svelte`, or CSS, run through this rubric BEFORE producing
+the envelope. Count how many tells the change carries:
+
+| # | Tell | Reject signal |
+|---|---|---|
+| 1 | Stock-token palette (dark + cyan + gradient hero) | 2+ hits = tell |
+| 2 | Glow / drop-shadow-glow / neon-ring effects on primary UI | any use = tell |
+| 3 | Manifesto verb copy ("Imagine.", "Unleash", "Empower", "Boundless") | any = tell (also caught by `copy-lint`) |
+| 4 | Card-grid-as-menu dashboards (6+ equal cards, no hierarchy) | present = tell |
+| 5 | Emoji-as-icon in headings, buttons, or empty states | any = tell (also caught by `copy-lint`) |
+| 6 | Over-padding: >64px padding on primary containers by default | present = tell |
+| 7 | Default font pairing (Inter + system-ui, no signature) | present = tell |
+| 8 | Word-chip UI ("Design ✨ Ship 🚀 Iterate 🌱") | present = tell |
+| 9 | No signature element — nothing that ties the screen to the product | absence = tell |
+
+**Verdict rule:** if a *new* screen (or a screen with substantial
+visual rework) carries **≥3 tells**, emit a **FAIL** verdict with the
+finding rule `p59.ai_aesthetic_rubric.tells_exceeded` and the
+instruction: "match the locked reference screen in
+`docs/design/reference/<page>.png` (or produce one before shipping)."
+
+Complement to the deterministic gates: `hooks/design-lint.sh` and
+`hooks/copy-lint.sh` catch what regex can find (tells 3, 5, 7 in
+part). This rubric catches the composition-level tells (1, 2, 4, 6,
+8, 9) that only a reviewer can see.
+
 ---
 
 # CRITICAL OUTPUT CONTRACT — read this last, do this last

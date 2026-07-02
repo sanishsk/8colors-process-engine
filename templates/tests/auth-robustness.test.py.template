@@ -1,0 +1,95 @@
+# auth-robustness.test — adversarial cases for the login path (P5.8).
+#
+# Every case below is one of the failure modes that shipped to
+# production in the 8CStudio audit or is a well-known auth failure
+# from OWASP + published post-mortems. The pattern is:
+#   1. Feed malformed stored credentials / cookies / tokens.
+#   2. Assert graceful None / 401 / 400 — NEVER a 500 unhandled
+#      exception in the most-public code path.
+#
+# Adopter customization:
+#   - Wire `_call_login(email, password)` to your login endpoint.
+#   - Wire `_set_stored_hash(user, hash_str)` to your user model / DB
+#     helper (needed by the "malformed hash" cases).
+#   - Skip cases that don't apply to your stack — but delete the skip,
+#     don't leave a silent pass.
+
+import pytest
+
+
+# ─── Adopter wires these two ─────────────────────────────────────────
+def _call_login(email: str, password: str):
+    """Return the response object from your login endpoint."""
+    raise NotImplementedError("wire to your app's test client + login route")
+
+
+def _set_stored_hash(user, hash_str: str):
+    """Overwrite the stored password hash for `user` with raw string."""
+    raise NotImplementedError("wire to your user model / DB helper")
+
+
+# ─── Fixtures ────────────────────────────────────────────────────────
+@pytest.fixture
+def existing_user():
+    """Adopter: return a real test user object (already in DB)."""
+    pytest.skip("adopter must provide an existing_user fixture")
+
+
+# ─── Cases ───────────────────────────────────────────────────────────
+
+def test_login_returns_401_on_wrong_password(existing_user):
+    resp = _call_login(existing_user.email, "definitely-wrong")
+    assert resp.status_code == 401, f"expected 401, got {resp.status_code}"
+
+
+def test_login_returns_401_on_unknown_user():
+    resp = _call_login("nobody@example.invalid", "whatever")
+    assert resp.status_code == 401, f"expected 401, got {resp.status_code}"
+
+
+def test_login_handles_legacy_malformed_bcrypt_hash(existing_user):
+    """The exact 8CStudio audit case: `ValueError: Invalid salt`."""
+    _set_stored_hash(existing_user, "not-a-real-bcrypt-hash")
+    resp = _call_login(existing_user.email, "any-password")
+    assert resp.status_code in (401, 400), \
+        f"malformed hash must not 500; got {resp.status_code}"
+
+
+def test_login_handles_empty_stored_hash(existing_user):
+    _set_stored_hash(existing_user, "")
+    resp = _call_login(existing_user.email, "any-password")
+    assert resp.status_code in (401, 400), \
+        f"empty hash must not 500; got {resp.status_code}"
+
+
+def test_login_handles_null_bytes_in_password(existing_user):
+    resp = _call_login(existing_user.email, "password\x00malicious")
+    assert resp.status_code in (401, 400), \
+        f"null bytes in input must not 500; got {resp.status_code}"
+
+
+def test_login_handles_oversized_email():
+    huge = "a" * 10_000 + "@example.com"
+    resp = _call_login(huge, "any-password")
+    assert resp.status_code in (400, 401, 413), \
+        f"oversized email must not 500; got {resp.status_code}"
+
+
+def test_login_handles_oversized_password(existing_user):
+    resp = _call_login(existing_user.email, "x" * 100_000)
+    assert resp.status_code in (400, 401, 413), \
+        f"oversized password must not 500; got {resp.status_code}"
+
+
+def test_login_handles_none_password_gracefully(existing_user):
+    # Some clients send JSON `{"password": null}` — must not 500.
+    resp = _call_login(existing_user.email, None)  # type: ignore
+    assert resp.status_code in (400, 401), \
+        f"null password must not 500; got {resp.status_code}"
+
+
+def test_login_response_does_not_leak_user_existence():
+    """OWASP: same generic error for wrong-user + wrong-password."""
+    wrong_user = _call_login("nobody@example.invalid", "x")
+    # Requires an existing user for comparison — skip if fixture absent.
+    # Adopter: implement or delete.

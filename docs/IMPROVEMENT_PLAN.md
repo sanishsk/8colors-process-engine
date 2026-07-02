@@ -497,31 +497,43 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
 > in ANY adopter project. Same contract as above: self-contained, any model can
 > implement without re-deriving.
 
-### P5.1 App-boot smoke gate ("fresh clone boots") ⭐ highest catch-rate
-- **Severity:** HIGH · **Effort:** M · **New files:** `hooks/boot-smoke.sh`, CI template job
-- **What happened:** 8CStudio local dev could not boot at all — 4 independent
-  failures (wrong interpreter, table creation only in Docker entrypoint,
-  migration runner dying silently, login 500 on legacy hash). Nobody noticed
-  because nothing ever tested "fresh environment → app answers".
-- **Generic check:** CI job + `pe doctor` extension: create a throwaway DB,
-  run the project's bootstrap + migrations, start the app, assert `/` or
-  `/login` returns <500, assert zero ERROR-level log lines during startup.
-  Project declares its boot command in `.process-engine.yaml`
-  (`boot_check: {setup: …, run: …, probe_url: …}`); hook skips politely when absent.
+### P5.1 App-boot smoke gate ("fresh clone boots") ⭐ highest catch-rate — ✅ SHIPPED in v0.14.0 (2026-07-03)
+- **Severity:** HIGH · **Effort:** M · **Files:** `hooks/boot-smoke.sh`
+- **Delivered:** Generic scaffold config-driven via `.process-engine.yaml
+  → boot_check.{setup, run, probe_url, timeout_seconds, expected_max_status}`.
+  Brings up a throwaway env, launches the app in the background, polls the
+  probe URL, kills the process, and fails on: missing probe response, probe
+  status ≥ configured max, OR any `^ERROR`/`^CRITICAL` log line during
+  startup. Runs at `pe doctor` + CI (NOT pre-commit — boot is slow). Adopter
+  fills in `setup`/`run`/`probe_url`; hook skips politely when
+  `boot_check.enabled=false` or the config block is absent. Product-specific
+  assertions (like #227's exact fixes) become an extension of this once #227
+  lands.
 
-### P5.2 Migration-contract lint
-- **Severity:** HIGH · **Effort:** S · **New file:** `hooks/migration-lint.sh`
-- **What happened:** `migrate_030` calls `sys.exit(0)` in its skip path —
-  killed the runner, 107 migrations silently unapplied; `migrate_045` had a
-  different call signature and crashed. Both invisible for months.
-- **Generic check (pre-commit, paths `migrations/**`):** (a) forbid
-  `sys.exit|os._exit|SystemExit` inside migration files; (b) every migration
-  defines the runner's expected entrypoint signature (configurable regex);
-  (c) CI: run the full migration chain against an EMPTY database and assert
-  exit 0 + applied-count == file-count. (c) is the real gate; (a)/(b) fail fast.
+### P5.2 Migration-contract lint — ✅ SHIPPED in v0.14.0 (2026-07-03)
+- **Severity:** HIGH · **Effort:** S · **File:** `hooks/migration-lint.sh`
+- **Delivered:** Pre-commit hook triggered only when staged files land in
+  the configured `migrations/` path. Forbids `sys.exit|os._exit|SystemExit`
+  (the exact class that hid 107 unapplied 8CStudio migrations). Optional
+  entrypoint-regex check for adopters whose runner enforces a specific
+  signature. Bypass via `PE_SKIP_MIGRATION_LINT=1`. The definitive CI gate
+  ("run full chain against empty DB and assert applied-count ==
+  file-count") remains a CI recipe adopters wire per project — the
+  fail-fast hook catches the common footgun.
 
-### P5.3 Design lint (deterministic, not prompt-hope)
-- **Severity:** HIGH · **Effort:** M · **New files:** `hooks/design-lint.sh` + `templates/design-lint.config.template`
+### P5.3 Design lint (deterministic, not prompt-hope) — ✅ SHIPPED in v0.14.0 (2026-07-03)
+- **Severity:** HIGH · **Effort:** M · **Files:** `hooks/design-lint.sh` + `templates/design-lint.config.template`
+- **Delivered:** Dual-mode hook (pre-commit + PostToolUse). Multi-theme
+  aware via `.design-lint.yaml`: each theme declares `path_patterns`
+  matched against staged files, plus per-theme `forbid_class_fragments`,
+  `forbid_inline_regex`, and `color_tokens` allowlist. First-match-wins
+  routing; `_default` theme applies when nothing matches. Engine defaults
+  enforce zero-tolerance for inline `style=`, raw `<div class="… fixed
+  inset-0"` modals, and `gradient-`/`blur-`/`backdrop-blur` class
+  fragments. Color-hex outside allowlist is WARN or FAIL under
+  `design_lint.strict=true`. Config template (`templates/design-lint.
+  config.template`) ships with studio + delivery + `_default` theme
+  scaffolds ready to fill.
 - **What happened:** a well-written design system had ~48% compliance: 159
   copy-pasted button variants, 77 hand-rolled modals, 1,400 off-spec radii,
   354 inline styles. Root cause: zero enforcement — every AI-generated page
@@ -552,57 +564,61 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   standard ignore paths (node_modules, dist, migrations, tests).
   Graceful advisory-skip when jscpd not installed.
 
-### P5.5 Runtime-console + route-integrity smoke (Playwright)
-- **Severity:** MEDIUM-HIGH · **Effort:** M · **New file:** `templates/e2e/smoke.spec.ts` template
-- **What happened:** every page in the walkthrough logged console errors
-  (`/api/me/companies` 500, `/api/v1/auth/me` 401); a sidebar item 404'd
-  (`/finance`); placeholder nav items led to dead ends. All invisible to
-  pytest.
-- **Generic check (E2E stage):** for each nav item discovered from the app's
-  nav registry (or a declared list): page loads <500, **zero console.error**,
-  no 404s in network log. One extra viewport pass at 375px asserting no
-  horizontal scroll on table pages. This single spec would have caught 4
-  distinct audit findings.
+### P5.5 Runtime-console + route-integrity smoke (Playwright) — ✅ SHIPPED in v0.14.0 (2026-07-03)
+- **Severity:** MEDIUM-HIGH · **Effort:** M · **File:** `templates/e2e/smoke.spec.ts.template`
+- **Delivered:** Playwright spec template that iterates the app's nav
+  registry (via `/api/nav` endpoint OR a static fallback array),
+  asserts page-load <500, zero `console.error`, zero 404/5xx in the
+  network log, and — at 375px viewport — zero horizontal scroll on
+  list/table pages. Two smoke tests total. Adopter wires
+  `discoverNavPaths()` to their app and points `E2E_BASE_URL` at the
+  test server.
 
-### P5.6 Confusion-budget test (nav ≤ N items/group)
+### P5.6 Confusion-budget test (nav ≤ N items/group) — ✅ SHIPPED in v0.14.0 (2026-07-03)
+- **Severity:** MEDIUM · **Effort:** S · **File:** `templates/tests/nav-confusion-budget.test.py.template`
+- **Delivered:** pytest template with two invariants: (1) no group's
+  visible-item count exceeds `.process-engine.yaml →
+  confusion_budget.per_group` (default 5); (2) every non-`hidden`/`beta`
+  nav route actually resolves in the app's URL map. Adopter wires
+  `load_nav_groups()` + `route_exists()` to their framework; tests
+  auto-skip until wired (no silent-pass hazard).
+
+### P5.7 In-app copy lint — ✅ SHIPPED in v0.14.0 (2026-07-03)
+- **Severity:** MEDIUM · **Effort:** S · **File:** `hooks/copy-lint.sh`
+- **Delivered:** Pre-commit hook scanning staged
+  `.html`/`.jinja`/`.jinja2`/`.tsx`/`.jsx`/`.vue`/`.svelte`/`.mdx`.
+  Default banned-phrase list: manifesto verb chains
+  (`Imagine. Create. Together.`), marketing verbs (`Innovate`,
+  `Boundless`, `Unleash`, `Empower`, `Elevate`, `Reimagine`), marketing
+  adjective phrases (`Seamless`, "Transform the …"). Plus emoji-in-
+  `<button>` + emoji-in-`<h1..4>` + Title-Case button label detection.
+  Default WARN; adopter flips `copy_lint.strict=true` to enforce.
+  Extra regexes via `copy_lint.banned_phrases`.
+
+### P5.8 Auth-path robustness cases in security-reviewer + test template — ✅ SHIPPED in v0.14.0 (2026-07-03)
 - **Severity:** MEDIUM · **Effort:** S
-- **What happened:** 50+ sidebar items, one group with 18 — the #1 "feels
-  cluttered" cause. 8CStudio even HAS a documented confusion-budget rule
-  (max 5 primary actions); nothing enforces it.
-- **Generic check:** unit test template that imports the project's nav
-  registry and asserts per-group item count ≤ configured budget, and that
-  every route referenced actually resolves (no placeholder targets unless
-  flagged `hidden`/`beta`). Budget lives in `.process-engine.yaml`.
+- **Delivered:** `agents/security-reviewer.md` OWASP §2 gained the
+  auth-path robustness checklist (must not 500 on: legacy/malformed
+  bcrypt hash, empty stored hash, null bytes in password, oversized
+  email, oversized password, null password; no user-existence leak).
+  Any 500 on these adversarial cases is now a **CRITICAL** finding,
+  not HIGH. `templates/tests/auth-robustness.test.py.template` codifies
+  the same cases; adopter wires `_call_login` + `_set_stored_hash` +
+  `existing_user` fixture.
 
-### P5.7 In-app copy lint
-- **Severity:** MEDIUM · **Effort:** S
-- **What happened:** login page shipped LLM-manifesto copy ("Imagine.
-  Create. Together.", floating word-chips); empty states used emoji-as-icon;
-  labels mixed Title Case / sentence case. These are the strongest
-  "AI-generated" tells and they're grep-able.
-- **Generic check (pre-commit on templates):** configurable banned-phrase
-  list (default seeded with marketing-fluff patterns: `Innovate`, `Boundless`,
-  `Imagine\.`, `Unleash`, `Empower`, emoji in `<button>`/headings), plus
-  Title-Case-label detector for buttons. Warn-level by default, FAIL when
-  `strict_copy: true`.
-
-### P5.8 Auth-path robustness cases in security-reviewer + test template
-- **Severity:** MEDIUM · **Effort:** S
-- **What happened:** login 500'd (`ValueError: Invalid salt`) on a legacy
-  password hash — unhandled exception in the most public code path.
-- **Generic check:** add to security-reviewer's checklist: "auth endpoints
-  must not raise on malformed stored credentials / cookies / tokens — assert
-  graceful None/401". Ship a pytest template with the standard adversarial
-  cases (malformed hash, oversized input, null bytes, expired token).
-
-### P5.9 AI-aesthetic tells → reviewer checklist
-- **Severity:** MEDIUM · **Effort:** S · **File:** ui/design reviewer agent (or code-reviewer UI section)
-- Codify the tells list from PRODUCT_RESTRUCTURE_PLAN Phase A+ as a review
-  rubric: stock-token dark+cyan+gradient palette, glow effects, manifesto
-  copy, card-grid-as-menu dashboards, over-padding, emoji icons, default
-  font pairing, no signature element. Verdict rule: ≥3 tells on a new screen
-  = FAIL with "match the locked reference screen" instruction. Pairs with
-  P5.3 (deterministic) — this catches what lint can't.
+### P5.9 AI-aesthetic tells → reviewer checklist — ✅ SHIPPED in v0.14.0 (2026-07-03)
+- **Severity:** MEDIUM · **Effort:** S · **File:** `agents/code-reviewer.md`
+- **Delivered:** New "UI review — AI-aesthetic tells rubric (P5.9)"
+  section in code-reviewer. Nine tells: stock-token palette, glow
+  effects, manifesto copy, card-grid-as-menu dashboards, emoji-as-
+  icon, over-padding (>64px default), default font pairing (Inter +
+  system-ui), word-chip UI, no signature element. **Verdict rule:**
+  ≥3 tells on a new/reworked screen → FAIL with rule
+  `p59.ai_aesthetic_rubric.tells_exceeded` and instruction to match a
+  locked reference screen. Pairs with `hooks/design-lint.sh` +
+  `hooks/copy-lint.sh` (regex catches tells 3, 5, 7 partially; rubric
+  catches composition-level tells 1, 2, 4, 6, 8, 9 that only a
+  reviewer can see).
 
 ---
 

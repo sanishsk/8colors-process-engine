@@ -1,0 +1,102 @@
+# nav-confusion-budget.test — engine-standard nav-density gate (P5.6).
+#
+# Enforces two invariants against the project's nav registry:
+#   1. No group has more than <budget> primary items (default 5).
+#   2. Every route referenced by a nav item actually resolves (i.e.
+#      the app registers a matching URL rule / route decorator).
+#      Items flagged `hidden` or `beta` are exempt.
+#
+# Adopter customization:
+#   - Point NAV_LOADER at your project's nav-registry loader.
+#     Two supported shapes (either works):
+#       (a) Callable returning {"groups": [{"name": ..., "items":[{"path":..., "hidden":False, ...}]}]}
+#       (b) List of items (flat), each dict with "path" and optionally "group" + "hidden"
+#   - Adjust `budget` — read from .process-engine.yaml if available,
+#     defaults to 5.
+
+import json
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+
+
+def _load_budget(default=5):
+    """Read confusion_budget.per_group from .process-engine.yaml, if any."""
+    yaml_path = Path(".process-engine.yaml")
+    if not yaml_path.exists():
+        return default
+    try:
+        text = yaml_path.read_text()
+        m = re.search(r"^confusion_budget\s*:\s*\n(?:\s+.*\n)*?\s+per_group\s*:\s*(\d+)", text, re.M)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    return default
+
+
+# ─── Adopter provides the loader here ────────────────────────────────
+def load_nav_groups():
+    """
+    Adopter: import your nav registry and yield
+        [(group_name, [item_dict, ...]), ...]
+    where item_dict has at minimum "path" and optionally "hidden" / "beta".
+    """
+    # Example (Flask-Menu-ish):
+    # from app.nav import NAV
+    # for g in NAV:
+    #     yield g["label"], g["items"]
+    #
+    # Fallback: empty (test auto-skips).
+    return []
+
+
+# ─── Adopter provides the route-existence probe ─────────────────────
+def route_exists(path: str) -> bool:
+    """
+    Adopter: return True if the app has a URL rule matching `path`.
+    Example (Flask): from app import create_app; app = create_app();
+                     return any(rule.rule == path for rule in app.url_map.iter_rules())
+    Fallback: naive existence check via curl if a local server runs.
+    """
+    return True  # override
+
+
+# ─── Tests ──────────────────────────────────────────────────────────
+
+BUDGET = _load_budget()
+
+
+def _all_groups():
+    groups = list(load_nav_groups())
+    if not groups:
+        pytest.skip("nav registry loader not wired — edit template")
+    return groups
+
+
+def test_no_group_exceeds_confusion_budget():
+    over_budget = []
+    for name, items in _all_groups():
+        visible = [it for it in items if not (it.get("hidden") or it.get("beta"))]
+        if len(visible) > BUDGET:
+            over_budget.append((name, len(visible)))
+    assert not over_budget, (
+        f"groups over confusion budget ({BUDGET}): "
+        + ", ".join(f"{n}={c}" for n, c in over_budget)
+    )
+
+
+def test_every_nav_route_resolves():
+    dead = []
+    for _, items in _all_groups():
+        for it in items:
+            if it.get("hidden") or it.get("beta"):
+                continue
+            path = it.get("path")
+            if not path:
+                continue
+            if not route_exists(path):
+                dead.append(path)
+    assert not dead, f"nav items point at unregistered routes: {dead}"

@@ -43,6 +43,20 @@ npx eslint . --plugin security
 ### 2. OWASP Top 10 Check
 1. **Injection** — Queries parameterized? User input sanitized? ORMs used safely?
 2. **Broken Auth** — Passwords hashed (bcrypt/argon2)? JWT validated? Sessions secure?
+   - **Auth-path robustness (P5.8):** any auth endpoint MUST handle
+     malformed stored credentials WITHOUT raising an unhandled
+     exception. Specifically test:
+     - Legacy/malformed bcrypt hash → 401 or 400, never 500
+       (the 8CStudio audit case: `ValueError: Invalid salt`).
+     - Empty stored hash → 401/400.
+     - Null bytes in submitted password → 401/400.
+     - Oversized email (>10K chars) → 400/413.
+     - Null / missing password field → 400/401.
+     - Response for "unknown user" MUST match "wrong password"
+       (OWASP — no user-existence leak).
+   Ship the standard adversarial cases via
+   `templates/tests/auth-robustness.test.py.template`. Any FAIL on a
+   500 in these cases is a **CRITICAL** finding, not HIGH.
 3. **Sensitive Data** — HTTPS enforced? Secrets in env vars? PII encrypted? Logs sanitized?
 4. **XXE** — XML parsers configured securely? External entities disabled?
 5. **Broken Access** — Auth checked on every route? CORS properly configured?

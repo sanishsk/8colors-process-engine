@@ -255,6 +255,32 @@ if [ -d "$ENGINE_DIR/templates/complexity" ]; then
     done
 fi
 
+# Copy product-quality templates (v0.14.0 — P5.3, P5.5, P5.6, P5.8).
+# Design lint config + E2E smoke spec + confusion-budget test + auth
+# robustness test template all land in docs/templates/. Adopter promotes
+# each as needed.
+for f in "$ENGINE_DIR/templates/design-lint.config.template"; do
+    [ -f "$f" ] || continue
+    dst="$TARGET/docs/templates/$(basename "$f")"
+    [ -f "$dst" ] || cp "$f" "$dst"
+done
+if [ -d "$ENGINE_DIR/templates/e2e" ]; then
+    mkdir -p "$TARGET/docs/templates/e2e"
+    for f in "$ENGINE_DIR"/templates/e2e/*; do
+        [ -f "$f" ] || continue
+        dst="$TARGET/docs/templates/e2e/$(basename "$f")"
+        [ -f "$dst" ] || cp "$f" "$dst"
+    done
+fi
+if [ -d "$ENGINE_DIR/templates/tests" ]; then
+    mkdir -p "$TARGET/docs/templates/tests"
+    for f in "$ENGINE_DIR"/templates/tests/*; do
+        [ -f "$f" ] || continue
+        dst="$TARGET/docs/templates/tests/$(basename "$f")"
+        [ -f "$dst" ] || cp "$f" "$dst"
+    done
+fi
+
 # ─── --with-ponytail (P6.1) ─────────────────────────────────────────
 # Clone/refresh Ponytail decision-ladder skill into user-global skills
 # directory. Idempotent: git pull if already present. Silently skips if

@@ -1,0 +1,86 @@
+// smoke.spec.ts — engine-standard console + route-integrity smoke (P5.5).
+//
+// Iterates every nav item discovered from the app and asserts:
+//   1. Page loads with status <500.
+//   2. Zero `console.error` messages during the visit.
+//   3. Zero 404s in the network log.
+//   4. At 375px viewport, no horizontal scroll on table pages.
+//
+// This single spec would have caught 4 distinct 8CStudio audit findings.
+//
+// Adopter customization:
+//   - Provide the nav list. Two supported patterns:
+//       (a) Endpoint that returns { items: [{path: "/..."}] }.
+//       (b) Static array in test-fixtures/nav-items.json.
+//   - Set BASE_URL via process.env.E2E_BASE_URL.
+
+import { expect, test } from "@playwright/test";
+
+const BASE_URL = process.env.E2E_BASE_URL || "http://127.0.0.1:5000";
+
+// Adopter overrides one of these:
+//   1. Endpoint that returns { items: [{ path: "/foo" }] }
+//   2. Static import: `import navItems from "../test-fixtures/nav-items.json"`
+async function discoverNavPaths(request: any): Promise<string[]> {
+  // Option A — endpoint:
+  try {
+    const res = await request.get(`${BASE_URL}/api/nav`);
+    if (res.ok()) {
+      const data = await res.json();
+      return (data.items || []).map((it: any) => it.path).filter(Boolean);
+    }
+  } catch {
+    // fall through
+  }
+  // Option B — static fallback. Edit to your project's structure.
+  return [
+    "/",
+    "/login",
+    "/dashboard",
+  ];
+}
+
+test.describe("engine smoke — console + route integrity (P5.5)", () => {
+  test("every nav item passes the smoke bar", async ({ page, request }) => {
+    const paths = await discoverNavPaths(request);
+    expect(paths.length).toBeGreaterThan(0);
+
+    const consoleErrors: { path: string; text: string }[] = [];
+    const networkErrors: { path: string; url: string; status: number }[] = [];
+
+    page.on("console", (msg) => {
+      if (msg.type() === "error") {
+        consoleErrors.push({ path: page.url(), text: msg.text() });
+      }
+    });
+    page.on("response", (resp) => {
+      if (resp.status() === 404 || resp.status() >= 500) {
+        networkErrors.push({ path: page.url(), url: resp.url(), status: resp.status() });
+      }
+    });
+
+    for (const p of paths) {
+      const resp = await page.goto(`${BASE_URL}${p}`, { waitUntil: "networkidle" });
+      expect(resp, `no response for ${p}`).not.toBeNull();
+      expect(resp!.status(), `${p} returned ${resp!.status()}`).toBeLessThan(500);
+    }
+
+    if (consoleErrors.length) {
+      console.error("console.error output:", JSON.stringify(consoleErrors, null, 2));
+    }
+    expect(consoleErrors, "console.error captured — see log").toEqual([]);
+    expect(networkErrors, "404/5xx captured — see log").toEqual([]);
+  });
+
+  test("no horizontal scroll on table pages at 375px", async ({ page, request }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    const paths = await discoverNavPaths(request);
+    // heuristic: anything with 'list' or 'table' in path
+    const tablePaths = paths.filter((p) => /list|table|admin|manage/.test(p));
+    for (const p of tablePaths) {
+      await page.goto(`${BASE_URL}${p}`, { waitUntil: "networkidle" });
+      const scrollX = await page.evaluate(() => document.body.scrollWidth - window.innerWidth);
+      expect(scrollX, `${p} has ${scrollX}px horizontal overflow at 375px`).toBeLessThanOrEqual(0);
+    }
+  });
+});

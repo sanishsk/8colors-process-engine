@@ -1,0 +1,56 @@
+# .design-lint.yaml — multi-theme design lint config (P5.3).
+#
+# The engine's hooks/design-lint.sh reads THIS file (path is
+# .process-engine.yaml -> design_lint.config, default `.design-lint.yaml`).
+#
+# The design lint supports MULTIPLE named theme scopes per project.
+# Each staged template is matched against theme.path_patterns
+# (first-match wins) and checked against that theme's rules.
+# Files that match no theme fall back to `_default` if defined.
+#
+# The lint enforces (per-theme):
+#   * Forbidden inline attributes (default: any `style="..."`, raw
+#     `<div class="... fixed inset-0` modals).
+#   * Forbidden class-name fragments (default: gradient-, blur-,
+#     backdrop-blur — the AI-look tells).
+#   * Optional color hex allowlist — anything outside is WARN
+#     (or FAIL under design_lint.strict=true).
+
+themes:
+  # ─── Example: dark studio-facing shell ─────────────────────────────
+  studio:
+    path_patterns:
+      - "^app/(?:admin|studio|internal)/"
+      - "^templates/studio/"
+    # Add project-specific forbidden fragments here:
+    forbid_class_fragments:
+      - "\\brainbow-\\w+"
+      - "\\bglow-shadow-\\w+"
+    forbid_inline_regex:
+      # example: forbid raw <img src="data:"> — force asset pipeline
+      # - '<img\s+[^>]*src="data:'
+    color_tokens:
+      # Populate with your theme tokens once frozen. Any hex NOT in
+      # this list becomes a WARN (or FAIL under strict).
+      # - "#0a0a0a"
+      # - "#f5f5f5"
+      # - "#00ffe6"
+
+  # ─── Example: light client-facing delivery ────────────────────────
+  delivery:
+    path_patterns:
+      - "^app/(?:gallery|deliver|client)/"
+      - "^templates/delivery/"
+    forbid_class_fragments:
+      - "\\bshadow-\\w+-glow"    # different vibe — no glows
+    forbid_inline_regex: []
+    color_tokens:
+      # - "#ffffff"
+      # - "#111111"
+      # - "#e2c98d"
+
+  # ─── Fallback theme for anything not path-matched ────────────────
+  _default:
+    forbid_class_fragments: []
+    forbid_inline_regex: []
+    color_tokens: []
