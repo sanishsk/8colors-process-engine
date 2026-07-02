@@ -27,22 +27,42 @@ The dev-log system already collected the raw data (zero token cost). Your one jo
 
 ## Inputs You Read
 
+**Preferred (rich mode) — if dev-log collector is installed:**
+
 ```
 docs/dev-log/daily/<YYYY-MM-DD>.json      — current period's raw metrics
 docs/dev-log/daily/<YYYY-MM-DD>.md         — pre-formatted digest
 docs/dev-log/daily/<last 7 days>.json     — for trend comparison
 docs/dev-log/monthly/retrospectives/<previous retros> — carry-over action item check (CRITICAL)
 docs/dev-log/frequency-state.json         — adaptive frequency state
-~/.claude/projects/.../memory/MEMORY.md   — corrections and process knowledge
-CLAUDE.md                                  — current process spec (to spot drift)
 ```
 
-**Mode Detection:** The folder you read from determines mode:
-- `docs/dev-log/daily/` → daily mode (1-day lookback)
-- `docs/dev-log/weekly/` → weekly mode (7-day lookback, Monday run)
-- `docs/dev-log/monthly/` → monthly rollup mode (first-of-month)
+**Always read (universal):**
 
-Write output to matching `monthly/retrospectives/` subfolder.
+```
+git log --since='<window>' --numstat        — commit velocity + churn
+.pe/decisions.jsonl (last N in window)      — shadow router decisions + failure_class distribution
+.pe/reconciliations.jsonl                   — actual vs shadow router disagreement
+.claude/gates/*.json                        — envelope verdict distribution (PASS/WARN/FAIL rates)
+docs/baselines/*.json                       — Phase 0 slot baselines for the window
+~/.claude/projects/.../memory/MEMORY.md     — corrections and process knowledge
+CLAUDE.md                                    — current process spec (to spot drift)
+```
+
+**Degraded mode (dev-log absent):** if `docs/dev-log/daily/` doesn't
+exist, derive metrics from the "Always read" inputs alone. Note the
+degradation in the report header ("dev-log collector not installed —
+metrics derived from git + gates + baselines only"). Do NOT skip the
+retro just because the collector is missing — velocity, gate-verdict
+distribution, and churn hotspots are still computable.
+
+**Mode Detection:** The folder you write output to determines mode:
+- daily mode (1-day lookback): `docs/dev-log/monthly/retrospectives/daily/<date>.md`
+- weekly mode (7-day lookback): `docs/dev-log/monthly/retrospectives/<YYYY-Www>-retro.md`
+- monthly rollup mode (first-of-month): `docs/dev-log/monthly/retrospectives/<YYYY-MM>-monthly.md`
+
+Fall back to `docs/retro-<YYYY-MM-DD>.md` if the tree above doesn't
+exist — the operator can move it later.
 
 ## Outputs You Produce
 

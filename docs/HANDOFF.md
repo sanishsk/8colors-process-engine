@@ -3,62 +3,95 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-02 evening (v0.10.0 P1 enforcement bundle
-> uncommitted — 6 P1 items landed; hooks + evidence trailers + chaining
-> skills. 64/64 tests pass. Ready to commit + push + adopter re-install.)
+> **Last updated:** 2026-07-02 late (v0.11.0 P2 agent-portability
+> bundle uncommitted — 9 of 11 P2 items landed; P2.10/P2.11 deferred
+> to Session 5. IMPROVEMENT_PLAN grew new P5/P6/P7 sections and
+> OPERATOR_WORKFLOW_V3.md ships as the canonical operating model.
+> 64/64 tests pass.)
 
 ---
 
 ## One-line state
 
-Engine v0.10.0 in the working tree — **uncommitted**. Six P1
-enforcement items shipped: Claude Code hooks (`hooks/hooks.json`),
-test-run/secrets-scan/deps-audit pre-commit hooks, evidence-backed
-trailers, hooks wired by default in `pe install`, and
-`/new-feature` + `/pre-commit` + `/retro` chaining commands. 64/64
-tests pass (9 sync + 10 install-reconcile + 33 orchestrator + 12
-hooks). Adopters (8CStudio, Origyn) still on v0.9.1 symlink target.
+Engine v0.11.0 in the working tree — **uncommitted**. Nine P2 items
+shipped: (P2.1) de-project-ified database-reviewer, (P2.2) gates
+lose Write/Edit, (P2.3) shared `_gate-contract.md` spec, (P2.4)
+tdd-guide rewritten as executable state machine, (P2.5) broken-
+agents batch fixed (planner Step 0, ceo/brainstorm de-hardcoded,
+researcher bumped to sonnet + softened stars rule,
+build-error-resolver multi-stack, doc-updater/retro degraded modes,
+data-model-auditor PROACTIVELY description), (P2.6) shared
+`_yaml.sh` helper, (P2.7) install_launchd injection hygiene, (P2.8)
+shell robustness batch, (P2.9) tools frontmatter normalized +
+`pe docs check` subcommand. **P2.10 and P2.11 deferred** — Session 5.
+64/64 tests pass. Adopters still on v0.10.0 symlink target.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Commit + push v0.10.0:**
+1. **Commit + push v0.11.0:**
 
    ```bash
    git add -A
-   git commit -m "feat(0.10.0): P1 enforcement bundle — hooks (Claude Code + git) + evidence trailers + chaining commands (see docs/IMPROVEMENT_PLAN.md P1)"
+   git commit -m "feat(0.11.0): P2 agent portability + shell robustness bundle (see docs/IMPROVEMENT_PLAN.md P2)"
    git push origin master
    ```
 
-2. **Re-install into adopters (NOT just `pe sync`).** Hooks wiring
-   changes ride in `install.sh`; `pe sync` alone won't merge the new
-   `.claude/settings.json` hooks section or render
-   `.pre-commit-config.yaml`. Same "install-time engine improvements
-   do NOT propagate via `pe sync`" gotcha as v0.9.0.
+2. **Re-install into adopters (NOT just `pe sync`).** The install.sh
+   doc-allowlist change, the shared `_yaml.sh` helper, the
+   `install_launchd.sh` rewrite ride in the installer.
 
    ```bash
    pe install /Users/sanishsasikumar/Documents/8Colors/8CStudio
    pe install /Users/sanishsasikumar/Documents/Origyn
    ```
 
-   Expect `.claude/settings.json` merged (idempotent — second install
-   dedupes) + `.pre-commit-config.yaml` created if absent + `pre-commit
-   install` run if the binary is on PATH.
+3. **Session 5 pickup order (per updated IMPROVEMENT_PLAN.md §Suggested execution order + OPERATOR_WORKFLOW_V3.md):**
 
-3. **Verify a smoke commit path.** In one adopter:
+   1. **P7.1 Context diet** — 8CStudio CLAUDE.md is 74KB / ~19k
+      tokens reloaded every turn. Target ≤300 lines / ≤12KB;
+      milestones → `PHASE_HISTORY.md`; rules → skills. Wire
+      `hooks/claude-md-size.sh` as a real hook (it exists but isn't
+      wired).
+   2. **P7.3 Retro unstall** — last dev-log digest is 2026-W21,
+      ~6 weeks stale. Fix the collector OR confirm the degraded-mode
+      path (already partially in v0.11.0 P2.5) fires cleanly next
+      Friday.
+   3. **P6.1 Ponytail adoption** — `pe install --with-ponytail`
+      (git clone / plugin add); reference the decision ladder in
+      tdd-guide + build-error-resolver preambles. Keep it a skill,
+      not prose (P2.3 lesson).
+   4. **P6.2 Deterministic complexity + dead-code gates** — ruff
+      C901/PLR + xenon `--max-absolute B` + vulture (Python); knip
+      + eslint complexity (JS/TS). Wired by `pe install` like P1.2.
 
-   - Stage a trivial change touching `src/…`.
-   - Run the code-reviewer agent.
-   - `pe gate parse --record .claude/gates/last-gate.json --diff-sha $(git diff --cached | git hash-object --stdin) <transcript>`
-   - `git commit` — should be allowed by the PreToolUse hook. Try
-     without the record — should be blocked with actionable message.
+   All four are S-effort; one sitting → v0.12.0.
 
-4. **Next active work:** P2 — agent portability & consistency bundle
-   (11 items). Highest-leverage single item: **P2.1 —
-   de-project-ify `database-reviewer`** (currently 38KB, 100%
-   8CStudio-specific; produces false CRITICALs in any other repo).
-   Then P2.3 (extract gate-envelope contract to shared
-   `_gate-contract.md`), P2.4 (rewrite `tdd-guide` as executable
-   state machine), P2.5 (fix broken/unportable agents batch).
+4. **Then:**
+
+   5. **P5.1 App-boot smoke gate** — 4 of the 8CStudio audit bugs
+      would have been caught by "fresh clone boots". Config-driven
+      `boot_check` in `.process-engine.yaml`; CI job + `pe doctor`.
+   6. **P5.2 Migration-contract lint** — forbid `sys.exit` in
+      migrations; CI runs full chain against empty DB.
+   7. **P5.3 Deterministic design lint** — config-driven allowlists
+      for tokens/radius/spacing; deny raw `style=`, deny raw modal
+      markup when a macro exists.
+
+5. **Higher latency (do NOT jump to these first):**
+
+   - **P5.4-P5.9** — duplication ratchet, Playwright console-error
+     + route-integrity smoke, nav confusion-budget, in-app copy
+     lint, auth-robustness, AI-aesthetic rubric.
+   - **P6.3-P6.4** — net-LOC budgets, `/simplify` stage in the
+     `/new-feature` chain.
+   - **P2.10** — reconcile stale `~/.claude/agents/` forks
+     (deferred from v0.11.0). Operator-machine hygiene.
+   - **P2.11** — Python hygiene batch (pe_gate + orchestrator +
+     baseline + research_index) (deferred from v0.11.0). Best done
+     in a focused Python session with pytest coverage in the same
+     commit.
+   - **P3.x** — domain layer (`pe new`), plugin migration,
+     telemetry, execution loop. Stays parked until P5-P7 land.
 
 ## What the v0.10.0 P1 bundle ships (6 items — condensed)
 
@@ -310,11 +343,38 @@ pe sync /Users/sanishsasikumar/Documents/8Colors/8CStudio    # 8CStudio
 pe sync /Users/sanishsasikumar/Documents/Origyn              # Origyn
 ```
 
-## What shipped in the last session (2026-07-02 P1)
+## What shipped in the last session (2026-07-02 P2, v0.11.0)
+
+Nine P2 items — agent portability, gate identity separation, shell
+robustness. All 64 tests pass. Uncommitted at session end.
+
+| Change | What |
+|---|---|
+| `agents/database-reviewer.md` (rewrite) | Generic Postgres + multi-tenant reviewer. 8CStudio's version forked to `8CStudio/.claude/agents/database-reviewer.md` |
+| `agents/_gate-contract.md` | SPEC (not runnable) — canonical E1 gate-envelope contract. All 5 gate agents point at it. `install.sh` + `pe sync/doctor` skip `_*.md` |
+| `agents/security-reviewer.md`, `agents/database-reviewer.md` | Removed `Write`/`Edit` — reviewers no longer modify code they judge |
+| `agents/tdd-guide.md` (rewrite) | Executable state machine — stack detection, RED-first verbatim paste, GREEN, REFACTOR-tests-stay-green, 80% coverage floor. `Glob` added |
+| `agents/e2e-runner.md` | Gate-identity note: hybrid worker+envelope, never self-grades tests it authored |
+| `agents/planner.md` | `Bash`+`Write` added, MANDATORY Step 0 (semantic-index query), output-artifact spec |
+| `agents/ceo.md` | "Sanish"/"LANE 1" 8CStudio-isms → "the operator" phrasing |
+| `agents/researcher.md` | `haiku` → `sonnet`, softened "<100 stars = reject" to weighted signal |
+| `agents/build-error-resolver.md` | Phase 0 multi-stack detection (TS/Py/Go/Rust/Java); per-stack commands |
+| `agents/data-model-auditor.md` | Description upgraded to "Use PROACTIVELY..." pattern; `Write` added |
+| `agents/doc-updater.md` | Feature-detect commands; graceful degradation; multi-stack tooling |
+| `agents/retrospective-agent.md` | Degraded mode — derives from git log + decisions.jsonl + baselines when dev-log absent |
+| `commands/brainstorm.md` | Soniox/8CStudio/Lipi references removed; tool-agnostic |
+| 5 gate agents | Hardcoded `claude-sonnet-4-6` → `<your-model-id>` placeholder with substitution note |
+| `scripts/_yaml.sh` | Shared `yaml_get <dot.path>` + `yaml_bool_get`. Replaces 4 ad-hoc readers |
+| `scripts/install_launchd.sh` (rewrite) | Injection hygiene — sys.argv passing, python str.replace rendering, actionable errors, charset guards |
+| `scripts/install.sh` | Docs allowlist (9 files), `.gitignore` create-if-absent, `nullglob`, hooks-wiring paths |
+| `scripts/pe` | `cmd_sync` realpath canonicalization, `cmd_doctor` exit-code normalize, `cmd_docs check` subcommand |
+| Tools frontmatter | Normalized to `["Read", ...]` quoted-array style across all 15 agents |
+| `VERSION` 0.10.0 → 0.11.0, `plugin.json`, `README.md` badge, `CHANGELOG.md`, `IMPROVEMENT_PLAN.md` P1 + P2 marked SHIPPED | Version bookkeeping |
+
+## What shipped in the session before (2026-07-02 P1, v0.10.0)
 
 Six P1 items — deterministic enforcement layer for the engine's
-headline promises. All 64 tests pass. Uncommitted at session end;
-resume points at commit + push + adopter re-install.
+headline promises.
 
 | Change | What |
 |---|---|
@@ -331,7 +391,7 @@ resume points at commit + push + adopter re-install.
 | `tests/test_hooks.sh` | 12-assertion smoke test |
 | `VERSION` 0.9.1 → 0.10.0, `plugin.json`, `README.md` badge, `CHANGELOG.md` | Version bookkeeping |
 
-## What shipped in the session before (2026-07-02 P0)
+## What shipped 2 sessions before (2026-07-02 P0, v0.9.1)
 
 3 engine commits + 2 config edits at Origyn (yaml placeholders +
 Serena MCP) + 1 user-global MCP fix (Semgrep Python 3.12 pin):

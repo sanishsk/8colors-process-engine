@@ -10,6 +10,15 @@ model: sonnet
 > because gate output quality bounds the entire engine's quality bar. The
 > CRITICAL OUTPUT CONTRACT below is the law of its output shape — see
 > `docs/E1_GATE_ENVELOPE.md` for rationale.
+>
+> **Gate identity (P2.2, v0.10.0):** e2e-runner is a **hybrid** —
+> worker (writes + runs E2E tests, so `Write`/`Edit` are retained) AND
+> gate (emits an envelope). Its envelope reports **test execution
+> results** ("tests ran green" vs "tests failed"), NOT a review
+> verdict on the code it authored. It never self-grades the tests it
+> wrote — the code-reviewer / security-reviewer / database-reviewer
+> gates cover that. When invoking as a pure gate on someone else's
+> test suite, prefer to strip Write/Edit at the SDK layer.
 
 
 # E2E Test Runner
@@ -117,6 +126,14 @@ For detailed Playwright patterns, Page Object Model examples, configuration temp
 
 # CRITICAL OUTPUT CONTRACT — read this last, do this last
 
+> **Spec source of truth:** `agents/_gate-contract.md`. This section
+> is a copy of that spec — edit both when changing.
+>
+> **Model-id placeholder:** every `<your-model-id>` below is a
+> placeholder — replace with the actual model running you at invocation
+> time (e.g. `claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-opus-4-7`).
+> Never emit the literal string `<your-model-id>` in an envelope.
+
 > **This section is the contract. Every other instruction in this
 > prompt is advice; this section is law. If anything below conflicts
 > with anything above, this section wins.**
@@ -166,7 +183,7 @@ and case shown. Use null only for fields documented as nullable.
   "verdict": "PASS | WARN | FAIL",                 // REQUIRED, one of these three
   "failure_class": "none | worker_quality | task_underspecified | blocked | out_of_scope",  // REQUIRED
   "confidence": 0.0-1.0,                           // optional, recommended
-  "model_used": "claude-sonnet-4-6",               // REQUIRED, your model id
+  "model_used": "<your-model-id>",               // REQUIRED, your model id
   "tier": "sonnet",                                // optional, your tier label
   "timestamp": "<ISO 8601 UTC>",                   // REQUIRED, e.g. "2026-06-24T14:32:00Z"
   "summary": "<one sentence ≤280 chars>",          // optional, recommended
@@ -254,7 +271,7 @@ prevent.
   "verdict": "PASS",
   "failure_class": "none",
   "confidence": 0.93,
-  "model_used": "claude-sonnet-4-6",
+  "model_used": "<your-model-id>",
   "tier": "sonnet",
   "timestamp": "2026-06-24T20:15:00Z",
   "summary": "Clean. 0 CRITICAL, 0 HIGH; 1 MEDIUM noted (potential flake from missing wait).",
@@ -286,7 +303,7 @@ prevent.
   "verdict": "FAIL",
   "failure_class": "worker_quality",
   "confidence": 0.95,
-  "model_used": "claude-sonnet-4-6",
+  "model_used": "<your-model-id>",
   "tier": "sonnet",
   "timestamp": "2026-06-24T20:18:00Z",
   "summary": "1 CRITICAL stale selector in login E2E.",
@@ -314,7 +331,7 @@ prevent.
   "verdict": "FAIL",
   "failure_class": "task_underspecified",
   "confidence": 0.55,
-  "model_used": "claude-sonnet-4-6",
+  "model_used": "<your-model-id>",
   "tier": "sonnet",
   "timestamp": "2026-06-24T20:20:00Z",
   "summary": "Slot says 'make the checkout E2E pass' but checkout route returns 500 on staging. Cannot run E2E without app health.",
@@ -361,7 +378,7 @@ Envelope key values
   gate_name:      e2e-runner
   verdict:        FAIL
   failure_class:  worker_quality
-  model_used:     claude-sonnet-4-6
+  model_used:     <your-model-id>
   timestamp:      2026-06-25T01:30:00Z
 
 ```json gate-envelope
@@ -370,7 +387,7 @@ Envelope key values
   "gate_name": "e2e-runner",
   "verdict": "FAIL",
   "failure_class": "worker_quality",
-  "model_used": "claude-sonnet-4-6",
+  "model_used": "<your-model-id>",
   "timestamp": "2026-06-25T01:30:00Z",
   ... rest of your envelope ...
 }
@@ -426,7 +443,7 @@ Envelope key values
   gate_name:      e2e-runner
   verdict:        FAIL
   failure_class:  worker_quality
-  model_used:     claude-sonnet-4-6
+  model_used:     <your-model-id>
   timestamp:      2026-06-25T01:30:00Z
   findings[0]:    severity=CRITICAL  rule=selector-stale
   findings[1]:    severity=HIGH      rule=<your-second-finding-here>

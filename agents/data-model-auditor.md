@@ -1,8 +1,8 @@
 ---
 name: data-model-auditor
-description: Finds hardcoded business values in code and recommends moving them to the data model or configuration
+description: Schema-first discipline enforcer. Finds hardcoded business values (rates, thresholds, category names, magic strings) scattered in code and recommends moving them to the data model or configuration. Use PROACTIVELY after adding new features, before shipping schema migrations, and during code review of new business logic.
 model: sonnet
-tools: [Read, Grep, Glob, Edit, Bash]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
 ---
 
 # Data Model Auditor Agent

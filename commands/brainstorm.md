@@ -7,7 +7,7 @@ description: Capture a brainstorm session (voice transcript or text) and produce
 Captures a brainstorm session for a new feature. Workflow:
 
 1. Ask user: "Voice transcript or text input?"
-2. If voice: instruct user to paste Soniox transcript or upload .m4a (user runs Soniox separately — Soniox API key already in 8CStudio env from Lipi integration).
+2. If voice: instruct user to paste a transcript from whatever transcription tool they use (Soniox, Whisper, Deepgram — the engine is tool-agnostic). The transcription step happens outside this command; user pastes the resulting text.
 3. If text: ask user to paste raw notes.
 4. Save raw notes to `docs/research/brainstorm-YYYY-MM-DD-<topic>.md`.
 5. Immediately invoke the `brief-writer` agent on the saved file.

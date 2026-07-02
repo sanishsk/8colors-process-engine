@@ -14,11 +14,19 @@
 # - brief-writer + architect agents now consult the index in their Step 0
 
 set -euo pipefail
+# nullglob so `*.md` expands to nothing when the directory is empty —
+# without this, an empty `.claude/agents/` would iterate the literal
+# glob string as a filename (P2.8).
+shopt -s nullglob 2>/dev/null || true
 ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Source preset rosters + yaml subset reader (shared with pe sync).
 # shellcheck source=./_subset.sh
 . "$ENGINE_DIR/scripts/_subset.sh"
+
+# Source shared YAML reader (P2.6).
+# shellcheck source=./_yaml.sh
+. "$ENGINE_DIR/scripts/_yaml.sh"
 
 # Source hook-install helpers (P1.4).
 # shellcheck source=./_hooks.sh
@@ -147,6 +155,9 @@ install_link() {
 for f in "$ENGINE_DIR"/agents/*.md; do
   agent_name="$(basename "$f")"
   agent_stem="${agent_name%.md}"
+  # Skip _-prefixed files — these are spec documents (e.g.
+  # _gate-contract.md), not runnable agents.
+  case "$agent_stem" in _*) continue ;; esac
   if ! agent_in_subset "$agent_stem" "$SUBSET"; then
     SKIPPED_AGENTS+=("$agent_stem")
     continue
@@ -206,15 +217,17 @@ for f in "$ENGINE_DIR"/scripts/research_index.py; do
   fi
 done
 
-# Append .gitignore entries for engine-managed paths if .gitignore exists
-# and doesn't already contain them.
-if [ -f "$TARGET/.gitignore" ]; then
-  for pattern in "*.research-index.sqlite" ".process-engine.local.yaml"; do
-    if ! grep -qF -- "$pattern" "$TARGET/.gitignore" 2>/dev/null; then
-      echo "$pattern" >> "$TARGET/.gitignore"
-    fi
-  done
+# Append .gitignore entries for engine-managed paths. Create the file
+# if absent (P2.8 — previously silently skipped, leaving the
+# research-index .sqlite committed by default in fresh projects).
+if [ ! -f "$TARGET/.gitignore" ]; then
+    touch "$TARGET/.gitignore"
 fi
+for pattern in "*.research-index.sqlite" ".process-engine.local.yaml" ".claude/gates/"; do
+    if ! grep -qF -- "$pattern" "$TARGET/.gitignore" 2>/dev/null; then
+        echo "$pattern" >> "$TARGET/.gitignore"
+    fi
+done
 
 # Copy templates (project may edit freely — no symlink)
 for f in "$ENGINE_DIR"/templates/*.md; do
@@ -247,8 +260,28 @@ install:
 EOF
 fi
 
-# Copy docs (project may edit — these are reference)
-cp -r "$ENGINE_DIR"/docs/* "$TARGET/docs/process-engine/"
+# Copy docs (project may edit — these are reference). Allowlist only —
+# the previous `cp -r docs/*` shipped HANDOFF.md, BACKLOG.md, session
+# notes, and IMPROVEMENT_PLAN.md into every adopter, which then got
+# stomped on the next install (P2.8 fix).
+DOC_ALLOWLIST=(
+    "RHYTHM.md"
+    "OSS_SEARCH_ORDER.md"
+    "AGENT_INVOCATION_RULES.md"
+    "CAPABILITY_CATALOG.md"
+    "RAG.md"
+    "TROUBLESHOOTING.md"
+    "E1_GATE_ENVELOPE.md"
+    "COUPLING_MAP.md"
+    "PHASE_3_ESCALATION_ROUTER.md"
+)
+for doc in "${DOC_ALLOWLIST[@]}"; do
+    src="$ENGINE_DIR/docs/$doc"
+    dst="$TARGET/docs/process-engine/$doc"
+    if [ -f "$src" ] && [ ! -f "$dst" ]; then
+        cp "$src" "$dst"
+    fi
+done
 
 # ─── Hook wiring (P1.4) ────────────────────────────────────────────────
 # Only fire if the yaml opts in AND the flag doesn't override off.
@@ -257,8 +290,8 @@ cp -r "$ENGINE_DIR"/docs/* "$TARGET/docs/process-engine/"
 # true; existing installs whose yaml pre-dates v0.10.0 must add the block
 # to opt in, which is the correct migration behavior.
 YAML_FILE="$TARGET/.process-engine.yaml"
-WANT_CLAUDE_HOOKS=$(yaml_bool_get claude_hooks_enabled "$YAML_FILE")
-WANT_GIT_HOOKS=$(yaml_bool_get pre_commit_enabled "$YAML_FILE")
+WANT_CLAUDE_HOOKS=$(yaml_bool_get hooks.claude_hooks_enabled "$YAML_FILE")
+WANT_GIT_HOOKS=$(yaml_bool_get hooks.pre_commit_enabled "$YAML_FILE")
 
 # Fresh installs (yaml just copied from template above) → both true.
 # Legacy yamls (silently upgrading through re-install) stay off unless

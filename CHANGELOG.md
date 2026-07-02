@@ -7,6 +7,119 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.11.0] — 2026-07-02
+
+> P2 agent-portability + shell-robustness bundle. Nine P2 items land.
+> `IMPROVEMENT_PLAN.md` grew new P5 (product-audit gates), P6
+> (code-simplicity toolchain), P7 (operator workflow V3) sections
+> plus `docs/OPERATOR_WORKFLOW_V3.md`. Session 5 (per updated plan)
+> picks up P7.1 + P7.3 + P6.1 + P6.2 first.
+>
+> All 64 tests pass (9 sync + 10 install-reconcile + 33 orchestrator + 12 hooks).
+
+### Added
+
+- `agents/_gate-contract.md` — SPEC (not runnable). Canonical source
+  of truth for the E1 gate-envelope contract. All five gate agents
+  point at it via a "Spec source of truth" note; scripts skip
+  `_*.md` files so it doesn't ship as a runnable agent.
+- `scripts/_yaml.sh` — shared `yaml_get <dot.path>` + `yaml_bool_get`
+  helpers. One reader replaces four ad-hoc grep/sed/awk/python-
+  heredoc readers previously scattered across `install.sh`,
+  `install_launchd.sh`, `pe doctor`, and `_hooks.sh`.
+- `pe docs check` — release-checklist subcommand. Greps VERSION
+  against README badge + plugin.json + INSTALL.md, cross-checks
+  agent/command counts on disk vs claimed. Exits 1 on any drift.
+
+### Changed
+
+- **`agents/database-reviewer.md` de-project-ified (P2.1).** Engine
+  ships a **generic** Postgres + multi-tenant SaaS reviewer
+  (tenant-isolation, migration-discipline, query-safety, schema-
+  quality, index-quality). 8CStudio's architecture-specific version
+  forked into `8CStudio/.claude/agents/database-reviewer.md` — that
+  project-local override wins for 8CStudio; other adopters get the
+  generic one.
+- **`security-reviewer` and `database-reviewer` no longer have
+  `Write` or `Edit` tools (P2.2).** Reviewers do not modify code they
+  judge. Gate-identity boundary documented in each agent's
+  frontmatter block.
+- **`agents/tdd-guide.md` rewritten as an executable state machine
+  (P2.4).** Phase 0 stack detection (pytest / npm / go / cargo / mvn
+  / mix); Phase 1 RED-first with verbatim failure output paste;
+  Phase 2 GREEN; Phase 3 REFACTOR (tests-stay-green); Phase 4
+  COVERAGE with 80% delta floor. `Glob` added to tools. Identity
+  clarified.
+- **`agents/e2e-runner.md`** — gate-identity note added: hybrid
+  worker+state-envelope, never self-grades tests it authored.
+- **`agents/planner.md`** — `Bash` + `Write` added to tools;
+  MANDATORY Step 0 (semantic-index prior-art query) documented;
+  plan-artifact output path + required sections specified.
+- **`agents/ceo.md`** — hardcoded "Sanish"/"LANE 1" 8CStudio-isms
+  replaced with "the operator" phrasing.
+- **`agents/researcher.md`** — bumped `haiku` → `sonnet`; brittle
+  "<100 stars = reject" rule softened to a weighted signal.
+- **`agents/build-error-resolver.md`** — Phase 0 stack detection
+  (TS/JS, Python, Go, Rust, Java Maven/Gradle); per-stack diagnostic
+  commands.
+- **`agents/data-model-auditor.md`** — description upgraded to
+  "Use PROACTIVELY when..." pattern; `Write` added.
+- **`agents/doc-updater.md`** — command detection (feature-detect,
+  don't assume); graceful degradation when project-specific tooling
+  absent; multi-stack diagnostic commands.
+- **`agents/retrospective-agent.md`** — degraded mode. Runs when
+  dev-log collector absent by deriving from git log + decisions.jsonl
+  + baselines alone. Report header notes the degradation.
+- **`commands/brainstorm.md`** — Soniox/8CStudio/Lipi references
+  removed; now tool-agnostic.
+- **All 5 gate agents — hardcoded `claude-sonnet-4-6` in exemplars
+  replaced with `<your-model-id>` placeholder** (P2.3). Header note
+  in each agent explains the substitution. Fixes the "envelope lies
+  about model" class.
+- **Tool frontmatter normalised** (P2.9) — three styles collapsed to
+  `tools: ["Read", ...]` across all 15 agents.
+- **`scripts/install.sh` docs allowlist** (P2.8). Previously
+  `cp -r docs/*` shipped HANDOFF/BACKLOG/session notes into every
+  adopter. Now: 9-item allowlist, copy-if-absent.
+- **`scripts/install.sh` creates `.gitignore` if absent** (P2.8);
+  new pattern `.claude/gates/` added.
+- **`scripts/install.sh` `shopt -s nullglob`** for empty-directory
+  glob safety.
+- **`scripts/install_launchd.sh` injection hygiene** (P2.7). Python
+  heredoc → `sys.argv`; sed template rendering → python
+  `str.replace`; missing `org_tag`/`root` → actionable error;
+  charset-guard on operator-supplied values.
+- **`scripts/pe cmd_sync` canonicalises symlink comparison via
+  `realpath`** (P2.8). `/var/...` vs `/private/var/...` no longer
+  registers as stale on macOS.
+- **`scripts/pe cmd_doctor` normalises exit code** to 1 (P2.8).
+- **`install.sh` + `pe` sync/doctor skip `_*.md` files** in agent
+  iteration.
+
+### Deferred to Session 5+
+
+- **P2.10** — reconcile `~/.claude/agents/` stale forks on operator
+  machine. Best done in a dedicated focused session.
+- **P2.11** — Python hygiene batch (pe_gate + orchestrator +
+  baseline + research_index). 10+ sub-items — best done in a focused
+  Python session with pytest coverage in the same commit.
+
+### Docs
+
+- `docs/IMPROVEMENT_PLAN.md` — P1 items marked ✅ SHIPPED v0.10.0;
+  P2 items marked ✅ SHIPPED v0.11.0 (except deferred P2.10/P2.11);
+  new P5 (product-audit gates), P6 (code-simplicity toolchain), P7
+  (operator workflow V3) sections; "Suggested execution order"
+  Session 5 targets P7.1 + P7.3 + P6.1 + P6.2 as fast wins.
+- `docs/OPERATOR_WORKFLOW_V3.md` — new canonical operating model
+  (Fable 5 plans + judges, Opus 4.8 foundational, Sonnet 5 default,
+  Haiku mechanical batches; worktrees + headless `claude -p`;
+  quarterly incident-to-check rule).
+- `docs/HANDOFF.md` — updated to reflect v0.11.0 shipped state and
+  Session 5 pickups.
+
+---
+
 ## [0.10.0] — 2026-07-02
 
 > P1 enforcement bundle: the headline promises are now *deterministically*

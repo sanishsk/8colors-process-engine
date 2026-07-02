@@ -227,7 +227,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
 
 ## P2 — Agent/portability/consistency fixes
 
-### P2.1 De-project-ify `database-reviewer` (38KB, 100% 8CStudio-specific)
+### P2.1 De-project-ify `database-reviewer` (38KB, 100% 8CStudio-specific) — ✅ SHIPPED v0.11.0
 - **Severity:** CRITICAL for adopters · **Effort:** M — it references
   `scripts.content_fountain`, migrate_093, Casbin ADR-001, gotchas §43 —
   meaningless in any other repo; produces false CRITICALs or `blocked`.
@@ -237,14 +237,14 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   generic and excellent). Add a project-overlay mechanism (engine agent +
   optional `.claude/agents/overrides/`).
 
-### P2.2 Remove Write/Edit from gate agents
+### P2.2 Remove Write/Edit from gate agents — ✅ SHIPPED v0.11.0
 - **Effort:** S — security-reviewer and database-reviewer have Write+Edit;
   a reviewer must not modify the code it judges (breaks the escalation
   ladder's reviewer/worker separation). Decide e2e-runner's identity:
   test-author (worker, keeps Write) or gate (loses it) — currently it
   self-grades tests it wrote.
 
-### P2.3 Extract the duplicated ~350-line gate-envelope contract
+### P2.3 Extract the duplicated ~350-line gate-envelope contract — ✅ SHIPPED v0.11.0
 - **Effort:** M — near-verbatim in 5 agents (code-reviewer,
   security-reviewer, tdd-guide, e2e-runner, database-reviewer); any schema
   change = 5 synchronized edits. Extract `agents/_gate-contract.md` and
@@ -252,7 +252,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   Also: remove hardcoded `model_used: "claude-sonnet-4-6"` from exemplars
   (agents copy exemplars literally → envelope lies about the model).
 
-### P2.4 Rewrite `tdd-guide` as an executable state machine
+### P2.4 Rewrite `tdd-guide` as an executable state machine — ✅ SHIPPED v0.11.0
 - **Effort:** M — currently ~85 lines of generic advice + 350 of envelope;
   no framework detection, no hard refusal rule. Fix: (1) detect test
   runner per stack; (2) write test; (3) run, paste failing output
@@ -261,7 +261,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   missing it). Resolve its gate-vs-worker identity (envelope says
   reviewer, body says author).
 
-### P2.5 Fix broken/unportable agents
+### P2.5 Fix broken/unportable agents — ✅ SHIPPED v0.11.0
 - **Effort:** S-M each:
   - **ceo.md**: hardcoded 8CStudio files + "Sanish"/"LANE 1"; Sentry MCP
     read is impossible (explicit `tools:` list excludes MCP tools) —
@@ -285,13 +285,13 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
     files.
   - **/brainstorm**: Soniox/8CStudio references — make tool-agnostic.
 
-### P2.6 One shared YAML reader
+### P2.6 One shared YAML reader — ✅ SHIPPED v0.11.0
 - **Effort:** S — four independent ad-hoc readers (awk in `_subset.sh`,
   python heredoc in `install_launchd.sh`, broken grep/sed in pe doctor,
   awk+sed writer in install.sh); one is broken (P0.8), one is
   code-injectable (P2.7). Single `yaml_get KEY FILE` python helper.
 
-### P2.7 Injection hygiene in `install_launchd.sh`
+### P2.7 Injection hygiene in `install_launchd.sh` — ✅ SHIPPED v0.11.0
 - **Effort:** S — (a) `read_yaml` splices `$CONFIG`/`$1` into a python
   heredoc — a path with a single quote breaks it; pass via `sys.argv`.
   (b) sed template rendering injects unescaped `PROJECT_ROOT`/`CLAUDE_BIN`
@@ -299,7 +299,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   literal replacement. (c) Missing org_tag/root dies with ZERO output
   under `set -e` — add actionable error messages.
 
-### P2.8 Shell robustness batch (one PR)
+### P2.8 Shell robustness batch (one PR) — ✅ SHIPPED v0.11.0
 - **Effort:** S each — `scripts/pe`: quote `$py` (doctor, pe:686-695);
   canonicalize both sides of symlink comparison before equality
   (pe:362-367, 634-637 — realpath, not raw readlink); anchor eject's
@@ -314,7 +314,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   clobbers project edits); `--dry-run` for install; prompts read
   `/dev/tty` with stdin fallback.
 
-### P2.9 Frontmatter + inventory consistency
+### P2.9 Frontmatter + inventory consistency — ✅ SHIPPED v0.11.0
 - **Effort:** S — normalize `tools:` to one style (3 styles today);
   document or remove non-standard `effort:`/`memory:` fields (silently
   ignored — false sense of configuration); model alias not pinned string
@@ -324,7 +324,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   ship or de-reference. Add `pe docs check`: grep VERSION vs badges,
   count agents/commands vs README/plugin.json claims.
 
-### P2.10 Reconcile `~/.claude/agents/` stale forks (operator machine)
+### P2.10 Reconcile `~/.claude/agents/` stale forks (operator machine) — ⏸️ DEFERRED (Session 5)
 - **Effort:** S — global `code-reviewer.md` is a May-22 haiku copy WITHOUT
   the envelope contract; in any project without project symlinks the old
   agent shadows the engine gate silently (this exact class caused the
@@ -332,7 +332,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   adopt the genuinely-global-only ones (tenant-isolation-auditor,
   project-kickstarter, project-onboarder) into the engine.
 
-### P2.11 Python hygiene batch
+### P2.11 Python hygiene batch — ⏸️ DEFERRED (Session 5)
 - **Effort:** S each — pe_gate: engine version from schema `examples`
   (IndexError if empty; move to const); `--bare` must precede path
   (argparse-ify); `utf-8-sig`; missing failure_class defaults to
@@ -475,6 +475,195 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
 
 ---
 
+## P5 — Generic quality gates extracted from the 2026-07-02 8CStudio product audit
+
+> The product audit (`8CStudio/docs/PRODUCT_RESTRUCTURE_PLAN.md`) found whole
+> *classes* of defect that no current gate catches. Each item below converts a
+> one-off finding into a portable engine check so the mistake class can't recur
+> in ANY adopter project. Same contract as above: self-contained, any model can
+> implement without re-deriving.
+
+### P5.1 App-boot smoke gate ("fresh clone boots") ⭐ highest catch-rate
+- **Severity:** HIGH · **Effort:** M · **New files:** `hooks/boot-smoke.sh`, CI template job
+- **What happened:** 8CStudio local dev could not boot at all — 4 independent
+  failures (wrong interpreter, table creation only in Docker entrypoint,
+  migration runner dying silently, login 500 on legacy hash). Nobody noticed
+  because nothing ever tested "fresh environment → app answers".
+- **Generic check:** CI job + `pe doctor` extension: create a throwaway DB,
+  run the project's bootstrap + migrations, start the app, assert `/` or
+  `/login` returns <500, assert zero ERROR-level log lines during startup.
+  Project declares its boot command in `.process-engine.yaml`
+  (`boot_check: {setup: …, run: …, probe_url: …}`); hook skips politely when absent.
+
+### P5.2 Migration-contract lint
+- **Severity:** HIGH · **Effort:** S · **New file:** `hooks/migration-lint.sh`
+- **What happened:** `migrate_030` calls `sys.exit(0)` in its skip path —
+  killed the runner, 107 migrations silently unapplied; `migrate_045` had a
+  different call signature and crashed. Both invisible for months.
+- **Generic check (pre-commit, paths `migrations/**`):** (a) forbid
+  `sys.exit|os._exit|SystemExit` inside migration files; (b) every migration
+  defines the runner's expected entrypoint signature (configurable regex);
+  (c) CI: run the full migration chain against an EMPTY database and assert
+  exit 0 + applied-count == file-count. (c) is the real gate; (a)/(b) fail fast.
+
+### P5.3 Design lint (deterministic, not prompt-hope)
+- **Severity:** HIGH · **Effort:** M · **New files:** `hooks/design-lint.sh` + `templates/design-lint.config.template`
+- **What happened:** a well-written design system had ~48% compliance: 159
+  copy-pasted button variants, 77 hand-rolled modals, 1,400 off-spec radii,
+  354 inline styles. Root cause: zero enforcement — every AI-generated page
+  drifted. (This is the "AI-generated look" vector too.)
+- **Generic check (PostToolUse on Edit/Write of templates + pre-commit):**
+  config-driven allowlists — permitted color tokens, radius set, spacing set;
+  deny new `style=` attributes, deny `gradient`/`blur` classes if config says
+  so, deny raw `<div class="fixed inset-0` modals when a modal macro exists.
+  Ships as a generic linter reading `.design-lint.yaml`; 8CStudio's tokens v2
+  becomes the first config. Fail = envelope-style FAIL, not a warning.
+
+### P5.4 Duplication budget (jscpd)
+- **Severity:** HIGH · **Effort:** S · **Files:** pre-commit + CI templates
+- **What happened:** the 159-button/77-modal explosion is *measurable*
+  copy-paste. AI agents duplicate rather than extract — every adopter will
+  hit this.
+- **Generic check:** `jscpd` (works on HTML/Jinja/JS/Python) with a ratcheting
+  threshold: record current duplication % as baseline; fail any commit that
+  RAISES it. New projects start at ≤3%. Add to `pe baseline` metrics so the
+  retro sees the trend.
+
+### P5.5 Runtime-console + route-integrity smoke (Playwright)
+- **Severity:** MEDIUM-HIGH · **Effort:** M · **New file:** `templates/e2e/smoke.spec.ts` template
+- **What happened:** every page in the walkthrough logged console errors
+  (`/api/me/companies` 500, `/api/v1/auth/me` 401); a sidebar item 404'd
+  (`/finance`); placeholder nav items led to dead ends. All invisible to
+  pytest.
+- **Generic check (E2E stage):** for each nav item discovered from the app's
+  nav registry (or a declared list): page loads <500, **zero console.error**,
+  no 404s in network log. One extra viewport pass at 375px asserting no
+  horizontal scroll on table pages. This single spec would have caught 4
+  distinct audit findings.
+
+### P5.6 Confusion-budget test (nav ≤ N items/group)
+- **Severity:** MEDIUM · **Effort:** S
+- **What happened:** 50+ sidebar items, one group with 18 — the #1 "feels
+  cluttered" cause. 8CStudio even HAS a documented confusion-budget rule
+  (max 5 primary actions); nothing enforces it.
+- **Generic check:** unit test template that imports the project's nav
+  registry and asserts per-group item count ≤ configured budget, and that
+  every route referenced actually resolves (no placeholder targets unless
+  flagged `hidden`/`beta`). Budget lives in `.process-engine.yaml`.
+
+### P5.7 In-app copy lint
+- **Severity:** MEDIUM · **Effort:** S
+- **What happened:** login page shipped LLM-manifesto copy ("Imagine.
+  Create. Together.", floating word-chips); empty states used emoji-as-icon;
+  labels mixed Title Case / sentence case. These are the strongest
+  "AI-generated" tells and they're grep-able.
+- **Generic check (pre-commit on templates):** configurable banned-phrase
+  list (default seeded with marketing-fluff patterns: `Innovate`, `Boundless`,
+  `Imagine\.`, `Unleash`, `Empower`, emoji in `<button>`/headings), plus
+  Title-Case-label detector for buttons. Warn-level by default, FAIL when
+  `strict_copy: true`.
+
+### P5.8 Auth-path robustness cases in security-reviewer + test template
+- **Severity:** MEDIUM · **Effort:** S
+- **What happened:** login 500'd (`ValueError: Invalid salt`) on a legacy
+  password hash — unhandled exception in the most public code path.
+- **Generic check:** add to security-reviewer's checklist: "auth endpoints
+  must not raise on malformed stored credentials / cookies / tokens — assert
+  graceful None/401". Ship a pytest template with the standard adversarial
+  cases (malformed hash, oversized input, null bytes, expired token).
+
+### P5.9 AI-aesthetic tells → reviewer checklist
+- **Severity:** MEDIUM · **Effort:** S · **File:** ui/design reviewer agent (or code-reviewer UI section)
+- Codify the tells list from PRODUCT_RESTRUCTURE_PLAN Phase A+ as a review
+  rubric: stock-token dark+cyan+gradient palette, glow effects, manifesto
+  copy, card-grid-as-menu dashboards, over-padding, emoji icons, default
+  font pairing, no signature element. Verdict rule: ≥3 tells on a new screen
+  = FAIL with "match the locked reference screen" instruction. Pairs with
+  P5.3 (deterministic) — this catches what lint can't.
+
+---
+
+## P6 — Code-simplicity toolchain ("less code" made enforceable)
+
+> Goal: stop AI overbuild at BOTH ends — generation time (skill/prompt) and
+> commit time (deterministic gates). AI agents reliably fail at brevity when
+> asked; they comply when the environment refuses verbose output.
+
+### P6.1 Adopt **Ponytail** at generation time
+- **Effort:** S · **Where:** engine install step + agent preambles
+- [Ponytail](https://github.com/DietrichGebert/ponytail) is an open-source
+  Claude Code skill forcing a decision ladder before code: *needs to exist? →
+  stdlib? → platform-native? → installed dep? → one line? → only then write
+  minimum*. Published evals: ~54% avg LOC reduction, 100% safety held.
+- **Fix:** `pe install --with-ponytail` (git clone / plugin add + verify);
+  reference the ladder in tdd-guide + build-error-resolver preambles
+  ("apply the Ponytail ladder before implementing"). Keep it a *skill*, not
+  prose duplicated into agents (P2.3 lesson).
+
+### P6.2 Deterministic complexity + dead-code gates
+- **Effort:** S-M · **Files:** pre-commit + CI templates
+- Python: `ruff` with `C901` (mccabe ≤ 10) + `PLR` pylint-refactor rules
+  enabled; **xenon** `--max-absolute B` (fails on any function worse than
+  grade B); **vulture** for dead code (allowlist file for false positives).
+  JS/TS: **knip** (dead exports/files/unused deps) + eslint `complexity` rule.
+  All config-templated, all opt-out-able per project, all wired by
+  `pe install` like the P1.2 test hook.
+
+### P6.3 Net-LOC + size budgets in CI
+- **Effort:** S — CI step computes the PR's net LOC delta and per-file sizes:
+  WARN >250 net new lines, FAIL >600 without a `size-justified:` trailer;
+  FAIL any source file crossing 800 lines or function >50 (matches the
+  operator's global rules, which today are prose only). Report goes into the
+  gate envelope so the retro can trend it.
+
+### P6.4 `/simplify` stage in the slot pipeline
+- **Effort:** S — extend `/new-feature` chain: brainstorm → brief → architect
+  → plan → tdd → impl → **simplify** → code-review. The simplify pass runs
+  AFTER green tests, BEFORE review: reuse/dead-code/altitude cleanups only
+  (Claude Code's built-in `/simplify` where available, else refactor-cleaner
+  agent). Tests must stay green — that's its envelope's PASS condition.
+  Rationale: asking the implementer to be brief mid-task fails; a dedicated
+  pass with green tests as the safety net works.
+
+### P6.5 Duplication ratchet
+- Covered by P5.4 — listed here because it's also the strongest simplicity
+  metric: duplication % + complexity grade + net-LOC trend together give the
+  retro an objective "are we getting simpler" answer (feeds P3.4 telemetry).
+
+---
+
+## P7 — Operator workflow upgrades (Claude Code usage)
+
+> Full analysis + the new operating model: **`docs/OPERATOR_WORKFLOW_V3.md`**
+> (written 2026-07-02). Headline findings, kept here for the checklist:
+
+- **P7.1 Context diet (CRITICAL for cost):** 8CStudio `CLAUDE.md` is **74KB
+  (~19k tokens)** + 22KB global rules — ~25k tokens re-processed EVERY turn.
+  This, not session length, is the root cause of the weekly-cap incidents the
+  token-discipline section fights. Target ≤300 lines / ≤12KB; milestones →
+  `PHASE_HISTORY.md`; rules → skills (loaded on demand). Enforce with the
+  existing `hooks/claude-md-size.sh` wired as a real hook (it exists but
+  isn't wired — same P1 class).
+- **P7.2 Model routing is stale:** operator global rules still route to
+  "Sonnet 4.6 / Opus 4.5 / Haiku 4.5" and yaml pins `claude-opus-4-7`.
+  Update to the Claude 5 era: Fable 5 (audits/architecture/design
+  direction/hard debugging), Opus 4.8 (foundational slots: RLS, auth, money),
+  Sonnet 5 (default dev), Haiku 4.5 (mechanical batches). See V3 doc §3.
+- **P7.3 Retro pipeline stalled:** last dev-log digest is 2026-W21 (~6 weeks
+  stale) — the Friday retro has been running on empty input (matches P2.5).
+  Fix the collector OR make retrospective-agent derive from
+  `git log --numstat` + decisions.jsonl (degraded mode) — P2.5 fix, raised
+  to do-now.
+- **P7.4 Skills/agents sprawl:** 67 global skills + duplicated
+  project/user copies (data-audit, health, kickstart, onboard each appear
+  twice) + stale `~/.claude/agents` forks (P2.10). Run a skills stocktake;
+  keep <20 curated; engine owns the rest via subset.
+- **P7.5 Missing modern primitives:** no worktree parallelism, no headless
+  `claude -p` batch runs for mechanical slots, no background-agent usage in
+  the documented workflow. V3 doc §4 defines when each applies.
+
+---
+
 ## P4 — Deliberately NOT now
 
 - **Phase 4 DAG scheduler** — stays parked (COUPLING_MAP data supports it).
@@ -501,3 +690,9 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
 5. **Validation:** P3.5 eval harness, then build the third app through
    `pe new` and treat every gap it hits as P1 backlog — that's the only
    honest test of "less code, fewer issues".
+6. **Session 5 (added 2026-07-02):** P7.1 context diet + P7.3 retro unstall
+   + P6.1 Ponytail + P6.2 complexity gates (all S, one sitting) → immediate
+   token savings + working feedback loop. Then P5.1/P5.2/P5.3 boot-smoke +
+   migration-lint + design-lint as v0.11.0 gate additions, P5.4-P5.9 +
+   P6.3-P6.4 following. Operator workflow changes:
+   `docs/OPERATOR_WORKFLOW_V3.md`.

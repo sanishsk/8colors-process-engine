@@ -12,22 +12,13 @@
 # hooks.claude_hooks_enabled. Never silent — every action prints one
 # line for the operator.
 
-# Detect whether a yaml boolean is truthy. Simple key match (not a full
-# yaml parser); acceptable because both keys live at fixed positions in
-# the engine's own template.
-yaml_bool_get() {
-    local key="$1" file="$2"
-    if [ ! -f "$file" ]; then
-        echo "false"; return
-    fi
-    local val
-    val=$(grep -E "^[[:space:]]*${key}:" "$file" 2>/dev/null | head -1 \
-          | sed -E "s/^[[:space:]]*${key}:[[:space:]]*//; s/#.*$//; s/[\"' ]//g")
-    case "$val" in
-        true|yes|1|on) echo "true" ;;
-        *)             echo "false" ;;
-    esac
-}
+# yaml_bool_get is defined in _yaml.sh (P2.6). Source it if the caller
+# hasn't already. Local grep/sed fallback removed — one YAML reader.
+if ! declare -F yaml_bool_get >/dev/null 2>&1; then
+    _HOOKS_ENGINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    # shellcheck source=./_yaml.sh
+    . "$_HOOKS_ENGINE_DIR/scripts/_yaml.sh"
+fi
 
 # Merge hooks/hooks.json into <project>/.claude/settings.json.
 # The engine's hooks.json uses {{ENGINE_DIR}} placeholders — replaced
