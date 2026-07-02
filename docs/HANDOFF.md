@@ -3,47 +3,41 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-02 late (v0.11.0 P2 agent-portability
-> bundle uncommitted — 9 of 11 P2 items landed; P2.10/P2.11 deferred
-> to Session 5. IMPROVEMENT_PLAN grew new P5/P6/P7 sections and
-> OPERATOR_WORKFLOW_V3.md ships as the canonical operating model.
-> 64/64 tests pass.)
+> **Last updated:** 2026-07-02 evening (v0.11.1 P2.10 operator-machine
+> agent reconcile shipped — 14 stale user-global agent copies
+> replaced with symlinks; 3 promoted into engine; 8CStudio's
+> ui-ux-design-agent moved to project-local. Engine agent surface
+> 15 → 18. Adopters re-installed against v0.11.1 with zero collision
+> warnings. 64/64 tests pass. Ready to commit + push.)
 
 ---
 
 ## One-line state
 
-Engine v0.11.0 in the working tree — **uncommitted**. Nine P2 items
-shipped: (P2.1) de-project-ified database-reviewer, (P2.2) gates
-lose Write/Edit, (P2.3) shared `_gate-contract.md` spec, (P2.4)
-tdd-guide rewritten as executable state machine, (P2.5) broken-
-agents batch fixed (planner Step 0, ceo/brainstorm de-hardcoded,
-researcher bumped to sonnet + softened stars rule,
-build-error-resolver multi-stack, doc-updater/retro degraded modes,
-data-model-auditor PROACTIVELY description), (P2.6) shared
-`_yaml.sh` helper, (P2.7) install_launchd injection hygiene, (P2.8)
-shell robustness batch, (P2.9) tools frontmatter normalized +
-`pe docs check` subcommand. **P2.10 and P2.11 deferred** — Session 5.
-64/64 tests pass. Adopters still on v0.10.0 symlink target.
+Engine v0.11.1 in the working tree — **uncommitted**. v0.11.0 landed
+earlier (commit `b6c566e`) with 9 P2 items. This session added
+**P2.10 operator-machine agent reconcile**: `~/.claude/agents/` no
+longer holds any stale regular-file copies (14 symlinks to engine +
+0 regular files); 3 genuinely-global agents (`tenant-isolation-
+auditor`, `project-kickstarter`, `project-onboarder`) promoted into
+`agents/`; `ui-ux-design-agent.md` moved to 8CStudio project-local;
+`pe docs check` cleaned (INSTALL.md v0.2.0 heading false-positive
+fixed). Adopters re-installed cleanly. Kills the E1_b propagation
+gap for good.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Commit + push v0.11.0:**
+1. **Commit + push v0.11.1:**
 
    ```bash
    git add -A
-   git commit -m "feat(0.11.0): P2 agent portability + shell robustness bundle (see docs/IMPROVEMENT_PLAN.md P2)"
+   git commit -m "fix(0.11.1): P2.10 reconcile ~/.claude/agents/ — kill E1_b propagation gap"
    git push origin master
    ```
 
-2. **Re-install into adopters (NOT just `pe sync`).** The install.sh
-   doc-allowlist change, the shared `_yaml.sh` helper, the
-   `install_launchd.sh` rewrite ride in the installer.
-
-   ```bash
-   pe install /Users/sanishsasikumar/Documents/8Colors/8CStudio
-   pe install /Users/sanishsasikumar/Documents/Origyn
-   ```
+2. **Adopters already re-installed this session** — no `pe install` needed
+   unless you want to double-check (`pe doctor <adopter>` will confirm
+   symlinks resolve).
 
 3. **Session 5 pickup order (per updated IMPROVEMENT_PLAN.md §Suggested execution order + OPERATOR_WORKFLOW_V3.md):**
 
@@ -84,12 +78,10 @@ shell robustness batch, (P2.9) tools frontmatter normalized +
      lint, auth-robustness, AI-aesthetic rubric.
    - **P6.3-P6.4** — net-LOC budgets, `/simplify` stage in the
      `/new-feature` chain.
-   - **P2.10** — reconcile stale `~/.claude/agents/` forks
-     (deferred from v0.11.0). Operator-machine hygiene.
    - **P2.11** — Python hygiene batch (pe_gate + orchestrator +
      baseline + research_index) (deferred from v0.11.0). Best done
      in a focused Python session with pytest coverage in the same
-     commit.
+     commit. (P2.10 shipped in v0.11.1 this session.)
    - **P3.x** — domain layer (`pe new`), plugin migration,
      telemetry, execution loop. Stays parked until P5-P7 land.
 

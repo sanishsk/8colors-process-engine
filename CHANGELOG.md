@@ -7,6 +7,70 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.11.1] — 2026-07-02
+
+> P2.10 reconcile-operator-machine-agents follow-up. Structural fix,
+> not a feature bump. Kills the E1_b propagation gap for good:
+> `~/.claude/agents/` no longer holds any stale regular-file copies.
+>
+> All 64 tests pass.
+
+### Added
+
+- `agents/tenant-isolation-auditor.md` — promoted from user-global to
+  engine (137 lines). Scans recent git history for new SQL crossing
+  tenant boundaries without RLS context.
+- `agents/project-kickstarter.md` — promoted from user-global to
+  engine (190 lines). Scaffolds new projects with full structure,
+  testing, linting, CLAUDE.md.
+- `agents/project-onboarder.md` — promoted from user-global to
+  engine (114 lines). Analyzes existing projects against standard
+  rules, generates + applies improvement plan.
+- Tools frontmatter of the three promoted agents normalized to the
+  P2.9 array-of-strings style (`tools: ["Read", ...]`).
+
+### Changed
+
+- `~/.claude/agents/` reconciled (**operator machine**): 14 regular-
+  file agent copies replaced with symlinks into
+  `.../8colors-process-engine/agents/`. Every project without
+  project-local symlinks now sees the engine version — no more
+  silent shadowing of the E1 gate-envelope contract by
+  pre-envelope-era user-global copies (the exact class that caused
+  the E1_b incident).
+- `~/.claude/agents/ui-ux-design-agent.md` moved to
+  `8CStudio/.claude/agents/ui-ux-design-agent.md` (project-local).
+  Content is 8CStudio-specific (v0.dev budget, Alpine/Tailwind/
+  Jinja, filmmaker audience) — symmetric with the P2.1 project-local
+  `database-reviewer.md` fork pattern.
+- `plugin.json` description: "15 agents" → "18 agents".
+- `README.md`: "15 specialist agents" → "18 specialist agents"; the
+  Agents table gained rows for build-error-resolver,
+  data-model-auditor, database-reviewer, e2e-runner,
+  memory-consolidator, retrospective-agent, project-kickstarter,
+  project-onboarder, tenant-isolation-auditor (previously 9 stale
+  rows; now 18 matching disk).
+- `INSTALL.md` heading `## v0.2.0 Optional: wire CEO weekly retro` →
+  `## Optional: wire CEO weekly retro`. Removes false-positive drift
+  warning from `pe docs check`. Historic origin captured in
+  changelog.
+
+### Fixed
+
+- `pe docs check` was flagging INSTALL.md's `## v0.2.0 ...` heading
+  as version drift. Heading rephrased; check now exits 0 cleanly.
+
+### Adopter impact
+
+- `pe install /path/to/adopter` picks up the 3 promoted agents
+  automatically (no manual copy).
+- 8CStudio and Origyn re-installed against v0.11.1 during this
+  session — both report 18 clean engine symlinks (8CStudio 19 with
+  the local `ui-ux-design-agent.md`), zero user-global collision
+  warnings.
+
+---
+
 ## [0.11.0] — 2026-07-02
 
 > P2 agent-portability + shell-robustness bundle. Nine P2 items land.

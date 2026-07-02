@@ -47,7 +47,7 @@ pe install /path/to/your-project
 #    Should produce an orientation report.
 ```
 
-## v0.2.0 Optional: wire CEO weekly retro (macOS only)
+## Optional: wire CEO weekly retro (macOS only)
 
 ```bash
 # 1. Edit project config

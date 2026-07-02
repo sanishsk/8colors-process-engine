@@ -324,13 +324,21 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   ship or de-reference. Add `pe docs check`: grep VERSION vs badges,
   count agents/commands vs README/plugin.json claims.
 
-### P2.10 Reconcile `~/.claude/agents/` stale forks (operator machine) — ⏸️ DEFERRED (Session 5)
-- **Effort:** S — global `code-reviewer.md` is a May-22 haiku copy WITHOUT
+### P2.10 Reconcile `~/.claude/agents/` stale forks (operator machine) — ✅ SHIPPED in v0.11.1 (2026-07-02)
+- **Effort:** S — global `code-reviewer.md` was a May-22 haiku copy WITHOUT
   the envelope contract; in any project without project symlinks the old
-  agent shadows the engine gate silently (this exact class caused the
-  E1_b incident). Replace stale duplicates with symlinks or delete;
-  adopt the genuinely-global-only ones (tenant-isolation-auditor,
-  project-kickstarter, project-onboarder) into the engine.
+  agent shadowed the engine gate silently (this exact class caused the
+  E1_b incident).
+- **Delivered:** 11 stale user-global agent copies replaced with symlinks
+  into the engine (`architect`, `build-error-resolver`, `code-reviewer`,
+  `data-model-auditor`, `database-reviewer`, `doc-updater`, `e2e-runner`,
+  `planner`, `retrospective-agent`, `security-reviewer`, `tdd-guide`).
+  3 genuinely-global agents promoted into the engine and symlinked
+  (`tenant-isolation-auditor`, `project-kickstarter`, `project-onboarder`);
+  `ui-ux-design-agent.md` moved from user-global to 8CStudio project-local
+  (content is 8CStudio-specific). Engine agent surface: 15 → 18. README /
+  plugin.json / `pe docs check` all consistent. Adopters re-installed;
+  zero collision warnings.
 
 ### P2.11 Python hygiene batch — ⏸️ DEFERRED (Session 5)
 - **Effort:** S each — pe_gate: engine version from schema `examples`
@@ -375,6 +383,12 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   reference implementation in the operator's global rules). Each module
   ships WITH its tests and its reviewing agent — that's how "fewer
   vulnerabilities with less code" materializes.
+- **Candidate #4 (added 2026-07-02 evening): 8c-delivery** — once 8CStudio's
+  Delivery wedge ships (client galleries: tokened share links + PIN, image
+  derivative pipeline, proofing loop, ZIP-on-demand — see 8CStudio
+  `docs/PIXIESET_REPLACEMENT_PLAN.md`), the gallery engine is a prime
+  extraction: "client file delivery with proofing" generalizes beyond
+  photography (design proofs, document delivery, video dailies).
 
 ### P3.3 Migrate distribution to a native Claude Code plugin
 - **Effort:** M — `plugin.json` is a homegrown manifest, not the native
@@ -518,6 +532,12 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   so, deny raw `<div class="fixed inset-0` modals when a modal macro exists.
   Ships as a generic linter reading `.design-lint.yaml`; 8CStudio's tokens v2
   becomes the first config. Fail = envelope-style FAIL, not a warning.
+- **Multi-theme requirement (added 2026-07-02 evening):** the config must
+  support multiple named theme scopes per project (path-pattern → theme), not
+  one global palette. 8CStudio now has a dark studio-facing shell AND a light
+  client-facing Delivery theme (galleries/tenant websites — see 8CStudio
+  `docs/PIXIESET_REPLACEMENT_PLAN.md`), each with its own token allowlist.
+  One token system, two configs, path-scoped.
 
 ### P5.4 Duplication budget (jscpd)
 - **Severity:** HIGH · **Effort:** S · **Files:** pre-commit + CI templates
@@ -696,3 +716,13 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
    migration-lint + design-lint as v0.11.0 gate additions, P5.4-P5.9 +
    P6.3-P6.4 following. Operator workflow changes:
    `docs/OPERATOR_WORKFLOW_V3.md`.
+
+> **SEQUENCED BY THE PRODUCT ROADMAP (2026-07-02):** engine work is now
+> interleaved with the 8CStudio product build, not run as a separate track.
+> The authoritative order lives in **`../../8CStudio/docs/ROADMAP.md`**
+> (created 2026-07-02) — engine gates map to its waves as: P7.1/P7.3 = Wave 0.2/0.3;
+> P5.1/P5.2 boot-smoke + migration-lint = Wave 0.4/0.5 (harden #227's fixes);
+> P5.3 design-lint = Wave 1.3 (after tokens v2 locks); P6.1/P6.2 = Wave 1.4;
+> P5.4-P5.9 + P6.3-P6.4 = the parallel backfill lane. P0/P1/P2 already SHIPPED
+> (v0.9.1/0.10.0/0.11.0). Pick engine slots by which product wave they de-risk,
+> not by P-number order.

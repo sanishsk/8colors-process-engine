@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.11.0-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.11.1-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -58,7 +58,7 @@ pe install /path/to/your/project
 
 Restart Claude Code in `your-project`. You now have:
 
-- 15 specialist agents (or a leaner set via `pe install --subset gate-only|core`)
+- 18 specialist agents (or a leaner set via `pe install --subset gate-only|core`)
 - 5 slash commands
 - 2 session skills (`/start-session`, `/end-session`)
 - Semantic search over `docs/research/`
@@ -79,19 +79,28 @@ if the cadence breaks.
 
 ## What you get
 
-### Agents (9)
+### Agents (18)
 
 | Agent | Model | When |
 |---|---|---|
 | `architect` | Opus | System design, scalability, architectural decisions. Consults `docs/research/` first. |
 | `brief-writer` | Sonnet | 1-page briefs with alternatives + market check. Consults `docs/research/` first. |
+| `build-error-resolver` | Sonnet | Multi-stack (TS/Py/Go/Rust/Java) build + type-error resolution. Minimal diffs. |
 | `ceo` | Opus | Weekly retro + next-week plan. Auto-fires Fridays via launchd. |
-| `code-reviewer` | Haiku | MANDATORY review before commit. CRITICAL blocks. |
-| `doc-updater` | Haiku | Documentation + codemap maintenance. |
+| `code-reviewer` | Haiku | MANDATORY review before commit. CRITICAL blocks. Envelope-contract gate. |
+| `data-model-auditor` | Haiku | Finds hardcoded business values; recommends moving to data model / config. |
+| `database-reviewer` | Sonnet | Generic Postgres + multi-tenant SaaS reviewer (tenant isolation, migrations, query safety). |
+| `doc-updater` | Haiku | Documentation + codemap maintenance. Multi-stack feature-detect. |
+| `e2e-runner` | Sonnet | End-to-end testing (Playwright / Vercel Agent Browser). Artifact management. |
+| `memory-consolidator` | Sonnet | Extracts durable memory from session transcripts. |
 | `planner` | Opus | Complex features, refactoring, multi-step implementation plans. |
-| `researcher` | Haiku | OSS/MCP scout. Runs async, parallel with implementation. |
-| `security-reviewer` | Sonnet | Auth, user input, secrets, OWASP top 10. |
-| `tdd-guide` | Sonnet | Write-tests-first methodology. 80%+ coverage. |
+| `project-kickstarter` | Opus | Scaffolds new projects — structure, tests, lint, CLAUDE.md, rules. |
+| `project-onboarder` | Opus | Analyzes existing projects against standard rules; generates + applies improvement plan. |
+| `researcher` | Sonnet | OSS/MCP scout. Runs async, parallel with implementation. |
+| `retrospective-agent` | Sonnet | Daily/weekly/monthly retro. Degrades gracefully when dev-log absent. |
+| `security-reviewer` | Sonnet | Auth, user input, secrets, OWASP top 10. Envelope-contract gate. |
+| `tdd-guide` | Sonnet | Executable state machine — Phase 0 stack detect → RED → GREEN → REFACTOR → COVERAGE. |
+| `tenant-isolation-auditor` | Haiku | Scans recent git history for SQL crossing tenant boundaries without RLS context. |
 
 ### Skills (2, user-global)
 
