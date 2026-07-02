@@ -3,45 +3,79 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-02 late (P0 audit bundle committed as
-> `3b43e03`; awaiting push + adopter sync; IMPROVEMENT_PLAN.md is the
-> active backlog going forward)
+> **Last updated:** 2026-07-02 evening (v0.10.0 P1 enforcement bundle
+> uncommitted — 6 P1 items landed; hooks + evidence trailers + chaining
+> skills. 64/64 tests pass. Ready to commit + push + adopter re-install.)
 
 ---
 
 ## One-line state
 
-Engine v0.9.1 committed locally (`3b43e03`), **unpushed**. Contains
-all 12 P0 items from the 4-track audit + `docs/IMPROVEMENT_PLAN.md`
-as the new active roadmap. 52/52 tests pass. Adopters (8CStudio,
-Origyn) still on v0.9.0 until pushed + synced.
+Engine v0.10.0 in the working tree — **uncommitted**. Six P1
+enforcement items shipped: Claude Code hooks (`hooks/hooks.json`),
+test-run/secrets-scan/deps-audit pre-commit hooks, evidence-backed
+trailers, hooks wired by default in `pe install`, and
+`/new-feature` + `/pre-commit` + `/retro` chaining commands. 64/64
+tests pass (9 sync + 10 install-reconcile + 33 orchestrator + 12
+hooks). Adopters (8CStudio, Origyn) still on v0.9.1 symlink target.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Push:** `git push origin master` — publishes `3b43e03` (v0.9.1)
-   + this HANDOFF refresh.
-2. **Propagate to adopters:**
+1. **Commit + push v0.10.0:**
 
    ```bash
-   pe sync --dry-run /Users/sanishsasikumar/Documents/8Colors/8CStudio
-   pe sync --dry-run /Users/sanishsasikumar/Documents/Origyn
-   # then non-dry-run per HANDOFF Common operations
+   git add -A
+   git commit -m "feat(0.10.0): P1 enforcement bundle — hooks (Claude Code + git) + evidence trailers + chaining commands (see docs/IMPROVEMENT_PLAN.md P1)"
+   git push origin master
    ```
 
-   Expect "0 changes" — install.sh changes propagate on the next
-   `pe install` at the adopter, not via sync (documented gotcha).
-   `pe doctor` should still report healthy on v0.9.1.
+2. **Re-install into adopters (NOT just `pe sync`).** Hooks wiring
+   changes ride in `install.sh`; `pe sync` alone won't merge the new
+   `.claude/settings.json` hooks section or render
+   `.pre-commit-config.yaml`. Same "install-time engine improvements
+   do NOT propagate via `pe sync`" gotcha as v0.9.0.
 
-3. **Read `docs/IMPROVEMENT_PLAN.md`** — 4-track audit consolidated
-   into ~45 items P0→P4 with file:line + severity + effort + fix.
-   This is the canonical roadmap now (supersedes BACKLOG.md's
-   carry-forward section).
+   ```bash
+   pe install /Users/sanishsasikumar/Documents/8Colors/8CStudio
+   pe install /Users/sanishsasikumar/Documents/Origyn
+   ```
 
-4. **Next active work:** P1 — deterministic enforcement of headline
-   promises (see three-findings section below). Do NOT start P3.x
-   (domain layer, native plugin) before P1 is in.
+   Expect `.claude/settings.json` merged (idempotent — second install
+   dedupes) + `.pre-commit-config.yaml` created if absent + `pre-commit
+   install` run if the binary is on PATH.
 
-## What the P0 bundle fixes (12 items — condensed)
+3. **Verify a smoke commit path.** In one adopter:
+
+   - Stage a trivial change touching `src/…`.
+   - Run the code-reviewer agent.
+   - `pe gate parse --record .claude/gates/last-gate.json --diff-sha $(git diff --cached | git hash-object --stdin) <transcript>`
+   - `git commit` — should be allowed by the PreToolUse hook. Try
+     without the record — should be blocked with actionable message.
+
+4. **Next active work:** P2 — agent portability & consistency bundle
+   (11 items). Highest-leverage single item: **P2.1 —
+   de-project-ify `database-reviewer`** (currently 38KB, 100%
+   8CStudio-specific; produces false CRITICALs in any other repo).
+   Then P2.3 (extract gate-envelope contract to shared
+   `_gate-contract.md`), P2.4 (rewrite `tdd-guide` as executable
+   state machine), P2.5 (fix broken/unportable agents batch).
+
+## What the v0.10.0 P1 bundle ships (6 items — condensed)
+
+| Item | What landed |
+|---|---|
+| **P1.1 Claude Code hooks** | `hooks/hooks.json` + three scripts: `pre-commit-envelope-check.sh` (blocks `git commit` unless PASS/WARN envelope matches staged diff — the deterministic backstop for "code review every commit"), `post-edit-lint.sh` (advisory linter for Python/JS/shell/JSON/YAML), `stop-uncommitted-reminder.sh`. Bypasses via `PE_SKIP_COMMIT_GATE=1` etc. — always logged. |
+| **P1.2 test-run + coverage** | `hooks/test-run.sh` detects pytest/npm test/go test/cargo test, runs scoped to changed packages. `ENGINE_COVERAGE_MIN` opt-in floor. `ENGINE_TEST_CMD` override for exotic stacks. |
+| **P1.3 secrets + deps audit** | `hooks/secrets-scan.sh` (gitleaks → detect-secrets → trufflehog) + `hooks/deps-audit.sh` (pip-audit / npm audit / govulncheck / cargo audit). Fires only when a dep manifest is staged. Plus `templates/ci/engine-quality.yml.template` — second CI workflow: lint + typecheck + tests + coverage + secrets + deps for python/node/go. |
+| **P1.4 wire by default** | `pe install` merges `hooks.json` into `.claude/settings.json` (idempotent) + renders `.pre-commit-config.yaml` + runs `pre-commit install`. Opt-out via `--no-claude-hooks` / `--no-git-hooks`. Yaml template default flipped: `pre_commit_enabled: true` + new `claude_hooks_enabled: true`. |
+| **P1.5 evidence trailers** | `code-review-trailer.sh` rewritten: commits touching `src/`, `app/`, `modules/`, `lib/`, `scripts/`, `hooks/` require `Code-reviewed: <envelope-sha>` that resolves to a PASS/WARN record in `.claude/gates/`. Legacy `Code-reviewed: code-reviewer` self-attest allowed only on non-behavior paths. New `security-review-trailer.sh` fires on auth/session/payment/webhook paths. |
+| **P1.6 chaining skills** | `/new-feature <topic>` walks brainstorm → brief → architect → plan → tdd with per-stage artifact checks + refusal to skip. `/pre-commit` runs the right gates for staged paths, records envelopes, constructs commit with verified trailers. `/retro` (previously referenced by retrospective-agent but missing) ships. |
+
+`pe gate parse` gained `--record <path>` + `--diff-sha <sha>` — writes
+an evidence sidecar on PASS/WARN. `.claude/gates/last-gate.json` is the
+canonical location the PreToolUse hook checks.
+
+## What the P0 bundle (v0.9.1) fixed (12 items — condensed)
 
 | Fix | Why it matters |
 |---|---|
@@ -276,7 +310,28 @@ pe sync /Users/sanishsasikumar/Documents/8Colors/8CStudio    # 8CStudio
 pe sync /Users/sanishsasikumar/Documents/Origyn              # Origyn
 ```
 
-## What shipped in the last session (2026-07-02)
+## What shipped in the last session (2026-07-02 P1)
+
+Six P1 items — deterministic enforcement layer for the engine's
+headline promises. All 64 tests pass. Uncommitted at session end;
+resume points at commit + push + adopter re-install.
+
+| Change | What |
+|---|---|
+| `hooks/hooks.json` + 3 scripts | Claude Code PreToolUse/PostToolUse/Stop bundle |
+| `hooks/test-run.sh` | Stack-detecting scoped test runner (pytest/npm/go/cargo) |
+| `hooks/secrets-scan.sh`, `hooks/deps-audit.sh` | Pre-commit secrets + vulnerability audit |
+| `hooks/code-review-trailer.sh` (rewrite) | Evidence-backed trailer — behavior paths require an envelope sha |
+| `hooks/security-review-trailer.sh` | Auth/session/payment paths require Security-reviewed |
+| `templates/ci/engine-quality.yml.template` | Second CI workflow — lint + typecheck + tests + coverage + secrets + deps |
+| `templates/process-engine.yaml.template` | `pre_commit_enabled: true` + `claude_hooks_enabled: true` defaults |
+| `scripts/pe_gate.py` | `--record <path> --diff-sha <sha>` writes evidence sidecar on PASS/WARN |
+| `scripts/install.sh` + `scripts/_hooks.sh` | Merges hooks into `.claude/settings.json` + renders `.pre-commit-config.yaml` + runs `pre-commit install`; `--no-claude-hooks` / `--no-git-hooks` opt-out |
+| `commands/new-feature.md`, `commands/pre-commit.md`, `commands/retro.md` | Chaining skills — brief-before-code + gated commit + missing `/retro` |
+| `tests/test_hooks.sh` | 12-assertion smoke test |
+| `VERSION` 0.9.1 → 0.10.0, `plugin.json`, `README.md` badge, `CHANGELOG.md` | Version bookkeeping |
+
+## What shipped in the session before (2026-07-02 P0)
 
 3 engine commits + 2 config edits at Origyn (yaml placeholders +
 Serena MCP) + 1 user-global MCP fix (Semgrep Python 3.12 pin):
@@ -290,7 +345,7 @@ Serena MCP) + 1 user-global MCP fix (Semgrep Python 3.12 pin):
 | `.mcp.json` | Origyn | added Serena MCP scoped to Origyn (was missing) |
 | `~/.claude.json` | user-global | Semgrep MCP re-registered with `uvx --python 3.12` — fixes `✗ Failed to connect` under Python 3.14 |
 
-## What shipped in the session before (2026-06-30)
+## What shipped 2 sessions before (2026-06-30)
 
 Retained for context — 10 commits on the engine + 2 on 8CStudio:
 

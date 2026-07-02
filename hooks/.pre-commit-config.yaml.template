@@ -43,6 +43,34 @@ repos:
         language: script
         stages: [commit-msg]
 
+      - id: security-review-trailer
+        name: Security-reviewed trailer required on auth/payment paths
+        entry: hooks/security-review-trailer.sh
+        language: script
+        stages: [commit-msg]
+
+      # Pre-commit (evidence-backed gates — v0.10.0)
+      - id: test-run
+        name: Run scoped tests before commit
+        entry: hooks/test-run.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: secrets-scan
+        name: Scan staged files for secrets
+        entry: hooks/secrets-scan.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: deps-audit
+        name: Audit dependency manifests for known vulnerabilities
+        entry: hooks/deps-audit.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
       # Pre-push (push-time gates)
       - id: stacking-rule-check
         name: Block foundational changes inside a slot-stack
@@ -53,7 +81,15 @@ repos:
 
 # Tuning env vars (set before running git commit/push):
 #   ENGINE_REVIEW_THRESHOLD=5      # min files before code-review trailer required
+#   ENGINE_REVIEW_BEHAVIOR_PATHS=... # regex of behavior paths that trigger review at 1 file
 #   ENGINE_STRUCTURAL_FILES=...    # regex of paths counted as "structural"
+#   ENGINE_SECURITY_PATHS=...      # regex of paths requiring Security-reviewed trailer
 #   ENGINE_UI_FILES=...            # regex of paths counted as "UI"
 #   ENGINE_CLAUDE_MD_LIMIT=40000   # CLAUDE.md warning threshold
 #   ENGINE_FOUNDATIONAL_REGEX=...  # regex of paths counted as "foundational"
+#   ENGINE_TEST_CMD=...            # explicit test command override (skips auto-detect)
+#   ENGINE_TEST_FULL=1             # run full test suite instead of scoped
+#   ENGINE_COVERAGE_MIN=80         # coverage-delta floor (pytest-cov / go test -cover)
+#   ENGINE_SKIP_TESTS=1            # bypass test-run for this commit
+#   ENGINE_SKIP_SECRETS=1          # bypass secrets-scan
+#   ENGINE_SKIP_DEPS_AUDIT=1       # bypass deps-audit

@@ -20,6 +20,16 @@ ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=./_subset.sh
 . "$ENGINE_DIR/scripts/_subset.sh"
 
+# Source hook-install helpers (P1.4).
+# shellcheck source=./_hooks.sh
+. "$ENGINE_DIR/scripts/_hooks.sh"
+
+# ─── Arg parsing hook flags (P1.4) ────────────────────────────────────────
+# --no-claude-hooks — skip the .claude/settings.json merge
+# --no-git-hooks    — skip .pre-commit-config.yaml + pre-commit install
+NO_CLAUDE_HOOKS=0
+NO_GIT_HOOKS=0
+
 # ─── Arg parsing ───────────────────────────────────────────────────────────
 # Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project
 SUBSET=""
@@ -28,12 +38,14 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --subset)       SUBSET="${2:-}"; shift 2 ;;
     --subset=*)     SUBSET="${1#--subset=}"; shift ;;
+    --no-claude-hooks) NO_CLAUDE_HOOKS=1; shift ;;
+    --no-git-hooks)    NO_GIT_HOOKS=1; shift ;;
     -h|--help)
-      echo "Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project"
+      echo "Usage: ./install.sh [--subset gate-only|core|full] [--no-claude-hooks] [--no-git-hooks] /path/to/target-project"
       exit 0 ;;
     --*)
       echo "Unknown flag: $1" >&2
-      echo "Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project" >&2
+      echo "Usage: ./install.sh [--subset ...] [--no-claude-hooks] [--no-git-hooks] /path/to/target-project" >&2
       exit 2 ;;
     *)
       if [ -z "$TARGET" ]; then TARGET="$1"; else
@@ -237,6 +249,36 @@ fi
 
 # Copy docs (project may edit — these are reference)
 cp -r "$ENGINE_DIR"/docs/* "$TARGET/docs/process-engine/"
+
+# ─── Hook wiring (P1.4) ────────────────────────────────────────────────
+# Only fire if the yaml opts in AND the flag doesn't override off.
+# yaml_bool_get defaults to false when the yaml is absent — first-run
+# projects still get hooks because the template ships with them set to
+# true; existing installs whose yaml pre-dates v0.10.0 must add the block
+# to opt in, which is the correct migration behavior.
+YAML_FILE="$TARGET/.process-engine.yaml"
+WANT_CLAUDE_HOOKS=$(yaml_bool_get claude_hooks_enabled "$YAML_FILE")
+WANT_GIT_HOOKS=$(yaml_bool_get pre_commit_enabled "$YAML_FILE")
+
+# Fresh installs (yaml just copied from template above) → both true.
+# Legacy yamls (silently upgrading through re-install) stay off unless
+# the operator flips them explicitly. Log both paths.
+if [ "${CREATED_CONFIG:-0}" = "1" ]; then
+    WANT_CLAUDE_HOOKS="true"
+    WANT_GIT_HOOKS="true"
+fi
+
+if [ "$NO_CLAUDE_HOOKS" = "0" ] && [ "$WANT_CLAUDE_HOOKS" = "true" ]; then
+    install_claude_hooks "$ENGINE_DIR" "$TARGET"
+elif [ "$NO_CLAUDE_HOOKS" = "1" ]; then
+    echo "  ⚠ Claude hooks: --no-claude-hooks — skipped"
+fi
+
+if [ "$NO_GIT_HOOKS" = "0" ] && [ "$WANT_GIT_HOOKS" = "true" ]; then
+    install_git_hooks "$ENGINE_DIR" "$TARGET"
+elif [ "$NO_GIT_HOOKS" = "1" ]; then
+    echo "  ⚠ Git hooks: --no-git-hooks — skipped"
+fi
 
 echo "✓ 8colors-process-engine v$(cat "$ENGINE_DIR/VERSION") installed to $TARGET"
 echo "  Subset:    $SUBSET (${#INSTALLED_AGENTS[@]} agents installed, ${#SKIPPED_AGENTS[@]} skipped)"

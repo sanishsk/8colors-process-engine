@@ -1,0 +1,35 @@
+{
+  "$comment": "8colors-process-engine Claude Code hooks (P1.1). Merged into <project>/.claude/settings.json by 'pe install' (v0.10.0+). Each command receives the tool event JSON on stdin and communicates via exit code + JSON on stdout. Paths are placeholders — pe install rewrites {{ENGINE_DIR}} to the resolved engine path at merge time.",
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/pre-commit-envelope-check.sh"
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/post-edit-lint.sh"
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/stop-uncommitted-reminder.sh"
+        }
+      ]
+    }
+  ]
+}

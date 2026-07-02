@@ -159,7 +159,12 @@
 
 ---
 
-## P1 — Enforcement: make the headline promises real
+## P1 — Enforcement: make the headline promises real — ✅ SHIPPED v0.10.0 (2026-07-02)
+
+All 6 items landed. `hooks/hooks.json` exists, `pe install` wires
+both Claude Code hooks + git-side pre-commit by default, evidence
+replaces self-attest on behavior paths, chaining skills ship. 12
+new tests in `tests/test_hooks.sh`.
 
 Architectural fact found by the audit: **all shipped hooks are git
 hooks; there is no `hooks/hooks.json` (Claude Code hooks) anywhere.**
@@ -177,7 +182,7 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
 | Envelope validity | `pe gate parse` ✓ (best engineering in repo) — but consumers are shadow | MEDIUM |
 | Stacking rule | pre-push hook ✓ genuinely deterministic (after P0.3 fix) | OK |
 
-### P1.1 Ship Claude Code hooks (`hooks/hooks.json`)
+### P1.1 Ship Claude Code hooks (`hooks/hooks.json`) — ✅ SHIPPED v0.10.0
 - **Effort:** M
 - (a) **PreToolUse on Bash matching `git commit`** → block unless a fresh
   validated code-reviewer envelope (PASS/WARN) exists for the staged
@@ -187,29 +192,29 @@ enforcement — "mandatory code review" and TDD are prompt-hope.
   if uncommitted changes. This closes the self-attestation hole from the
   deterministic side.
 
-### P1.2 Test-run + coverage pre-commit hook (the only way TDD becomes real)
+### P1.2 Test-run + coverage pre-commit hook (the only way TDD becomes real) — ✅ SHIPPED v0.10.0
 - **Effort:** M — detect runner (pytest / npm test / go test), run scoped
   to changed packages, optional coverage-delta floor. Add to
   `.pre-commit-config.yaml.template` and the CI template.
 
-### P1.3 Secrets scanning + dependency audit
+### P1.3 Secrets scanning + dependency audit — ✅ SHIPPED v0.10.0
 - **Effort:** S — add gitleaks (or detect-secrets) + `pip-audit`/`npm audit`
   to the pre-commit template and a second CI template (lint + typecheck +
   tests + coverage floor + secret scan). The engine promises "fewer
   vulnerabilities" and ships no scanner.
 
-### P1.4 Wire git hooks by default
+### P1.4 Wire git hooks by default — ✅ SHIPPED v0.10.0
 - **Effort:** S — `pe install` runs `pre-commit install` (opt-out flag);
   flip template default `pre_commit_enabled: true`.
 
-### P1.5 Upgrade trailers from self-attestation to evidence
+### P1.5 Upgrade trailers from self-attestation to evidence — ✅ SHIPPED v0.10.0
 - **Effort:** M — `code-review-trailer.sh` requires
   `Code-reviewed: <envelope-sha>` verifiable against `.claude/gates/`;
   drop the ≥5-file threshold to 1 for behavior-changing paths
   (src/, app/, modules/). Path-based security trailer: commits touching
   `auth|login|oauth|session|payment|webhook` require Security-reviewed.
 
-### P1.6 `/new-feature` + `/pre-commit` chaining skills
+### P1.6 `/new-feature` + `/pre-commit` chaining skills — ✅ SHIPPED v0.10.0
 - **Effort:** M — `/new-feature` walks brainstorm→brief→architect→plan→tdd,
   checks each artifact exists before advancing, refuses to skip stages
   (strongest brief-before-code enforcement available without hooks).

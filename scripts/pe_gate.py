@@ -2,7 +2,8 @@
 """
 pe_gate.py — gate envelope parser + validator.
 
-E1, 2026-06-24. Stdlib only. Invoked via `pe gate parse [--bare] <file>`.
+E1, 2026-06-24. Stdlib only. Invoked via
+`pe gate parse [--bare] [--record <path>] [--diff-sha <sha>] <file>`.
 
 DEFAULT MODE — TRANSCRIPT (E1.d hardening, 2026-06-25):
 Reads a transcript file containing BOTH:
@@ -319,11 +320,30 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         return 0
     bare = False
-    if args and args[0] == "--bare":
-        bare = True
-        args.pop(0)
+    record_path: Path | None = None
+    diff_sha: str | None = None
+    while args and args[0].startswith("--"):
+        flag = args.pop(0)
+        if flag == "--bare":
+            bare = True
+        elif flag == "--record":
+            if not args:
+                print("ERROR: --record requires a path argument", file=sys.stderr)
+                return EXIT_PARSE_ERROR
+            record_path = Path(args.pop(0))
+        elif flag == "--diff-sha":
+            if not args:
+                print("ERROR: --diff-sha requires a value", file=sys.stderr)
+                return EXIT_PARSE_ERROR
+            diff_sha = args.pop(0)
+        else:
+            print(f"ERROR: unknown flag: {flag}", file=sys.stderr)
+            return EXIT_PARSE_ERROR
     if not args:
-        print("usage: pe gate parse [--bare] <file>", file=sys.stderr)
+        print(
+            "usage: pe gate parse [--bare] [--record <path>] [--diff-sha <sha>] <file>",
+            file=sys.stderr,
+        )
         return EXIT_PARSE_ERROR
 
     target = Path(args[0])
@@ -396,7 +416,26 @@ def main(argv: list[str]) -> int:
             print(f"  - {err_msg}", file=sys.stderr)
         return EXIT_PARSE_ERROR
 
-    return classify_exit(envelope)
+    # --record: on PASS/WARN, write evidence sidecar for pre-commit hook
+    # to verify. Never write on FAIL — a failed envelope is not proof of
+    # review. Atomic tempfile+replace so concurrent gates never see a
+    # torn write.
+    exit_code = classify_exit(envelope)
+    if record_path is not None and exit_code in (EXIT_PASS, EXIT_WARN):
+        record = {
+            "envelope": envelope,
+            "verdict": envelope.get("verdict"),
+            "gate_name": envelope.get("gate_name"),
+            "diff_sha": diff_sha,
+            "recorded_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "source": str(target),
+        }
+        record_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = record_path.with_suffix(record_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(record_path)
+
+    return exit_code
 
 
 if __name__ == "__main__":

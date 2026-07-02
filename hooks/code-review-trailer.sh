@@ -1,55 +1,152 @@
 #!/usr/bin/env bash
-# code-review-trailer — commit-msg hook that blocks commits ≥THRESHOLD files
-# without one of these trailers:
+# code-review-trailer — commit-msg hook that requires an evidence-backed
+# code-review trailer on any commit that touches behavior code, and on
+# any multi-file commit.
 #
-#   Code-reviewed: <agent-name>
-#   Code-skip-reason: <short reason>
+# Trailer contract (v0.10.0, P1.5 — evidence not self-attestation):
 #
-# Defaults to threshold=5. Override via the env var ENGINE_REVIEW_THRESHOLD.
+#   Code-reviewed: <envelope-sha>       ← preferred; must resolve to a
+#                                          record in .claude/gates/
+#   Code-reviewed: code-reviewer        ← legacy self-attest — allowed
+#                                          only for BEHAVIOR-EXEMPT paths
+#   Code-skip-reason: <short reason>    ← explicit skip; must be non-empty
 #
-# Install via .pre-commit-config.yaml:
+# When set, `<envelope-sha>` is expected to name a file at
+# `.claude/gates/<sha>.json` OR match `.claude/gates/last-gate.json`'s
+# top-level "sha256" field. The hook verifies existence and PASS/WARN.
 #
-#   - repo: local
-#     hooks:
-#       - id: code-review-trailer
-#         name: Code-reviewed trailer required on multi-file commits
-#         entry: hooks/code-review-trailer.sh
-#         language: script
-#         stages: [commit-msg]
+# Thresholds (env vars):
+#   ENGINE_REVIEW_THRESHOLD=5            multi-file commit floor
+#   ENGINE_REVIEW_BEHAVIOR_PATHS=<re>    always-require regex (default:
+#                                        ^(src|app|modules|lib|scripts|hooks)/)
 #
-# Origin: 8CStudio Wave 1H/1M pattern — code-reviewer agent CRITICAL/HIGH
-# blocks made mandatory, with explicit skip-reason logged when skipped.
+# Bypass: git commit --no-verify (logged in operator's session).
 
 set -euo pipefail
 
 MSG_FILE="${1:?Usage: $0 <commit-msg-file>}"
 THRESHOLD="${ENGINE_REVIEW_THRESHOLD:-5}"
+BEHAVIOR_RE="${ENGINE_REVIEW_BEHAVIOR_PATHS:-^(src|app|modules|lib|scripts|hooks)/}"
 
-# Count files staged for this commit
-NUM_FILES=$(git diff --cached --name-only | wc -l | tr -d ' ')
+STAGED=$(git diff --cached --name-only)
+NUM_FILES=$(echo "$STAGED" | grep -c . || echo 0)
 
-if [ "$NUM_FILES" -lt "$THRESHOLD" ]; then
+BEHAVIOR_HITS=$(echo "$STAGED" | grep -E "$BEHAVIOR_RE" || true)
+HAS_BEHAVIOR="0"
+if [ -n "$BEHAVIOR_HITS" ]; then
+    HAS_BEHAVIOR="1"
+fi
+
+# Fast path: no behavior code AND under threshold → no trailer needed.
+if [ "$HAS_BEHAVIOR" = "0" ] && [ "$NUM_FILES" -lt "$THRESHOLD" ]; then
     exit 0
 fi
 
 MSG=$(cat "$MSG_FILE")
-if echo "$MSG" | grep -qE '^(Code-reviewed:|Code-skip-reason:)'; then
+
+# Read the trailer value (strip 'Code-reviewed:' prefix, trim whitespace).
+TRAILER=$(echo "$MSG" | grep -E '^Code-reviewed:' | head -1 | sed -E 's/^Code-reviewed:[[:space:]]*//' | tr -d '\r' | sed -E 's/[[:space:]]+$//')
+SKIP=$(echo "$MSG" | grep -E '^Code-skip-reason:' | head -1 | sed -E 's/^Code-skip-reason:[[:space:]]*//' | tr -d '\r')
+
+if [ -n "$SKIP" ]; then
     exit 0
 fi
 
-cat >&2 <<EOF
-✗ code-review-trailer: commit touches $NUM_FILES files (≥$THRESHOLD threshold)
-  but lacks a code-review trailer.
+if [ -z "$TRAILER" ]; then
+    cat >&2 <<EOF
+✗ code-review-trailer: commit needs a Code-reviewed trailer.
 
-Add ONE of these as a trailer in your commit message:
+Reason: $([ "$HAS_BEHAVIOR" = "1" ] && echo "touches behavior code ($BEHAVIOR_HITS | tr '\n' ',')" || echo "touches $NUM_FILES files (≥$THRESHOLD)")
 
-  Code-reviewed: code-reviewer
-  Code-skip-reason: <short reason, e.g. "single-file refactor, no behavior change">
+Add ONE of these:
 
-The code-reviewer agent is your gate against CRITICAL / HIGH findings
-landing in master. Skipping is allowed but must be explicit.
+  Code-reviewed: <envelope-sha>       # sha of PASS/WARN record in .claude/gates/
+  Code-reviewed: code-reviewer        # legacy self-attest (non-behavior only)
+  Code-skip-reason: <short reason>    # explicit skip
 
-To bypass this hook for a hotfix: git commit --no-verify
-(but log the bypass in your session log).
+Recommended: run the code-reviewer agent, then:
+  pe gate parse --record .claude/gates/last-gate.json \\
+                --diff-sha \$(git diff --cached | git hash-object --stdin) \\
+                <transcript>
+  sha=\$(shasum -a 256 .claude/gates/last-gate.json | cut -c1-12)
+  # then in the commit message: Code-reviewed: \$sha
+
+To bypass for a hotfix: git commit --no-verify
 EOF
-exit 1
+    exit 1
+fi
+
+# Verify evidence-backed trailer. Two accepted forms:
+#   1) TRAILER == "code-reviewer" — legacy self-attest; ONLY allowed when
+#      HAS_BEHAVIOR=0. On behavior paths we insist on evidence.
+#   2) TRAILER == <sha> (>=8 hex chars) — must resolve.
+if [ "$TRAILER" = "code-reviewer" ]; then
+    if [ "$HAS_BEHAVIOR" = "1" ]; then
+        cat >&2 <<EOF
+✗ code-review-trailer: 'Code-reviewed: code-reviewer' is self-attestation.
+  This commit touches behavior code (paths matching $BEHAVIOR_RE) — evidence required.
+
+Replace with an envelope sha:
+  pe gate parse --record .claude/gates/last-gate.json \\
+                --diff-sha \$(git diff --cached | git hash-object --stdin) \\
+                <transcript>
+  sha=\$(shasum -a 256 .claude/gates/last-gate.json | cut -c1-12)
+  # Code-reviewed: \$sha
+EOF
+        exit 1
+    fi
+    # Non-behavior + self-attest allowed.
+    exit 0
+fi
+
+# SHA form: >= 8 hex chars. Look up the record.
+if ! echo "$TRAILER" | grep -qE '^[0-9a-fA-F]{8,64}$'; then
+    echo "✗ code-review-trailer: 'Code-reviewed: $TRAILER' is not an envelope sha" >&2
+    echo "  Expected hex sha (8-64 chars). Run 'shasum -a 256 .claude/gates/last-gate.json | cut -c1-12' for one." >&2
+    exit 1
+fi
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+LAST_GATE="$REPO_ROOT/.claude/gates/last-gate.json"
+RECORD=""
+
+if [ -f "$LAST_GATE" ]; then
+    # Match against the sha of the last-gate.json.
+    LAST_SHA=$(shasum -a 256 "$LAST_GATE" 2>/dev/null | awk '{print $1}')
+    if [ "${LAST_SHA:0:${#TRAILER}}" = "$TRAILER" ]; then
+        RECORD="$LAST_GATE"
+    fi
+fi
+
+# Fallback: named record file.
+if [ -z "$RECORD" ] && [ -f "$REPO_ROOT/.claude/gates/$TRAILER.json" ]; then
+    RECORD="$REPO_ROOT/.claude/gates/$TRAILER.json"
+fi
+
+if [ -z "$RECORD" ]; then
+    cat >&2 <<EOF
+✗ code-review-trailer: Code-reviewed sha '$TRAILER' does not resolve.
+  Looked for:
+    $LAST_GATE (sha256 prefix)
+    $REPO_ROOT/.claude/gates/$TRAILER.json
+  Regenerate the record with 'pe gate parse --record ...' after running the code-reviewer.
+EOF
+    exit 1
+fi
+
+VERDICT=$("${PE_PYTHON:-python3}" -c '
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    print(data.get("verdict",""))
+except Exception:
+    print("PARSE_ERROR")
+' "$RECORD")
+
+case "$VERDICT" in
+    PASS|WARN)
+        exit 0 ;;
+    *)
+        echo "✗ code-review-trailer: envelope at $RECORD has verdict '$VERDICT' — not PASS/WARN" >&2
+        exit 1 ;;
+esac

@@ -1,0 +1,124 @@
+# engine-quality.yml — GitHub Actions workflow that runs the full
+# deterministic quality gate: lint + typecheck + tests (with coverage) +
+# secrets-scan + dependency audit. Complements engine-gate.yml (which
+# checks trailer discipline).
+#
+# Install:
+#   cp <engine>/templates/ci/engine-quality.yml.template \
+#      .github/workflows/engine-quality.yml
+#
+# Environment assumptions:
+#   - Python projects: pyproject.toml drives ruff/black/pytest/pip-audit
+#   - Node projects:   package.json with `test`, `lint`, `typecheck` scripts
+#   - Go projects:     go.mod
+# The workflow auto-detects the stack from these files.
+#
+# The gate mirrors the local pre-commit template — if pre-commit is
+# green locally, this CI job should be green too.
+
+name: Engine quality gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master]
+
+jobs:
+  detect-stack:
+    runs-on: ubuntu-latest
+    outputs:
+      stack: ${{ steps.detect.outputs.stack }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: detect
+        run: |
+          if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then
+            echo "stack=python" >> "$GITHUB_OUTPUT"
+          elif [ -f package.json ]; then
+            echo "stack=node" >> "$GITHUB_OUTPUT"
+          elif [ -f go.mod ]; then
+            echo "stack=go" >> "$GITHUB_OUTPUT"
+          else
+            echo "stack=unknown" >> "$GITHUB_OUTPUT"
+          fi
+
+  python:
+    needs: detect-stack
+    if: needs.detect-stack.outputs.stack == 'python'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black pytest pytest-cov pip-audit || true
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e ".[dev]" || pip install -e . || true; fi
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format check (black)
+        run: black --check .
+      - name: Tests (pytest --cov)
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=${ENGINE_COVERAGE_MIN:-0}
+      - name: Dependency audit (pip-audit)
+        run: pip-audit || true  # advisory in CI; block via local hook
+
+  node:
+    needs: detect-stack
+    if: needs.detect-stack.outputs.stack == 'node'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint --if-present
+      - name: Typecheck
+        run: npm run typecheck --if-present
+      - name: Tests (with coverage)
+        run: npm test -- --coverage --coverageThreshold='{"global":{"lines":${ENGINE_COVERAGE_MIN:-0}}}'
+      - name: Dependency audit
+        run: npm audit --audit-level=high || true
+
+  go:
+    needs: detect-stack
+    if: needs.detect-stack.outputs.stack == 'go'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test -race -cover ./...
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || true
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

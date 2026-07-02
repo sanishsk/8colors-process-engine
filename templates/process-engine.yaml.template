@@ -74,11 +74,20 @@ rag:
   # Optional model override. Provider-specific default if unset.
   # model: BAAI/bge-small-en-v1.5
 
-# Pre-commit hook integration (optional)
+# Hook wiring (v0.10.0 default: enabled — the promises are only real
+# when hooks are installed)
 hooks:
-  # If your project uses pre-commit (https://pre-commit.com/), the engine
-  # can append starter hook entries to .pre-commit-config.yaml.
-  pre_commit_enabled: false
+  # Git-side pre-commit framework. If true, `pe install` renders
+  # .pre-commit-config.yaml (unless one already exists) and runs
+  # `pre-commit install --hook-type pre-commit --hook-type commit-msg
+  #                    --hook-type pre-push` when the `pre-commit` binary
+  # is on PATH.
+  pre_commit_enabled: true
+
+  # Claude Code hooks (PreToolUse/PostToolUse/Stop). If true, `pe install`
+  # merges hooks/hooks.json into <project>/.claude/settings.json. Set to
+  # false in projects where per-turn hooks would be too noisy (rare).
+  claude_hooks_enabled: true
 
 # Project-specific session.yaml (start-session / end-session customization)
 # Lives at <project>/.claude/session.yaml — engine doesn't manage it,

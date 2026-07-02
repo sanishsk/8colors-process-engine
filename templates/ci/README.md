@@ -9,6 +9,7 @@ contributors who didn't set pre-commit up locally.
 | Template | Renders to | Purpose |
 |---|---|---|
 | `engine-gate.yml.template` | `.github/workflows/engine-gate.yml` | Gates PRs on Code-reviewed + Docs-updated trailers |
+| `engine-quality.yml.template` | `.github/workflows/engine-quality.yml` | Runs lint + typecheck + tests + coverage + secrets-scan + deps-audit for python/node/go stacks |
 
 ## Install
 

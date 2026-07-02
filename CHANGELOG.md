@@ -7,6 +7,89 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.10.0] — 2026-07-02
+
+> P1 enforcement bundle: the headline promises are now *deterministically*
+> enforced instead of prompt-hope. Six items from
+> `docs/IMPROVEMENT_PLAN.md` P1 land together:
+>
+> All 64 tests pass (9 sync + 10 install-reconcile + 33 orchestrator +
+> 12 hooks).
+
+### Added
+
+- **Claude Code hooks (`hooks/hooks.json`)** — three deterministic
+  gates fire from inside Claude Code:
+  - `PreToolUse` on `Bash git commit` → blocks unless a fresh
+    code-reviewer envelope (PASS/WARN) exists at
+    `.claude/gates/last-gate.json` AND its recorded `diff_sha` matches
+    the staged diff. Bypass via `PE_SKIP_COMMIT_GATE=1` (logged).
+  - `PostToolUse` on `Edit`/`Write`/`MultiEdit` → best-effort lints
+    the touched file (ruff/black for Python, eslint for JS/TS,
+    shellcheck for shell, JSON/YAML validity). Advisory only.
+  - `Stop` → reminds `/end-session` when uncommitted work exists.
+- `hooks/pre-commit-envelope-check.sh`, `hooks/post-edit-lint.sh`,
+  `hooks/stop-uncommitted-reminder.sh` — the three hook scripts.
+- `hooks/test-run.sh` — pre-commit hook that detects the test runner
+  (pytest / npm test / go test / cargo test) and runs it scoped to
+  the packages changed by staged files. Optional coverage floor via
+  `ENGINE_COVERAGE_MIN`. Override with `ENGINE_TEST_CMD`.
+- `hooks/secrets-scan.sh` — pre-commit hook that runs
+  gitleaks/detect-secrets/trufflehog (first available) on staged files.
+- `hooks/deps-audit.sh` — pre-commit hook that runs
+  pip-audit/npm audit/govulncheck/cargo audit when a dependency
+  manifest is staged.
+- `hooks/security-review-trailer.sh` — commit-msg hook that requires
+  `Security-reviewed: <envelope-sha>` on commits touching
+  auth/session/payment/webhook paths.
+- `templates/ci/engine-quality.yml.template` — second GitHub Actions
+  workflow: lint + typecheck + tests + coverage + secrets-scan +
+  deps-audit for Python/Node/Go stacks.
+- `pe gate parse --record <path> --diff-sha <sha>` — writes an
+  evidence sidecar for PASS/WARN envelopes so the PreToolUse hook can
+  verify a fresh review exists for the currently-staged diff.
+- `commands/new-feature.md` — `/new-feature <topic>` chains
+  brainstorm → brief → architect → plan → tdd, verifying each artifact
+  before advancing. The strongest brief-before-code enforcement short
+  of file-system hooks.
+- `commands/pre-commit.md` — `/pre-commit` runs the right gates for
+  the staged paths, records envelopes, and constructs the commit
+  with verified trailers.
+- `commands/retro.md` — the missing `/retro` command
+  (retrospective-agent referenced it; it didn't exist).
+- `tests/test_hooks.sh` — 12-assertion smoke test for the P1 hook
+  bundle: gate satisfied / stale / missing / FAIL / dry-run / bypass
+  paths; post-edit-lint never fails; stop-reminder respects clean vs
+  dirty repo.
+- `scripts/_hooks.sh` — helper module that merges `hooks/hooks.json`
+  into `<project>/.claude/settings.json` (idempotent) and installs
+  the pre-commit framework hooks.
+
+### Changed
+
+- **`pe install` now wires hooks by default.** Merges Claude Code
+  hooks into `.claude/settings.json` and renders
+  `.pre-commit-config.yaml` from the engine template if absent, then
+  runs `pre-commit install` (all three hook types). New flags
+  `--no-claude-hooks` and `--no-git-hooks` opt out.
+- `templates/process-engine.yaml.template` — `hooks.pre_commit_enabled`
+  flipped to `true`; new `hooks.claude_hooks_enabled: true` key.
+  Fresh installs get hooks; legacy yamls must opt in.
+- **`code-review-trailer.sh` upgraded from self-attest to evidence.**
+  Commits touching behavior code (`src/`, `app/`, `modules/`, `lib/`,
+  `scripts/`, `hooks/` by default) now require an envelope-sha trailer
+  that resolves to a PASS/WARN record in `.claude/gates/`. The legacy
+  `Code-reviewed: code-reviewer` self-attest is preserved for
+  non-behavior commits.
+- `hooks/.pre-commit-config.yaml.template` — adds `test-run`,
+  `secrets-scan`, `deps-audit`, and `security-review-trailer`; new
+  tuning env vars documented.
+- `hooks/README.md` — new Claude Code hooks section, updated catalogue.
+- `templates/ci/README.md` — documents the new
+  `engine-quality.yml.template`.
+
+---
+
 ## [0.9.1] — 2026-07-02
 
 > P0 audit bundle. Consolidates a 4-track audit (shell layer, Python
