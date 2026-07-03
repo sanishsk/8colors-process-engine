@@ -1,0 +1,17 @@
+# .semgrep-allowlist.txt — one semgrep rule-id per line to EXCLUDE from
+# hooks/sast-scan.sh. Blank lines and `# ...` comments are ignored.
+#
+# Move to `.semgrep-allowlist.txt` at your project root when you have
+# at least one confirmed false positive.
+#
+# Rule IDs come from semgrep output:
+#     python.lang.security.audit.exec-use.exec-use
+#     python.django.security.audit.tainted-sql-string.tainted-sql-string
+#
+# Every entry deserves a comment explaining WHY it's allowlisted.
+# A silently-suppressed rule is worse than no rule.
+
+# Example — comment out to activate:
+# python.lang.security.audit.exec-use.exec-use
+#   Reason: internal DSL runner in scripts/dsl_runner.py; input is
+#   never user-controlled; reviewed 2026-07-03 by security-reviewer.

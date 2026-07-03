@@ -7,6 +7,93 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.17.0] — 2026-07-03
+
+> First V2 wave — security core (S1 + S2). Turns the security-reviewer
+> from a Node-centric prompt-checklist into an evidence-based
+> Python-first gate wired to real SAST tools. Operator's #1 priority.
+
+### Added
+
+- **`hooks/sast-scan.sh`** (S1) — Static Application Security Testing
+  pre-commit hook that feature-detects and runs, per language:
+    * Python: `semgrep --config=p/security-audit --config=p/owasp-top-ten` + `bandit -rq`
+    * Go: `gosec` + `semgrep p/security-audit`
+    * JS/TS: `semgrep p/javascript --config=p/owasp-top-ten` + `eslint --plugin security`
+  Missing tool = advisory skip with a fix-it hint (`pipx install
+  semgrep bandit`, `go install github.com/securego/gosec/v2/cmd/
+  gosec@latest`). Blocks the commit only when a tool ran AND found
+  HIGH+ severity issues. `--strict` mode drops the threshold to
+  MEDIUM+. FP allowlist via `.semgrep-allowlist.txt` per project.
+  Extra semgrep rule packs via
+  `sast_gate.semgrep_configs` yaml value (e.g. `"p/flask,p/django"`).
+  Bypass one commit: `PE_SKIP_SAST=1`.
+- **`templates/security/`** — new template dir:
+    * `.semgrep-allowlist.txt.template` — starter allowlist file with
+      comment guidance ("every entry deserves a comment explaining
+      why").
+    * `README.md` — installation ladder + toggling + escalation.
+- **`.process-engine.yaml.template`** — new `sast_gate` section:
+  `enabled` (default true) / `strict` (default false) /
+  `semgrep_configs` / `allowlist`.
+
+### Changed
+
+- **`agents/security-reviewer.md`** (S2) — substantial rewrite:
+  * **De-Node-ified** — Python-first pattern table (SQLAlchemy string
+    interpolation, `subprocess shell=True`, `pickle.loads`,
+    `yaml.load` on untrusted, `flask.render_template_string(user)`,
+    MD5/SHA1 for passwords, `secrets` vs `random`, `verify=False` in
+    `requests`). JS/TS + Go tables preserved as secondary references.
+  * **Analysis Commands** section rewritten around real tools per
+    stack — semgrep/bandit/pip-audit for Python primary; gosec +
+    govulncheck for Go; npm audit + semgrep p/javascript for
+    JS/TS. Points at the pre-commit `hooks/sast-scan.sh` so the
+    agent doesn't duplicate.
+  * **Step 3 Auth depth** — new full section covering session
+    security (HttpOnly/Secure/SameSite/CSRF/fixation-rotation on
+    login), JWT (reject `alg:none`, require `exp`/`aud`/`iss`,
+    `verify_signature=False` = CRITICAL, symmetric key strength),
+    OAuth 2.0/OIDC (exact-match `redirect_uri`, `javascript:`/
+    `data:` block, `state` param, PKCE for public clients, no
+    tokens in URLs), password-reset tokens (≥128-bit entropy, TTL
+    ≤1h, single-use, rate-limited, timing-safe compare, no user-
+    existence leak).
+  * **Step 4 Payment + webhook** — new section covering server-side
+    amount authority (`Decimal` not `float` = CRITICAL), webhook
+    signature verification (constant-time compare), idempotency
+    keys, test/live key separation, atomic refund state machines.
+    Fires on paths matching `payment|webhook|billing|checkout|
+    invoice`.
+  * **Confidence scoring** — new §, findings emit a confidence
+    score 0.0–1.0. `verdict=WARN` for confidence <0.5 (surfaces
+    without blocking); `verdict=FAIL` only when confidence ≥0.5
+    AND severity HIGH+. This is the "critical without drowning"
+    routing the operator asked for.
+  * **OWASP Top 10 (2021)** — updated numbering (A01–A10) and
+    per-category questions rewritten for Python/Flask/Django
+    context.
+- **`hooks/.pre-commit-config.yaml.template`** — wires `sast-scan`
+  as a pre-commit stage. Env-var comment table gains `PE_SKIP_SAST`.
+- **`scripts/install.sh`** — copies `templates/security/*` and the
+  dotfile `.semgrep-allowlist.txt.template` into
+  `<project>/docs/templates/security/` on install.
+- **`plugin.json`** version + **`README.md`** badge → 0.17.0.
+
+### Session pickup (v0.18.0 next)
+
+- **D1** — Design-critic agent + evidence-verified envelope (closes
+  the code-vs-design asymmetry).
+- **D2** — axe-core + Lighthouse CI (the strongest OSS design gates —
+  a11y + perf). Shared wiring with PF3.
+- **PF3** — Lighthouse perf budgets + backend p95 latency assertions.
+
+Then v0.18.x for PF1 (runtime N+1 gate) + PF2 (unbounded-query /
+missing-index static gate). Both share tooling with S1's semgrep +
+the database-reviewer agent.
+
+---
+
 ## [0.16.0] — 2026-07-03
 
 > P7.4 skills stocktake tooling + P7.5 execution-patterns docs.

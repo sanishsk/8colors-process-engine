@@ -61,8 +61,8 @@ agent gates actually catch anything.
 > **tiered enforcement (CRITICAL blocks / HIGH surfaces / MED-LOW advisory) + per-repo allowlist
 > baselines + confidence scoring** — the failure_class routing already supports this.
 
-### S1 Wire real SAST — semgrep as the backbone ⭐ biggest security gap
-- **Severity:** CRITICAL · **Effort:** M · **Model:** Sonnet · **[MISSING]**
+### S1 Wire real SAST — semgrep as the backbone ⭐ biggest security gap — ✅ SHIPPED in v0.17.0 (2026-07-03)
+- **Severity:** CRITICAL · **Effort:** M · **Model:** Sonnet
 - **Files:** `hooks/sast-scan.sh` (new), `hooks/hooks.json`, `hooks/.pre-commit-config.yaml.template`,
   `agents/security-reviewer.md` (Step 1), `agents/code-reviewer.md:159` (already names `bandit -r .`
   but nothing runs it).
@@ -76,8 +76,8 @@ agent gates actually catch anything.
 - **FP control:** ship `.semgrep-allowlist.txt` template (one rule-id per line); soft-warn if
   semgrep absent (`pipx install semgrep`), never hard-block on missing tool.
 
-### S2 De-Node-ify + deepen the security-reviewer (Python-first)
-- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[PARTIAL]**
+### S2 De-Node-ify + deepen the security-reviewer (Python-first) — ✅ SHIPPED in v0.17.0 (2026-07-03)
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet
 - **File:** `agents/security-reviewer.md`.
 - **Fix:** (a) make examples stack-agnostic — Python-first (SQLAlchemy string-interp, `subprocess`
   shell=True, `flask` session config) alongside Node; (b) add the P3.9 depth that never shipped:
@@ -444,6 +444,45 @@ agent gates actually catch anything.
 - **Real-time hallucination-detection models on every turn** — too expensive per the research
   (a full model call per judgment); the gate-at-commit + PostToolUse-hook posture is the right
   cost/coverage trade for code work.
+
+---
+
+## A9 — Integrate the AI Testing Agent as an MCP tool (converts D3 + parts of S3/PF from build→wire)
+- **Severity:** MEDIUM · **Effort:** S-M · **Model:** Sonnet · **[NEW 2026-07-03]**
+- **Why:** the operator's standalone `ai-testing-agent` (38k LOC, 679 passing tests) already
+  implements several gaps this plan listed as unbuilt, and ships an **MCP server** (8 tools) — the
+  clean reuse path. Full assessment: `docs/AI_TESTING_AGENT_VALIDATION.md`.
+- **Fix (call it, don't reimplement):** register its MCP server; then (A9.2) wire `compare_api_specs`
+  as the **S3 API-contract check** (breaking-change gate — replaces the planned oasdiff build);
+  (A9.3) build **D3 visual regression** on its `visual_tester` + `advanced_comparison` (SSIM/hash +
+  baselines — most of D3 already written); (A9.4) expose `run_resilience_tests` to the PF6
+  performance-reviewer and add the PF1 query-count hook onto its chaos runner; (A9.5) pull its OWASP
+  payload constants into the S3 templates (payloads only — the SAST scanner is still S1/semgrep).
+- **Prereq:** clean the testing-agent first (ruff --fix, migrate `google.generativeai`→`google.genai`,
+  fix the awaited-coroutine test, strip the 2k-LOC licensing subsystem) so the exposed tool is
+  trustworthy. **Model decision: engine ORCHESTRATES + owns verdicts; testing-agent EXECUTES** (do
+  A9 before building S3-contract/PF-resilience/D3 from scratch — it converts them to integration).
+- **STATUS (2026-07-03) — A9.1 DONE + prereqs DONE:**
+  - **Testing-agent cleaned & MCP completed** (in the `ai-testing-agent` repo):
+    - `run_security_scan` MCP tool was a **stub** ("security scan would run here") → now runs a real
+      OWASP scan via a new shared `integrations/security_scan.py` (used by both the MCP tool and the
+      `ai-test security` CLI — no duplication).
+    - Added launcher: `ai-test mcp serve` / `ai-test mcp tools` CLI + `ai-test-mcp` console script
+      (`integrations/mcp_launcher.py`) so the engine registers a stable command.
+    - Migrated `google.generativeai` → `google-genai` (SDK 1.x `Client` API); verified with a live
+      Gemini call in the integration suite.
+    - Fixed the coroutine-never-awaited test bug (`test_graphql_executor.py`); suite is clean under
+      `-W error::RuntimeWarning`.
+    - `ruff check --fix`: 3,422 auto-fixed (4,250 → 814 residual, non-auto-fixable style/complexity).
+    - **All 679 tests pass, 1 skipped.**
+  - **Engine-side registration (A9.1):** `templates/mcp/ai-testing-agent.mcp.json.template` +
+    `templates/mcp/README.md` (per-gate tool-consumer map); catalogued in `docs/CAPABILITY_CATALOG.md`
+    (MCP servers → ADOPTED). Smoke-tested: server builds, lists all 8 tools.
+  - **NOT yet done (follow-ups):** A9.2 wire `compare_api_specs` into code-reviewer as the S3 gate;
+    A9.3 build D3 on `visual_tester` (not yet an MCP tool); A9.4 add PF1 query-count hook to the chaos
+    runner; A9.5 pull OWASP payloads into S3 templates. **Licensing not stripped** — the operator's
+    uncommitted WIP already neutralizes it (all gates return unlocked), and the MCP path never calls
+    it; full removal deferred as low-priority.
 
 ---
 

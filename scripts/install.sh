@@ -281,6 +281,24 @@ if [ -d "$ENGINE_DIR/templates/tests" ]; then
     done
 fi
 
+# Copy security templates (v0.17.0 — S1). semgrep allowlist starter +
+# README explaining the SAST tool ladder.
+if [ -d "$ENGINE_DIR/templates/security" ]; then
+    mkdir -p "$TARGET/docs/templates/security"
+    for f in "$ENGINE_DIR"/templates/security/*; do
+        [ -f "$f" ] || continue
+        dst="$TARGET/docs/templates/security/$(basename "$f")"
+        [ -f "$dst" ] || cp "$f" "$dst"
+    done
+    # Dotfile allowlist template also lands (mkdir -p handled above)
+    for f in "$ENGINE_DIR"/templates/security/.*; do
+        [ -f "$f" ] || continue
+        case "$(basename "$f")" in .|..) continue ;; esac
+        dst="$TARGET/docs/templates/security/$(basename "$f")"
+        [ -f "$dst" ] || cp "$f" "$dst"
+    done
+fi
+
 # ─── --with-ponytail (P6.1) ─────────────────────────────────────────
 # Clone/refresh Ponytail decision-ladder skill into user-global skills
 # directory. Idempotent: git pull if already present. Silently skips if

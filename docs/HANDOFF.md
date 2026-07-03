@@ -3,20 +3,21 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.13.0 + v0.14.0 + v0.15.0 + v0.16.0
-> shipped back-to-back this sitting per operator direction "finish
-> everything on engine side". After a plan audit, **P7.4 skills
-> stocktake tooling + P7.5 execution-patterns docs** landed in
-> v0.16.0. **Every P0/P1/P2/P5/P6/P7 item on IMPROVEMENT_PLAN.md is
-> now shipped or explicitly out-of-engine-scope.** P3.x + P4 stay
-> parked per plan. Next: switch to 8CStudio for #227.)
+> **Last updated:** 2026-07-03 (v0.17.0 shipped — first V2 wave.
+> Fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md` covering
+> security depth, design parity, performance, autonomy, and
+> landscape items. S1 (SAST hook: semgrep + bandit + gosec +
+> eslint-plugin-security) + S2 (Python-first security-reviewer
+> rewrite with auth/JWT/OAuth/payment depth + confidence scoring)
+> landed as v0.17.0. Next V2 waves: v0.18 D1+D2+PF3 (design + a11y +
+> perf budgets); v0.18.x PF1+PF2; v0.19 A1+A2 (telemetry + eval).)
 
 ---
 
 ## One-line state
 
-Engine v0.16.0 committed and pushed. Four consecutive releases this
-sitting:
+Engine v0.17.0 committed and pushed. **Five** consecutive releases
+this sitting; V2 wave 1 begins:
 - **v0.13.0** (`3f13653`) — simplicity toolchain: P6.1 Ponytail,
   P6.2 complexity + dead-code (ruff/xenon/vulture/knip/eslint), P6.3
   net-LOC + file/function size, P6.4 `/simplify` chain stage, P5.4
@@ -30,51 +31,53 @@ sitting:
 - **v0.15.0** (`4ee7b0c`) — P2.11 Python hygiene batch: 20 targeted
   fixes across pe_gate / pe_orchestrator / baseline / research_index,
   22 new unittest cases, 86 tests pass overall.
-- **v0.16.0** (this commit) — P7.4 skills-audit tool + `docs/
+- **v0.16.0** (`32e4a54`) — P7.4 skills-audit tool + `docs/
   SKILLS.md` core-20 curation; P7.5 `docs/EXECUTION_PATTERNS.md`
   with worktree / headless / background recipes; RHYTHM.md refs.
+- **v0.17.0** (this commit) — **V2 wave 1**. S1 SAST hook
+  (`hooks/sast-scan.sh` — semgrep + bandit + gosec + eslint) with
+  yaml toggles + FP allowlist template. S2 security-reviewer
+  rewrite: de-Node-ified, Python-first pattern table, auth depth
+  (session/JWT/OAuth/reset), payment + webhook §, confidence
+  scoring 0.0–1.0 with WARN <0.5 routing.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Re-install adopters against v0.15.0 (optional confirmation).**
-   The new hooks (complexity-gate, size-budget, duplication-gate,
-   migration-lint, design-lint, copy-lint, boot-smoke) + config
-   templates (`complexity/`, `design-lint.config.template`, `e2e/`,
-   `tests/`) ride in the installer.
-
+1. **Re-install adopters against v0.17.0.** New security template
+   dir + `sast_gate` yaml section land via the installer. Adopters
+   who want SAST enforcement install semgrep/bandit locally:
    ```bash
+   pipx install semgrep bandit
    pe install /Users/sanishsasikumar/Documents/8Colors/8CStudio
    pe install /Users/sanishsasikumar/Documents/Origyn
-   # Optional Ponytail:
-   pe install --with-ponytail /Users/sanishsasikumar/Documents/8Colors/8CStudio
    ```
 
-2. **Switch to the product track — 8CStudio #227 dev-env repair.**
-   Per ROADMAP + operator direction, #227 is the true critical-path
-   blocker (nothing downstream can be verified until the app boots
-   locally).
+2. **Continue V2 waves (per plan §Suggested execution order).**
 
-   The engine now has generic gates for P5.1 boot-smoke, P5.2
-   migration-lint, and P5.3 design-lint. Once #227 lands, the
-   8CStudio-side work is to POINT these gates at the actual fixes:
-   fill in `boot_check.{setup, run, probe_url}` in
-   `8CStudio/.process-engine.yaml`, configure the design-lint
-   themes, wire the auth-robustness pytest template, etc.
+   - **v0.18** — **D1 + D2 + PF3** (design parity + a11y + perf
+     budgets). D1 = new design-critic agent with verified envelope;
+     D2 = axe-core Playwright + Lighthouse CI; PF3 shares
+     Lighthouse wiring with D2 for perf budgets (LCP/TBT/bundle) +
+     backend p95 latency assertions.
+   - **v0.18.x** — **PF1 + PF2** (runtime N+1 gate via nplusone +
+     query-count assertions; unbounded-query + missing-index static
+     gate via semgrep rules).
+   - **v0.19** — **A1 + A2** (real telemetry parsing +
+     gate-efficacy eval harness with seeded-defect corpus +
+     adversarial fixtures per L2). Measurement first.
+   - **v0.20** — **S3 + S4 + A5** (auth/webhook/payment pytest
+     templates + LLM-agent threat hardening + Ponytail-as-default).
+   - **v0.20.x** — **PF6 + PF4 + PF5** (perf-reviewer agent + soak
+     + load).
+   - **After telemetry** — **A3 + A4** (self-improvement loop +
+     closed execution).
+   - **After 8CStudio Delivery settles** — **A6 + A8** (domain
+     scaffold + native plugin migration).
 
-3. **Engine backlog after #227 — P3.x (parked):**
-
-   1. **P3.1 `pe new <app>` scaffold** — Flask/Postgres/pytest
-      skeleton, CI gate pre-wired, engine pre-installed. L effort,
-      multi-week. Waits until 8CStudio settles so the scaffold
-      matches the actual proven stack.
-   2. **P3.2 Extract 3 SaaS modules** — `8c-tenancy` (from
-      8CStudio's RLS), `8c-billing` (from Origyn's payment stack),
-      `8c-credentials` (from invoice-system). Each ships with its
-      tests + reviewing agent.
-   3. **P3.3 Migrate distribution to native Claude Code plugin** —
-      `plugin.json` → real plugin marketplace entry.
-   4. **P3.4 Telemetry** — feed retrospective-agent + ceo agent
-      real numbers instead of just git-derived signals.
+3. **8CStudio #227 dev-env repair** — deliberately deferred until
+   the V2 waves settle per operator direction "lets finish all of
+   engine work first". Product tests can proceed with 8CStudio /
+   Origyn while V2 rolls out.
 
 ## What the v0.10.0 P1 bundle ships (6 items — condensed)
 

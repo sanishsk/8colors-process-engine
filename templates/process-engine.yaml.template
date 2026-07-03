@@ -181,3 +181,14 @@ copy_lint:
 # the loader, and this number becomes the enforced cap.
 confusion_budget:
   per_group: 5                 # max items per nav group before the test FAILs
+
+# ─── Security (v0.17.0 — S1) ─────────────────────────────────────────
+# hooks/sast-scan.sh feature-detects semgrep / bandit / gosec /
+# eslint-plugin-security and runs the appropriate tools on staged
+# files. Missing tool = advisory skip. FAIL only when a tool ran AND
+# found HIGH+ (or MEDIUM+ under strict).
+sast_gate:
+  enabled: true                    # false to skip entirely
+  strict: false                    # true = bandit MEDIUM+ becomes blocking
+  semgrep_configs: ""              # comma-separated extra packs (e.g. "p/flask,p/django")
+  allowlist: ".semgrep-allowlist.txt"
