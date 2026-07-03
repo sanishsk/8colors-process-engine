@@ -11,6 +11,13 @@
 > `ruff --fix` (3,422 fixed, 814 residual). **All 679 tests pass.** Engine-side: registered via
 > `templates/mcp/` + catalogued. See the **STATUS** block under A9 in `ENHANCEMENT_PLAN_V2.md`.
 > Follow-ups A9.2–A9.5 (contract gate wiring, D3, PF hook, payload port) remain open.
+>
+> **UPDATE 2026-07-03 (round 2) — hardening + future-proofing.** Added a 9th MCP tool
+> `run_visual_regression` (D3 is now callable, not a rebuild); migrated `config.py` off the
+> deprecated Pydantic `Field(env=)` (40→21 warnings); neutralized licensing to unlocked-enterprise on
+> every path (no network call existed); archived 6 theater markdowns + rewrote the README to truth.
+> SAST intentionally left to the engine (S1) — the agent does *dynamic* security, not static. **Still
+> 679 tests pass.** See the round-2 STATUS block under A9 in `ENHANCEMENT_PLAN_V2.md`.
 
 ---
 

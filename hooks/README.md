@@ -41,6 +41,8 @@ Bypasses log to stderr so they are observable.
 | `test-run` | pre-commit | Runs the detected test framework (pytest/npm test/go test) scoped to files changed since last commit. Optional coverage-delta floor. |
 | `secrets-scan` | pre-commit | Runs gitleaks or detect-secrets on staged files if installed; blocks on any finding. |
 | `deps-audit` | pre-commit | Runs pip-audit or npm audit before dependency-manifest commits. |
+| `sast-scan` | pre-commit | SAST gate (S1) — semgrep/bandit/gosec/eslint-security; blocks on HIGH+ when a tool ran. Advisory skip if none installed. |
+| `api-contract-check` | pre-commit | API breaking-change gate (A9.2) — runs `ai-test api-diff` on committed OpenAPI/Swagger specs; blocks on a breaking change. Advisory skip if `ai-test` absent. |
 | `stacking-rule-check` | pre-push | Blocks pushes that bundle ≥2 slot IDs with foundational changes (Process v2 rule). |
 
 ## Install

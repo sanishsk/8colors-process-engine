@@ -88,6 +88,10 @@ agent gates actually catch anything.
   per finding (0-1) so low-confidence findings route to human rather than block.
 
 ### S3 Auth + payment security TEST templates (secure-by-default)
+> **COVERAGE (see `TESTING_TOPOLOGY.md`):** the *dynamic* auth-bypass/injection
+> probing is already DELEGATED to the agent (`run_security_scan`). Engine builds
+> ONLY the pytest **templates** (webhook HMAC, payment authority) + the
+> security-review path-gate — do not rebuild a runtime auth prober here.
 - **Severity:** HIGH · **Effort:** M · **Model:** Sonnet (templates), Haiku (fill) · **[MISSING]**
 - **Files:** `templates/tests/{session,jwt,oauth,webhook,payment,reset-token}-security.test.py.template`
   (only `auth-robustness.test.py.template` + `nav-confusion-budget` exist today).
@@ -191,6 +195,10 @@ agent gates actually catch anything.
 > hand-tunes performance.
 
 ### PF1 Runtime N+1 + query-count regression gate ⭐ biggest real-world perf win
+> **COVERAGE (see `TESTING_TOPOLOGY.md`):** runtime-shaped → BUILD IN THE AGENT
+> (A9.4: a query-count hook + `nplusone` on the chaos runner), engine calls it.
+> Neither side has it today — this is the #1 perf gap. Do NOT build a parallel
+> engine-side fixture; delegate the runtime counting to the agent.
 - **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[PARTIAL — static-only today]**
 - **Files:** `templates/tests/query-count.test.py.template` (new), `hooks/perf-gate.sh` (new),
   `agents/database-reviewer.md`.
@@ -214,6 +222,10 @@ agent gates actually catch anything.
   guidance for prod slow-query capture.
 
 ### PF3 Performance budgets — Lighthouse (frontend) + endpoint latency (backend)
+> **COVERAGE (see `TESTING_TOPOLOGY.md`):** SPLIT. Backend p95-latency is
+> DELEGATED to the agent (`ai-test perf --threshold`). Engine builds ONLY the
+> Lighthouse-CI frontend budgets (shared with D2) — the agent has no frontend
+> perf/a11y capability.
 - **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[MISSING — shares tooling with D2]**
 - **Files:** `templates/ci/lighthouse-ci.yml.template` (also serves D2), `templates/perf/lhci.json`,
   `templates/tests/latency-budget.test.py.template`.
@@ -233,6 +245,9 @@ agent gates actually catch anything.
   Advisory in CI (WARN) — leaks are noisy to gate hard, but the trend must be visible.
 
 ### PF5 Load / stress baseline (before any "scales to N" claim)
+> **COVERAGE (see `TESTING_TOPOLOGY.md`):** DELEGATED to the agent — it already
+> ships Locust generation + concurrent-load via `run_resilience_tests`. Do NOT
+> build a second k6 harness; the engine calls the agent and records the ceiling.
 - **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]**
 - **Files:** `templates/perf/load-test.k6.js.template` (or locust), CI (manual-trigger) job.
 - **Fix:** a **k6** (or locust) script — "50 concurrent virtual users, p95 < Xms, 0 errors" — run
@@ -241,6 +256,10 @@ agent gates actually catch anything.
   milestones. Establishes the honest ceiling instead of guessing.
 
 ### PF6 A dedicated `performance-reviewer` agent (the judgment 20%)
+> **COVERAGE (see `TESTING_TOPOLOGY.md`):** the *agent* (judgment) stays
+> engine-side, but its runtime evidence is DELEGATED — it calls the testing-agent's
+> `run_resilience_tests` / `perf` instead of running its own load. Keep this thin:
+> orchestrate + judge, don't re-implement execution.
 - **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]**
 - **File:** `agents/performance-reviewer.md` (new gate agent, envelope contract, no Write).
 - **Fix:** what deterministic tools can't see: blocking/expensive work in the request path (AI
@@ -483,6 +502,35 @@ agent gates actually catch anything.
     runner; A9.5 pull OWASP payloads into S3 templates. **Licensing not stripped** — the operator's
     uncommitted WIP already neutralizes it (all gates return unlocked), and the MCP path never calls
     it; full removal deferred as low-priority.
+  - **A9.2 DONE (v0.17.1, 2026-07-03):** shipped as a **deterministic pre-commit gate**, not an
+    agent-only MCP call. Mechanism chosen: a new `ai-test api-diff` CLI wrapping the same `APIDiffer`
+    the MCP `compare_api_specs` tool uses (one source of truth), called by `hooks/api-contract-check.sh`
+    — blocks the commit on a breaking change to a committed OpenAPI/Swagger spec; advisory skip if
+    `ai-test`/`deepdiff` absent (mirrors `sast-scan`). Wired into `.pre-commit-config.yaml.template`,
+    `api_contract_gate` in `process-engine.yaml.template`, and a new **API contract (HIGH)** section in
+    `code-reviewer.md`. NOTE on scope: the S3 *item* is broader (auth/payment pytest templates —
+    webhook HMAC, payment authority); A9.2 covers only the **breaking-change** half. Config-generated
+    or uncommitted specs aren't gated (no baseline to diff) — the code-reviewer section is the human
+    backstop there.
+- **STATUS (2026-07-03, round 2) — hardening + future-proofing DONE:**
+  - **`run_visual_regression` is now the 9th MCP tool** (new `integrations/visual_scan.py` over
+    `visual_tester`, sync Playwright run in a worker thread, graceful degradation if the `[visual]`
+    extra is absent). **This lifts A9.3 to a near-complete state:** the visual capability is callable;
+    the only remaining A9.3 work is engine-side — wire the **design-critic** gate to call it on key
+    pages and fail below the similarity threshold. Registered in `templates/mcp/README.md`.
+  - **Future-proofing:** migrated `config.py` off the deprecated Pydantic `Field(env=...)` to
+    `validation_alias` / `AliasChoices` + `populate_by_name` (removes ~19 deprecation warnings; safe
+    for Pydantic v3). Suite warnings 40 → 21.
+  - **Licensing neutralized cleanly** (not ripped — 2,068 LOC across 10 files + tests, too risky):
+    `get_license_manager()` now defaults to unlocked ENTERPRISE on every path; confirmed no real
+    network call existed (`_validate_with_server` was already a mock); documented as self-hosted.
+  - **Docs honesty:** archived 6 completion-theater markdowns to the testing-agent's `docs/archives/`;
+    rewrote its README (dropped "world-class / 100% complete / 71-71" → "beta, 679 tests", added the
+    MCP section, replaced the fake pricing tiers with a self-hosted note).
+  - **No double work by design:** SAST stays the engine's S1 (`hooks/sast-scan.sh`); the agent's
+    security is *dynamic* (payloads vs a live app) — complementary, not duplicate. Documented in the
+    agent README + `templates/mcp/README.md`.
+  - **Still all 679 tests pass; new files ruff-clean.**
 
 ---
 

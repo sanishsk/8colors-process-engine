@@ -17,3 +17,6 @@ __pycache__/
 docs/dev-log/daily/
 docs/dev-log/weekly/
 docs/dev-log/monthly/
+
+# Playwright MCP runtime cache (per-machine, regenerable)
+.playwright-mcp/

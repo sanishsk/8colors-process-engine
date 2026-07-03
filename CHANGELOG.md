@@ -7,6 +7,35 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.17.1] — 2026-07-03
+
+> Security wave, part 2 — **A9.2 API breaking-change gate**. Reuses the
+> ai-testing-agent's differ (via the new `ai-test api-diff` CLI) instead of
+> building an oasdiff gate from scratch. Catches the silent class of prod
+> break: the tests pass but the response *shape* changed.
+
+### Added
+
+- **`hooks/api-contract-check.sh`** (A9.2) — pre-commit gate. When a committed
+  OpenAPI/Swagger spec changes, it diffs `HEAD` vs the staged version via
+  `ai-test api-diff` and **blocks the commit on a breaking change** (removed/
+  renamed endpoint, param, or field; type change; new required field).
+  Additions are advisory. Registered in `.pre-commit-config.yaml.template`;
+  configured via `api_contract_gate.{enabled,spec_globs}` in
+  `.process-engine.yaml`. Optional by design: advisory skip if `ai-test`
+  isn't installed (mirrors `sast-scan`). Bypass: `PE_SKIP_API_CONTRACT=1`.
+- **`agents/code-reviewer.md`** — new **API contract (HIGH)** checklist
+  section: judge the semver impact of a flagged break (MAJOR bump or
+  deprecation window), and catch breaks when there's no committed spec to diff.
+
+### Changed
+
+- **ai-testing-agent** gains an `ai-test api-diff` CLI wrapping the same
+  `APIDiffer` the `compare_api_specs` MCP tool uses — one source of truth,
+  callable deterministically from the hook. (See `AI_TESTING_AGENT_VALIDATION.md`.)
+
+---
+
 ## [0.17.0] — 2026-07-03
 
 > First V2 wave — security core (S1 + S2). Turns the security-reviewer

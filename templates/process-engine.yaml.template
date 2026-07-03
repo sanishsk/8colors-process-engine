@@ -192,3 +192,11 @@ sast_gate:
   strict: false                    # true = bandit MEDIUM+ becomes blocking
   semgrep_configs: ""              # comma-separated extra packs (e.g. "p/flask,p/django")
   allowlist: ".semgrep-allowlist.txt"
+
+# API breaking-change gate (A9.2). Blocks a commit when a committed OpenAPI/
+# Swagger spec drops or changes an existing endpoint/param/field. Reuses the
+# ai-testing-agent differ via `ai-test api-diff` (optional — advisory skip if
+# ai-test isn't installed). No effect on projects without a committed spec.
+api_contract_gate:
+  enabled: true                    # false to skip entirely
+  spec_globs: "openapi*.yaml openapi*.yml openapi*.json swagger*.yaml swagger*.yml swagger*.json"

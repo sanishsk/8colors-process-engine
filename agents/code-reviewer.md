@@ -66,6 +66,25 @@ const result = await db.query(query, [userId]);
 <div>{userComment}</div>
 ```
 
+### API contract (HIGH)
+
+When a change touches routes, view handlers, serializers, or a committed
+OpenAPI/Swagger spec, check for **breaking API changes** — the silent class
+that ships because the tests still pass but the response *shape* changed:
+
+- **Removed / renamed** endpoint, parameter, or response field
+- **Type change** on an existing field (e.g. `string` → `object`)
+- **New required** request field (breaks existing callers)
+- **Narrowed** enum / removed accepted value
+
+The `api-contract-check` pre-commit gate (A9.2) runs `ai-test api-diff`
+against committed specs and blocks on breaks automatically. Your job is the
+part the differ can't judge: when it flags a break (or when there's no
+committed spec to diff), decide the **semver impact** — a genuine break
+needs a MAJOR version bump or a deprecation window (keep the old shape
+alongside the new one), not a silent merge. Flag any breaking change that
+lacks one.
+
 ### Code Quality (HIGH)
 
 - **Large functions** (>50 lines) — Split into smaller, focused functions

@@ -123,6 +123,14 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # Pre-commit (API contract — v0.17.1 / A9.2)
+      - id: api-contract-check
+        name: API breaking-change gate (ai-test api-diff on committed specs)
+        entry: hooks/api-contract-check.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
       # Pre-push (push-time gates)
       - id: stacking-rule-check
         name: Block foundational changes inside a slot-stack
@@ -150,6 +158,7 @@ repos:
 #   PE_SKIP_COPY_LINT=1            # bypass copy-lint for one commit
 #   PE_SKIP_BOOT_SMOKE=1           # bypass boot-smoke (used by pe doctor + CI)
 #   PE_SKIP_SAST=1                 # bypass sast-scan for one commit
+#   PE_SKIP_API_CONTRACT=1         # bypass api-contract-check for one commit
 #   # size-budget net-lines gate accepts a `Size-justified: <reason>` trailer
 #   ENGINE_FOUNDATIONAL_REGEX=...  # regex of paths counted as "foundational"
 #   ENGINE_TEST_CMD=...            # explicit test command override (skips auto-detect)

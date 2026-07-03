@@ -7,7 +7,7 @@ they don't re-implement heavy test execution. Copied into adopters at
 ## ai-testing-agent
 
 The standalone [ai-testing-agent](../../docs/AI_TESTING_AGENT_VALIDATION.md)
-(38k LOC, 679 passing tests) exposes its capabilities as **8 MCP tools**.
+(38k LOC, 679 passing tests) exposes its capabilities as **9 MCP tools**.
 The engine **orchestrates and owns verdicts**; the testing-agent
 **executes** (fuzz, resilience, visual diff, api-diff, security). This is
 engine model (A) — call it, don't duplicate it.
@@ -52,13 +52,15 @@ Tools then appear to agents as `mcp__ai-testing-agent__*`.
 | `compare_api_specs` | code-reviewer / api-diff step | **S3** API-contract breaking-change gate (replaces planned oasdiff build) |
 | `run_security_scan` | security-reviewer | **S3** OWASP API Top-10 execution (payload runner; SAST stays S1/semgrep) |
 | `run_resilience_tests` | performance-reviewer | **PF6** resilience/load foundation |
+| `run_visual_regression` | design-critic | **D3** visual regression (SSIM/perceptual-hash + baselines) |
 | `run_pipeline` | e2e-runner | smoke/comprehensive test execution |
 | `extract_apis` / `list_modules` / `test_intent` | planner / e2e-runner | endpoint + module discovery for scoping |
 | `get_test_history` | retrospective-agent | flaky-test + perf-regression trends |
 
-> **D3 (visual regression)** is built on the testing-agent's
-> `visual_tester` + `advanced_comparison` (SSIM/perceptual-hash + baselines).
-> It is not yet surfaced as an MCP tool — track under A9.3.
+> **D3 (visual regression)** is now surfaced as the `run_visual_regression`
+> MCP tool (built on `visual_tester` + `advanced_comparison`). The remaining
+> A9.3 work is engine-side only: wire the design-critic gate to call it with
+> the app's key pages and fail on a below-threshold similarity.
 
 ### Secrets
 

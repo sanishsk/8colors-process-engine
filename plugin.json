@@ -1,6 +1,6 @@
 {
   "name": "8colors-process-engine",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "Portable Claude Code process engine — 18 agents + 2 session skills + 9 commands + cross-platform schedulers + multi-provider RAG + Claude Code hooks (PreToolUse/PostToolUse/Stop) + 15 git-side hooks + 2 CI templates + unified pe CLI + shared _gate-contract spec + generic database-reviewer + pe docs check + pe collect (git-derived dev-log) + claude-md-size dual-mode guard + complexity/duplication/size-budget gates + Ponytail wiring + /simplify chain stage + boot-smoke + migration-lint + design-lint (multi-theme) + copy-lint + Playwright smoke template + confusion-budget test + auth-robustness pytest template + AI-aesthetic rubric in code-reviewer. Enforcement is deterministic, not prompt-hope.",
   "author": "8Colors",
   "license": "MIT",
