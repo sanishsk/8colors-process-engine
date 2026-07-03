@@ -1241,6 +1241,15 @@ EOF
     esac
 }
 
+cmd_verify() {
+    # S4 supply-chain integrity: checksum all load-bearing engine
+    # surfaces against MANIFEST.sha256. Divergence = local edit OR
+    # upstream poisoning; either way, exit non-zero so a poisoned
+    # agent/hook can't run silently.
+    local py; py="$(pe_python)" || exit 1
+    exec "$py" "$ENGINE_DIR/scripts/pe_verify.py" "$@"
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -1381,6 +1390,7 @@ case "$cmd" in
     new)        cmd_new "$@" ;;
     module)     cmd_module "$@" ;;
     gate)       cmd_gate "$@" ;;
+    verify)     cmd_verify "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;
     version|-v|--version) echo "$VERSION" ;;

@@ -41,6 +41,15 @@
           "command": "{{ENGINE_DIR}}/hooks/cache-hygiene-warn.sh"
         }
       ]
+    },
+    {
+      "matcher": "Bash|Read|WebFetch|WebSearch",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/transcript-guard.sh"
+        }
+      ]
     }
   ],
   "Stop": [

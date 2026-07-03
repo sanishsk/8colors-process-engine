@@ -7,6 +7,143 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.30.0] — 2026-07-03
+
+> **S4 shipped — LLM/agent threat hardening.** Three layers land
+> in one release: a PostToolUse `transcript-guard.sh` that flags
+> prompt-injection payloads and secret leaks in fetched / shell
+> output; a `pe verify` subcommand that checksums all load-bearing
+> engine surfaces against a signed manifest (catches poisoned
+> agent + hook files — the real supply-chain vector now that
+> agents auto-run on commit); and a hook-wiring update so the new
+> guard fires on Bash / Read / WebFetch / WebSearch by default.
+> These were unguarded and are the scariest class for a
+> multi-tenant SaaS built BY agents.
+
+### Added — `hooks/transcript-guard.sh` (S4 layer a + b)
+
+- PostToolUse advisory hook. Reads the tool_response payload the
+  agent is about to consume; scans for two things:
+  1. **9 prompt-injection marker patterns** — "ignore N previous
+     instructions", "disregard prompts", role-hijack `system:`
+     prefixes, ChatGPT-style `<|im_start|>` blocks, jailbreak /
+     DAN, `you are now a different assistant` re-persona attempts,
+     `###system###` fake-block markers. Extend the ruleset via
+     `PE_TRANSCRIPT_INJECTION_RE` env var (per-project).
+  2. **11 secret-shape patterns** — Stripe live/test/restricted,
+     OpenAI `sk-`, Anthropic `sk-ant-`, AWS `AKIA…`, GitHub
+     `ghp_/gho_`, Slack bot tokens, Bearer tokens, JWTs. Emits
+     name + last-4 preview only — the actual value is never
+     re-emitted (protects the transcript itself).
+- Always exit 0 (advisory — the tool already ran; the goal is to
+  raise a hand to the operator). Fires only for Bash / Read /
+  WebFetch / WebSearch tool_names; skipped silently on everything
+  else so it never blocks a Write / Edit flow.
+- Scan cap 512KB — big file dumps skip past the length limit;
+  markers deep in a 5MB build log are lower risk than perf cost.
+
+### Added — `hooks/hooks.json`
+
+- PostToolUse matcher `Bash|Read|WebFetch|WebSearch` → runs
+  `transcript-guard.sh`. Existing `Edit|Write|MultiEdit`
+  PostToolUse chain (post-edit-lint, claude-md-size, design-lint,
+  cache-hygiene-warn) is unchanged.
+
+### Added — `scripts/pe_verify.py` + `pe verify` subcommand (S4 layer c)
+
+- Checksums the load-bearing surface (agents/, commands/,
+  skills/, hooks/, scripts/pe*, plugin.json, VERSION) against
+  a checked-in `MANIFEST.sha256` at engine root. Divergence =
+  local edit OR upstream poisoning; either way, exit 1 with the
+  divergent paths listed.
+- Modes:
+  - default: verify + exit 0/1
+  - `--update`: regenerate MANIFEST.sha256 (release-time)
+  - `--json`: machine-readable output for CI
+  - `--engine <path>`: explicit engine dir
+- Adopter-side engine resolution: reads
+  `.claude/settings.json` hook commands and auto-locates the
+  engine dir from the installed hook paths — so
+  `pe verify` works from any adopter tree.
+- Exit codes: 0 clean, 1 divergence, 2 missing manifest / usage.
+
+### Added — `MANIFEST.sha256` (66 entries at v0.30.0)
+
+- SHA-256 of every load-bearing engine surface. Regenerated on
+  every release via `pe verify --update` before commit + tag.
+- Format: `<hex-sha256>  <relative path>` (GNU sha256sum-compatible).
+
+### Added — tests
+
+- **`tests/test_transcript_guard.sh`** — 12 cases:
+  clean output silent, ignore-instructions marker, jailbreak/DAN,
+  role-hijack `system:` prefix, Stripe-key last-4-only preview
+  (never full leak), JWT-shape detection, Write tool skipped,
+  empty/malformed stdin exit 0, `PE_TRANSCRIPT_INJECTION_RE`
+  respected, combined injection+secret both surfaced.
+- **`tests/test_pe_verify.sh`** — 8 cases: --update writes
+  manifest, clean tree verifies, tampered hook detected,
+  --json emits verdict, restore + rebuild works, missing manifest
+  errors, new-on-disk file is advisory (not fatal), missing-from
+  -disk file is fatal.
+
+### Updated
+
+- `plugin.json.description` — mentions transcript-guard patterns
+  and `pe verify` supply-chain check.
+- `README.md` badge → 0.30.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` S4 marker: MISSING → SHIPPED v0.30.0.
+
+### Reviewer fixes (applied pre-commit)
+
+- **HIGH — `pe verify --update` had no privilege gate.** A compromised
+  agent could have run `pe verify --update` inside an adopter tree
+  to whitewash its own poisoning. **Fix:** `--update` now requires
+  `PE_VERIFY_ALLOW_UPDATE=1` in the environment AND refuses to run
+  when the resolved engine dir differs from the script's own parent
+  tree (an adopter tree cannot regenerate the engine's manifest).
+  Two new regression tests in `test_pe_verify.sh` cover both guards.
+- **MEDIUM — symlink guard in engine auto-resolve.** `pe_verify.py`
+  now rejects direct-symlink paths and non-directory targets when
+  auto-resolving the engine dir from an adopter's
+  `.claude/settings.json` hook commands. Prevents a
+  hostile-settings.json redirect to a wrong tree.
+
+### Alignment
+
+- All 15 test scripts + `pe docs check` green at v0.30.0.
+- Manifest coverage: 66 files (all agents, commands, hooks,
+  skills/*, pe + pe_*.py, plugin.json, VERSION).
+- No new install step for adopters — `pe install` picks up the
+  new hook via the existing hooks.json merge.
+
+### Notes — deliberately out of scope
+
+- **Blocking-mode transcript-guard.** The hook is ADVISORY by
+  design — the plan explicitly says "WARN + human review".
+  Blocking on injection markers would be trivially bypassed by
+  attackers who wrap payloads in variations we don't match, and
+  would produce false-positives on legitimate content that
+  discusses injection (docs, security posts).
+- **Automatic secret rotation.** Detection is per-session; the
+  hook doesn't touch Vault / rotate keys. That coordination
+  needs an incident-response path, not a PostToolUse hook.
+- **Cryptographic manifest signing.** `MANIFEST.sha256` is
+  checked-in unsigned. Signing (`.asc` or in-tree GPG signature)
+  is a follow-up (S5-adjacent) — the current design detects
+  tampering AFTER install, which is what the plan asked for.
+
+### Migration
+
+- No breaking changes. Adopters upgrade via `pe install` — the
+  new PostToolUse matcher merges cleanly into their
+  `.claude/settings.json`.
+- Adopters who patch engine files locally will see `pe verify`
+  fail after upgrade — either revert the patch, or upstream it,
+  or set `PE_SKIP_VERIFY=1` (advisory only in v0.30.0).
+
+---
+
 ## [0.29.0] — 2026-07-03
 
 > **S3 shipped — auth / payment / webhook security TEST templates +

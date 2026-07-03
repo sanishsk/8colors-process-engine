@@ -3,14 +3,15 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.29.0 shipped — S3 security pytest
-> templates + test-evidence path-gate. Money-mutating commits now
-> require co-staged test evidence. Ten V2 items shipped since the
-> fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.)
+> **Last updated:** 2026-07-03 (v0.30.0 shipped — S4 LLM/agent threat
+> hardening: transcript-guard PostToolUse hook + pe verify supply-chain
+> checksum. All of S1–S4 now shipped; S5 (container + secrets-history
+> + license) is the only remaining Security row. Eleven V2 items
+> shipped since the fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.)
 
 ---
 
-## Current state — v0.29.0 (`f4fcad1` → `<v0.29.0 sha>` this session)
+## Current state — v0.30.0 (`76291b0` → `<v0.30.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -37,21 +38,23 @@
 | L3 memory governance | ✅ SHIPPED | v0.24.0 |
 | A6 scaffold + api-credentials + auth + tenancy + billing | ✅ SHIPPED (module library COMPLETE) | v0.25.0 → v0.28.0 |
 | S3 auth/payment/webhook pytest templates + test-evidence gate | ✅ SHIPPED | v0.29.0 |
+| S4 transcript-guard + pe verify (LLM/agent threat hardening) | ✅ SHIPPED | v0.30.0 |
 
 **PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
 with a named prerequisite, on a specific release queue, or
 explicitly not yet started.
 
-**Not started yet:** S4 (LLM-agent threat hardening), S5 (container +
-secrets-history + license), A7 (cross-session memory learning), A8
-(native plugin migration), A9 higher tiers, PF1 (runtime N+1),
-PF4/PF5 (soak + load), PF6 (perf-reviewer agent), D3 (visual-regression).
+**Not started yet:** S5 (container + secrets-history + license), A7
+(cross-session memory learning), A8 (native plugin migration), A9
+higher tiers, PF1 (runtime N+1), PF4/PF5 (soak + load), PF6
+(perf-reviewer agent), D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.29.0.** Run `pe install`
-   in both 8CStudio and Origyn to pick up the S3 pytest templates
-   and the tighter security-review-trailer test-evidence gate.
+1. **Adopters need to be re-installed at v0.30.0.** Run `pe install`
+   in both 8CStudio and Origyn to pick up the S4 transcript-guard
+   hook (new PostToolUse matcher on Bash/Read/WebFetch/WebSearch)
+   and the `pe verify` subcommand.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -61,10 +64,9 @@ PF4/PF5 (soak + load), PF6 (perf-reviewer agent), D3 (visual-regression).
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **S4** — LLM-agent threat hardening (prompt-injection detection
-     PostToolUse hook, transcript-guard, `pe verify`). S3 shipped
-     v0.29.0. **S4 is the natural follow-up: existential for an
-     agent-built SaaS and unguarded today.**
+   - **S5** — container + secrets-history + license (hadolint,
+     trivy, gitleaks full-history, pip-licenses / license-checker).
+     All advisory, feature-detected. Ships in CI templates.
    - **A6 extensions** — module library baseline is COMPLETE
      (scaffold + api-credentials + auth + tenancy + billing all
      shipped). Only extensions remain deferred: email flows

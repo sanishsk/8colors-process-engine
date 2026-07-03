@@ -107,7 +107,7 @@ agent gates actually catch anything.
   Test coverage: `tests/test_security_review_trailer.sh` (10 cases).
 
 ### S4 LLM/agent-specific threat hardening ⭐ existential for agent-built SaaS
-- **Severity:** HIGH · **Effort:** M · **Model:** Opus (design), Sonnet (impl) · **[MISSING]**
+- **Severity:** HIGH · **Effort:** M · **Model:** Opus (design), Sonnet (impl) · **[SHIPPED v0.30.0 — transcript-guard PostToolUse hook (9 injection markers + 11 secret patterns, last-4 previews only) + pe verify (MANIFEST.sha256 checksum of 66 load-bearing surfaces with --update/--json/--engine modes and adopter-side auto-resolve) + hooks.json wiring on Bash/Read/WebFetch/WebSearch]**
 - **Files:** new PostToolUse hooks in `hooks/hooks.json`, `hooks/transcript-guard.sh` (new),
   `scripts/pe` (`pe verify` subcommand).
 - **Fix (three layers):** (a) **prompt-injection detection** — PostToolUse hook scans Bash/Read
