@@ -7,6 +7,106 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.21.0] — 2026-07-03
+
+> **A4 (partial) — headless agent invocation primitive + live-mode
+> gate-efficacy.** Adds `pe agent run <name>` — a `claude -p` wrapper
+> that invokes any engine agent by name with a brief on stdin, using
+> the agent's YAML frontmatter (model, tools) and body (system prompt)
+> from `agents/<name>.md`. Persists a structured run record to
+> `.pe/runs/<slug>/{brief.md,run.json,output.txt}`. Then wires
+> `tests/test_gate_efficacy.sh --live` on top: the eval harness can
+> now actually invoke each gate against every fixture and compare
+> the emitted envelope's verdict + failure_class to the expected.
+>
+> **What's still open in A4:** the orchestrator's auto-escalation
+> loop (on `worker_quality` FAIL, invoke next tier headlessly, re-run
+> the gate) — that's the caller of this primitive. Deferred to a
+> follow-up release. The execution mechanism is ready; wiring it
+> into `pe_orchestrator.py`'s decision loop with human checkpoints
+> is a separate scope.
+
+### Added — `pe agent run`
+
+- **`scripts/agent_runner.py`** — headless agent invocation
+    * `load_agent_spec()` parses `agents/<name>.md` frontmatter (name,
+      model, tools, effort) + body (system prompt).
+    * `build_argv()` assembles `claude -p --output-format json
+      --model <alias> --append-system-prompt <body> --allowedTools <list>`.
+      Uses `--append-system-prompt`, not `--system-prompt`, so Claude
+      Code's own safety guardrails stay active on top of the persona.
+    * `parse_result()` best-effort extracts `result / session_id /
+      model / usage / duration_ms` from the JSON blob. Missing keys
+      default to zero; raw JSON is retained so schema drift is
+      inspectable.
+    * `run_agent()` executes the subprocess with a 600s timeout;
+      raises `ClaudeNotOnPathError` if `claude` is missing so callers
+      can feature-detect a clean SKIP.
+    * `persist_run()` writes `.pe/runs/<UTC-timestamp>-<agent>-<hex>/`
+      with `brief.md`, `run.json` (structured, joinable against
+      `.pe/telemetry.jsonl`), and `output.txt` (raw agent response).
+    * Cost is computed via `scripts/telemetry.py::_cost_cents` so
+      A1's price table is the single source of truth.
+
+- **`pe agent run <name>` CLI**
+    * `--brief <file>|-` — brief file path or stdin
+    * `--out <path>` — write output to file (else stdout)
+    * `--model <alias>` — override agent's default model
+    * `--timeout <s>` — subprocess timeout (default 600)
+    * `--dry-run` — print the assembled invocation without executing
+      (redacts the system prompt body for readability)
+
+- **Exit codes:** 0 success · 1 agent exited non-zero · 2 invalid args ·
+  3 `claude` CLI not on PATH (feature-detected skip) · 4 agent .md
+  file missing / unparseable
+
+### Added — live-mode gate-efficacy
+
+- **`tests/test_gate_efficacy.sh --live`** — for each fixture,
+  invokes `pe agent run <gate> --brief input.md`, extracts the
+  emitted envelope via `pe gate parse`, and asserts the exit code
+  matches the directory-prefix contract. Also supports `--gate
+  <name>` and `--fixture <slug>` filters + `--model <alias>` +
+  `--timeout <s>`. Preflight-checks for `claude` on PATH and
+  `ANTHROPIC_API_KEY` in the environment; skips cleanly (exit 0)
+  if either is missing. Shape mode (default) unchanged: 16/16 pass.
+
+### Added — tests
+
+- **`tests/test_agent_runner.py`** — 22 unit tests covering:
+  frontmatter parser (JSON-array tools, comma-list tools, missing
+  frontmatter), agent-spec loader (real security-reviewer.md, missing
+  agent, default model fallback), argv assembly (model override,
+  append-system-prompt, empty tools, tool joining), JSON result
+  parsing (well-formed, non-JSON fallback, missing usage, stderr
+  capture), subprocess wrapper (FileNotFoundError → typed
+  ClaudeNotOnPathError, canned success, non-zero exit forwarding),
+  and run persistence (brief.md + run.json + output.txt written).
+- **`tests/test_agent_runner.sh`** — shell wrapper for the standard
+  test-suite loop.
+
+### Notes
+
+- `pe agent run` is the PRIMITIVE. It does not read `.claude/gates/`,
+  it does not auto-trigger review trailers, it does not escalate. It
+  runs one agent, once, with one brief, and hands you the output.
+  Composing that primitive into an auto-escalation loop is the
+  remaining half of A4 (deferred).
+- The run record shape (`.pe/runs/<slug>/run.json`) is designed to be
+  joined against A1's `.pe/telemetry.jsonl` via `session_id` — future
+  releases can walk the runs directory to compute per-agent p50/p95
+  cost and success rate for the retro.
+
+### Migration
+
+- No breaking changes. `pe agent run` is a new subcommand; existing
+  workflow untouched.
+- Adopters: `pe upgrade` + `pe install <project>` picks up the new
+  subcommand + agent_runner.py.
+- `.pe/runs/` is gitignored via the existing `.pe/` rule.
+
+---
+
 ## [0.20.0] — 2026-07-03
 
 > **A2 fill-out — gate-efficacy corpus complete across all 5 gate

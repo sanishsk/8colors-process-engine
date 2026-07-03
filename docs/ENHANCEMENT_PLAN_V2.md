@@ -338,15 +338,28 @@ agent gates actually catch anything.
   the proposed gate before it can ship — so a bad auto-gate can't propagate via `pe sync`.
 
 ### A4 Close the execution loop (orchestrator invokes workers)
-- **Severity:** MEDIUM · **Effort:** M-L · **Model:** Opus · **[MISSING — shadow-mode]** · **depends: A1**
-- **File:** `scripts/pe_orchestrator.py` (subprocess is currently used only to call pe_gate, not
-  workers).
-- **Fix:** on `worker_quality` FAIL, the orchestrator invokes the next tier headlessly via
-  `claude -p "<tight brief referencing the gate FAIL>" --allowedTools <scoped>` (or Agent SDK),
-  then re-runs the gate — bounded by A1's token budget + the existing iteration cap. Turns
-  "graduated enforce mode" from a printout the operator obeys into an actual autonomous
-  escalation chain. This is the single biggest step from "agentic tool" to "autonomous
-  orchestrator." Keep the human checkpoint on merge/deploy (never auto-commit sensitive paths).
+- **Severity:** MEDIUM · **Effort:** M-L · **Model:** Opus · **[PARTIAL v0.21.0 — execution primitive shipped; orchestrator auto-escalation wiring deferred]** · **depends: A1**
+- **Files (shipped v0.21.0):** `scripts/agent_runner.py` (headless `claude -p` wrapper),
+  `scripts/pe` (`pe agent run` subcommand), `tests/test_gate_efficacy.sh` (`--live` mode
+  wired onto `pe agent run`), `tests/test_agent_runner.py` (22 unit tests).
+- **What shipped:** `pe agent run <name> [--brief <file>|-] [--out <path>] [--model <alias>]
+  [--timeout <s>] [--dry-run]` loads `agents/<name>.md` frontmatter (model + tools) + body
+  (system prompt), invokes `claude -p --output-format json --model <alias>
+  --append-system-prompt <body> --allowedTools <list>`, parses the JSON result robustly
+  (missing keys → zero; raw blob retained for drift inspection), computes cost via A1's
+  price table, and persists `.pe/runs/<slug>/{brief.md, run.json, output.txt}`. Live-mode
+  gate-efficacy (`--live`) now invokes each gate against every fixture and compares
+  emitted vs expected envelope — first real precision/recall measurement path is live.
+  Feature-detected: `claude` missing → exit 3 (clean SKIP); no `ANTHROPIC_API_KEY` →
+  live-mode preflight skips.
+- **What's still open:** the orchestrator's auto-escalation loop itself. On
+  `worker_quality` FAIL, `pe_orchestrator.py::cmd_decide` should (a) call `pe agent run
+  <next-tier-agent> --brief <fail-envelope-summary>`, (b) re-run `pe gate parse` on the
+  produced artifact, (c) loop bounded by A1's token budget + the iteration cap, (d) halt
+  on `task_underspecified/blocked/out_of_scope` per policy. Requires a stateful loop
+  inside cmd_decide + an `--auto-execute` flag gated by `--enforce` (which is itself
+  tested=false per §9 watchpoint). Ship in a follow-up once first-fire evidence is
+  reviewed on enforce-mode.
 
 ### A5 Ponytail as a universal prerequisite (not opt-in on 2 of 10 agents)
 - **Severity:** MEDIUM · **Effort:** S · **Model:** Sonnet · **[PARTIAL]**

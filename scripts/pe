@@ -68,6 +68,8 @@ SUBCOMMANDS
     telemetry <sub>       Parse Claude Code transcripts → structured usage
                           records + OTel spans + cost (A1/L1/L4). Subs:
                           collect, summary.
+    agent run <name>      Invoke an engine agent headlessly via `claude -p`
+                          with the agent's persona + a brief on stdin (A4).
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
@@ -997,6 +999,51 @@ EOF
     esac
 }
 
+cmd_agent() {
+    # A4: headless agent invocation via `claude -p`. The primitive that
+    # both the gate-efficacy live-mode runner and (future) shadow
+    # orchestrator's auto-escalation loop will consume.
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        run)
+            local py; py="$(pe_python)" || exit 1
+            exec "$py" "$ENGINE_DIR/scripts/agent_runner.py" "$sub" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe agent — headless agent invocation (A4)
+
+SUBCOMMANDS
+    run <name> [--brief <file>|-] [--out <path>] [--model <id>]
+               [--timeout <s>] [--dry-run]
+
+        Invokes agents/<name>.md's persona via \`claude -p\` with the
+        brief passed on stdin (or --brief). Writes agent output to
+        stdout (or --out) and persists a structured run record at
+        <cwd>/.pe/runs/<slug>/{brief.md, run.json, output.txt}.
+
+        Exit codes:
+          0 success
+          1 agent exited non-zero
+          2 invalid args
+          3 claude CLI not on PATH (feature-detected skip)
+          4 agent .md file missing / unparseable
+
+        This is the execution PRIMITIVE. The auto-escalation loop
+        (orchestrator invokes next tier on worker_quality FAIL) is a
+        caller, deferred to a follow-up release — this file just
+        ships the runnable primitive + live-mode gate-efficacy eval.
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe agent' subcommand: $sub" >&2
+            echo "Run 'pe agent help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -1131,6 +1178,7 @@ case "$cmd" in
     collect)    cmd_collect "$@" ;;
     skills-audit) cmd_skills_audit "$@" ;;
     telemetry)  cmd_telemetry "$@" ;;
+    agent)      cmd_agent "$@" ;;
     gate)       cmd_gate "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;
