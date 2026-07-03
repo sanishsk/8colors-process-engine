@@ -305,11 +305,22 @@ Cost-awareness check:
 - Flag workflows that escalate to higher-cost models without clear reasoning need.
 - Recommend defaulting to lower-cost tiers for deterministic refactors.
 
-## UI review — AI-aesthetic tells rubric (P5.9 / v0.13.0+)
+## UI review — delegate to design-critic (D1, v0.18.0+)
 
 When the diff touches `.html`, `.jinja`, `.jinja2`, `.tsx`, `.jsx`,
-`.vue`, `.svelte`, or CSS, run through this rubric BEFORE producing
-the envelope. Count how many tells the change carries:
+`.vue`, `.svelte`, or CSS: this rubric MOVED to the dedicated
+`design-critic` agent in v0.18.0. Its envelope is
+evidence-verified by `hooks/design-review-trailer.sh` (parallel to
+your own code-review-trailer). You should NOT emit both a
+code-review and design-review verdict on the same diff — invoke
+`design-critic` for the UI half, then return to your normal code
+review of behavior/logic/security.
+
+The 9-tells rubric is preserved below as a REFERENCE for reviewers
+who want to sanity-check the design-critic's judgment, but the
+authoritative gate lives in `agents/design-critic.md`.
+
+### 9 tells (reference — authoritative in agents/design-critic.md)
 
 | # | Tell | Reject signal |
 |---|---|---|

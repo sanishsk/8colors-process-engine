@@ -1,0 +1,58 @@
+{
+  "//": "Lighthouse CI budget config (D2 + PF3). Move to .lighthouserc.json at project root. Consumed by templates/ci/lighthouse-ci.yml.template.",
+
+  "ci": {
+    "collect": {
+      "//startServerCommand": "How lhci brings up your app for testing. Adjust per stack.",
+      "startServerCommand": "npm start",
+      "startServerReadyPattern": "listening|Ready|Server started",
+      "//url": "Which pages to score. Add every important user path.",
+      "url": [
+        "http://localhost:3000/",
+        "http://localhost:3000/login",
+        "http://localhost:3000/dashboard"
+      ],
+      "numberOfRuns": 3
+    },
+
+    "//assert": "The gate. `assertions.<metric>` sets budgets; a PR that regresses fails CI.",
+    "assert": {
+      "assertions": {
+        "//accessibility": "D2 gate — WCAG-adjacent score. Must stay >=90.",
+        "categories:accessibility": ["error", {"minScore": 0.9}],
+
+        "//performance": "PF3 gate — start conservative (0.75), raise as you fix.",
+        "categories:performance": ["error", {"minScore": 0.75}],
+
+        "//best-practices": "Best-practices — includes HTTPS, deprecations, console errors.",
+        "categories:best-practices": ["error", {"minScore": 0.85}],
+
+        "//seo": "Optional — SEO score. Loose default.",
+        "categories:seo": ["warn", {"minScore": 0.8}],
+
+        "//LCP": "Largest Contentful Paint (ms). PF3 hero-<200KB rule cashes here.",
+        "largest-contentful-paint": ["error", {"maxNumericValue": 2500}],
+
+        "//TBT": "Total Blocking Time (ms) — the interactivity ceiling.",
+        "total-blocking-time": ["error", {"maxNumericValue": 300}],
+
+        "//CLS": "Cumulative Layout Shift — 0.1 is the 'good' bar.",
+        "cumulative-layout-shift": ["error", {"maxNumericValue": 0.1}],
+
+        "//byte-size": "Total transfer budget (KB) — catches oversized bundles/images. Default 1500 KB.",
+        "resource-summary:total:size": ["error", {"maxNumericValue": 1500000}],
+
+        "//image-size": "Total image bytes budget (KB). Default 600 KB — hero images should be lazy or WebP.",
+        "resource-summary:image:size": ["warn", {"maxNumericValue": 600000}],
+
+        "//js-size": "Total JS bytes budget (KB). Default 500 KB — split bundles or lazy-load.",
+        "resource-summary:script:size": ["warn", {"maxNumericValue": 500000}]
+      }
+    },
+
+    "upload": {
+      "//": "Optional — persist reports. `temporary-public-storage` is Google-hosted, ephemeral, zero-cost. Swap for `lhci-server` if you self-host.",
+      "target": "temporary-public-storage"
+    }
+  }
+}

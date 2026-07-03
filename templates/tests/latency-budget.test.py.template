@@ -1,0 +1,90 @@
+# latency-budget.test — p95 backend latency budgets (PF3).
+#
+# What Lighthouse can't see: the p95 wall-clock of the API endpoints
+# under normal load. Lighthouse measures the browser side; this measures
+# the server side. Together they cover "the page felt slow."
+#
+# The gate:
+#   For each hot endpoint declared below, fire N warm-up + M measured
+#   requests, sort, take p95, assert <= budget.
+#
+# When it fires:
+#   - As part of the smoke/e2e suite (fast — a few hundred requests total).
+#   - Before any performance-touching commit ("added caching to
+#     /api/tenant/list — did p95 improve or regress?").
+#
+# Not for load testing — that's PF5's k6/locust template. This is the
+# "single-user p95 baseline" gate.
+#
+# Adopter customization:
+#   - Wire `_call(path, method='GET', json=None)` to your test client
+#     (Flask test_client, requests to a running dev server, httpx to
+#     an ASGI app — pick one).
+#   - Populate ENDPOINTS with (method, path, budget_ms) tuples.
+#   - Adjust N_WARMUP + N_MEASURED to your tolerance for CI time.
+
+import statistics
+import time
+
+import pytest
+
+
+# ─── Adopter wires this ─────────────────────────────────────────────
+def _call(path: str, method: str = "GET", json: dict | None = None):
+    """Fire one request against the app under test. Return the response
+    object (with .status_code attribute)."""
+    raise NotImplementedError("wire to your Flask test_client / requests / httpx")
+
+
+# ─── Endpoints to budget (adopter fills) ────────────────────────────
+# (method, path, p95_budget_ms) — endpoints that are on the hot path.
+# Static assets not included; those are Lighthouse's territory.
+ENDPOINTS: list[tuple[str, str, int]] = [
+    # ("GET",  "/api/dashboard/summary", 250),
+    # ("GET",  "/api/gallery/list?limit=20", 400),
+    # ("POST", "/api/upload/init", 300),
+]
+
+N_WARMUP = 3
+N_MEASURED = 20
+
+
+@pytest.fixture
+def warm_app():
+    """Adopter: yield an initialised test app / client. Cache DB
+    connections / templates so timings are steady-state, not
+    cold-start."""
+    pytest.skip("wire the warm_app fixture to your stack")
+
+
+@pytest.mark.parametrize("method,path,budget_ms", ENDPOINTS)
+def test_endpoint_p95_within_budget(warm_app, method: str, path: str, budget_ms: int):
+    """PF3: p95 latency for a hot endpoint must stay under budget."""
+    if not ENDPOINTS:
+        pytest.skip("no endpoints declared — populate ENDPOINTS in the template")
+
+    # Warm-up (JIT, template cache, connection pool)
+    for _ in range(N_WARMUP):
+        resp = _call(path, method=method)
+        assert resp.status_code < 500, f"{path} 5xx during warm-up"
+
+    # Measured
+    timings_ms: list[float] = []
+    for _ in range(N_MEASURED):
+        t0 = time.perf_counter()
+        resp = _call(path, method=method)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert resp.status_code < 500, f"{path} 5xx during measured run"
+        timings_ms.append(elapsed_ms)
+
+    timings_ms.sort()
+    # Sample-p95 (index ceil(0.95*N) - 1)
+    p95_idx = max(0, int(0.95 * len(timings_ms)) - 1)
+    p95 = timings_ms[p95_idx]
+    median = statistics.median(timings_ms)
+
+    assert p95 <= budget_ms, (
+        f"{method} {path} p95={p95:.1f}ms > budget={budget_ms}ms "
+        f"(median={median:.1f}ms, min={min(timings_ms):.1f}ms, "
+        f"max={max(timings_ms):.1f}ms, N={len(timings_ms)})"
+    )

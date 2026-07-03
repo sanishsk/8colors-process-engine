@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.17.2-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.18.0-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -58,7 +58,7 @@ pe install /path/to/your/project
 
 Restart Claude Code in `your-project`. You now have:
 
-- 18 specialist agents (or a leaner set via `pe install --subset gate-only|core`)
+- 19 specialist agents (or a leaner set via `pe install --subset gate-only|core`)
 - 9 slash commands
 - 2 session skills (`/start-session`, `/end-session`)
 - Semantic search over `docs/research/`
@@ -79,7 +79,7 @@ if the cadence breaks.
 
 ## What you get
 
-### Agents (18)
+### Agents (19)
 
 | Agent | Model | When |
 |---|---|---|
@@ -90,6 +90,7 @@ if the cadence breaks.
 | `code-reviewer` | Haiku | MANDATORY review before commit. CRITICAL blocks. Envelope-contract gate. |
 | `data-model-auditor` | Haiku | Finds hardcoded business values; recommends moving to data model / config. |
 | `database-reviewer` | Sonnet | Generic Postgres + multi-tenant SaaS reviewer (tenant isolation, migrations, query safety). |
+| `design-critic` | Sonnet | MANDATORY design review before UI commits. AI-aesthetic tells + hierarchy/density/tabular-nums/empty-state/responsive rubric. Envelope-contract gate. |
 | `doc-updater` | Haiku | Documentation + codemap maintenance. Multi-stack feature-detect. |
 | `e2e-runner` | Sonnet | End-to-end testing (Playwright / Vercel Agent Browser). Artifact management. |
 | `memory-consolidator` | Sonnet | Extracts durable memory from session transcripts. |

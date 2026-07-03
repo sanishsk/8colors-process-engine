@@ -140,8 +140,8 @@ agent gates actually catch anything.
 > regression. Design catches ~7 of 9 AI-tells via regex; the 2 that matter most (palette identity,
 > composition) need vision.
 
-### D1 Design-critic agent + verified envelope (close the asymmetry) ⭐
-- **Severity:** HIGH · **Effort:** M-L · **Model:** Sonnet (vision-capable) · **[MISSING]**
+### D1 Design-critic agent + verified envelope (close the asymmetry) ⭐ — ✅ SHIPPED in v0.18.0 (2026-07-03)
+- **Severity:** HIGH · **Effort:** M-L · **Model:** Sonnet (vision-capable)
 - **Files:** `agents/design-critic.md` (new — engine-level; distinct from 8CStudio's project-local
   ui-ux-design-agent), `hooks/design-review-trailer.sh` (upgrade), `agents/_gate-contract.md`.
 - **Fix:** (a) extract the P5.9 AI-aesthetic rubric out of code-reviewer into a standalone gate
@@ -151,8 +151,8 @@ agent gates actually catch anything.
   envelope** like code-review-trailer does — `Design-reviewed: <sha>` resolves against
   `.claude/gates/last-design-review.json`. This single change makes design a first-class gate.
 
-### D2 Accessibility as a gate — axe-core + Lighthouse (the strongest OSS "design agents")
-- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[MISSING]**
+### D2 Accessibility as a gate — axe-core + Lighthouse (the strongest OSS "design agents") — ✅ SHIPPED in v0.18.0 (2026-07-03)
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet
 - **Files:** `templates/e2e/a11y-audit.spec.ts.template` (new), `.axe-config.json` template,
   `templates/ci/lighthouse-ci.yml.template` (new). Playwright is already present (P5.5 smoke).
 - **Fix:** `@axe-core/playwright` runs WCAG 2.1 AA on each nav path (violations → FAIL, incomplete →
@@ -230,7 +230,7 @@ agent gates actually catch anything.
   table (interpret seq-scan-on-big-table as a finding). Add `pg_stat_statements` / `auto_explain`
   guidance for prod slow-query capture.
 
-### PF3 Performance budgets — Lighthouse (frontend) + endpoint latency (backend)
+### PF3 Performance budgets — Lighthouse (frontend) + endpoint latency (backend) — ✅ SHIPPED in v0.18.0 (2026-07-03)
 > **COVERAGE (see `TESTING_TOPOLOGY.md`):** SPLIT. Backend p95-latency is
 > DELEGATED to the agent (`ai-test perf --threshold`). Engine builds ONLY the
 > Lighthouse-CI frontend budgets (shared with D2) — the agent has no frontend

@@ -7,6 +7,122 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.18.0] — 2026-07-03
+
+> **V2 wave 2 — design parity + accessibility + performance budgets.**
+> Ships D1 (design-critic agent + evidence-verified envelope) + D2
+> (axe-core WCAG 2.1 AA gate) + PF3 (Lighthouse perf budgets + backend
+> p95 latency), sharing Lighthouse wiring between D2 and PF3 (one CI
+> job, two verticals). Closes the code-vs-design asymmetry that was
+> the operator's stated #2 priority: **design is now evidence-verified,
+> not self-attested.**
+
+### Added
+
+- **`agents/design-critic.md`** (D1) — new gate agent. Emits standard
+  E1 envelope (`gate_name = "design-critic"`); rubric covers:
+    * **9 AI-aesthetic tells** — stock-token palette, glow/neon,
+      manifesto copy, card-grid-as-menu, emoji-as-icon, over-padding,
+      default font pairing, word-chip UI, no signature element. ≥3
+      tells on a new/reworked screen → FAIL rule
+      `d1.ai_aesthetic_rubric.tells_exceeded` with "match locked
+      reference" instruction.
+    * **5 quality dimensions** — density, hierarchy, tabular
+      numerals, empty states, responsive. Two "bad" dimensions =
+      FAIL.
+    * **Reference lock** — if `docs/design/reference/<page>.png`
+      exists, judged against it; drift = `d1.reference_drift`.
+  Agent count 18 → 19. The P5.9 rubric moves here from
+  `code-reviewer.md` (code-reviewer now points to design-critic and
+  keeps the tells as a reference list only).
+- **`hooks/design-review-trailer.sh`** rewritten (D1 — was: bare
+  self-attest accepted). Now mirrors `code-review-trailer.sh`:
+    * Multi-file UI commits (≥`ENGINE_UI_THRESHOLD`, default 2)
+      REQUIRE `Design-reviewed: <envelope-sha>` that resolves to a
+      PASS/WARN record in `.claude/gates/`.
+    * Legacy `Design-reviewed: design-critic|self|ui-ux-design-agent`
+      accepted only on single-file UI diffs (bug fix, copy tweak).
+    * `Design-skip-reason: <one-line>` accepted with mandatory
+      reason.
+    * `PE_SKIP_DESIGN_TRAILER=1` bypass (logged).
+    * FAIL verdicts in the envelope block the commit (was: no
+      verdict check).
+- **`templates/e2e/a11y-audit.spec.ts.template`** (D2) — Playwright
+  spec using `@axe-core/playwright`. Iterates nav paths (reuses
+  smoke.spec.ts's discovery helper); asserts zero WCAG 2.1 AA
+  violations per path; reports "incomplete" findings (need human
+  review) but doesn't fail on them. Loads `.axe-config.json` for
+  project-specific rule tuning + per-page overrides.
+- **`templates/design/axe-config.json.template`** (D2) — starter
+  axe config with commented `disableRules` guidance ("every
+  disabled rule is a11y debt") and per-page override structure.
+- **`templates/ci/lighthouse-ci.yml.template`** (D2 + PF3) —
+  GitHub Actions workflow. **One workflow, two gates.** Runs
+  `lhci autorun` on PRs touching UI/frontend paths. Uses adopter's
+  `.lighthouserc.json` for URL list + assertions. Chrome + npm
+  cached; upload target defaults to `temporary-public-storage`
+  (free, ephemeral).
+- **`templates/perf/lhci.json.template`** (D2 + PF3) — Lighthouse
+  CI budget config with per-category floors (`accessibility ≥ 90`
+  D2; `performance ≥ 0.75` PF3; `best-practices ≥ 0.85`) + hard
+  metric budgets (LCP ≤ 2500ms, TBT ≤ 300ms, CLS ≤ 0.1, total ≤
+  1500KB, images ≤ 600KB, JS ≤ 500KB). Adopter-tunable per
+  vertical.
+- **`templates/tests/latency-budget.test.py.template`** (PF3) —
+  pytest template for backend p95 latency budgets. Two-phase per
+  endpoint: N warm-up + M measured requests; sort, take p95,
+  assert `<= budget_ms`. Adopter wires `_call()` to their test
+  client and populates `ENDPOINTS = [(method, path, budget_ms), ...]`.
+
+### Changed
+
+- **`agents/code-reviewer.md`** — UI review § softened. The P5.9
+  9-tells rubric MOVED to `agents/design-critic.md` (which owns the
+  gate now). code-reviewer's section is now a reference note
+  pointing at design-critic — you no longer emit both a code-review
+  and design-review verdict on the same diff.
+- **`templates/process-engine.yaml.template`** — 3 new opt-in
+  sections: `design_gate` (enabled/ui_threshold), `a11y_gate`
+  (enabled/wcag_level/axe_config/lighthouse_a11y_min), `perf_budget`
+  (enabled/lighthouse_perf_min/lhci_config).
+- **`scripts/install.sh`** — copies `templates/design/*`,
+  `templates/perf/*`, and `templates/ci/lighthouse-ci.yml.template`
+  into adopters at `docs/templates/{design,perf,ci}/`. Idempotent.
+- **`plugin.json`** description updated to reflect 19 agents +
+  3 CI templates + the design/a11y/perf additions.
+- **`README.md`** badge → 0.18.0; agent count 18 → 19; Agents
+  table gained the `design-critic` row.
+
+### Fixed
+
+- Design was self-attested while code was evidence-verified — the
+  asymmetry that made design drift ship. v0.18.0 D1 closes this:
+  the design-review-trailer now requires an envelope-sha on
+  multi-file UI commits, just like code-review has since v0.10.0.
+
+### Verification
+
+- 86/86 tests pass (9 sync + 10 install-reconcile + 12 hooks +
+  33 orchestrator + 22 P2.11 unittest).
+- `pe docs check` at v0.18.0: **19 agents on disk**, docs
+  consistent.
+- 8CStudio + Origyn re-installed against v0.18.0:
+    * 8CStudio preserves its project-local `database-reviewer.md`
+      fork (as expected — P2.1 pattern).
+    * Both report clean symlinks; new templates land at
+      `docs/templates/{design,perf,ci}/`.
+
+### Session pickup (v0.18.x + v0.19.0)
+
+- **v0.18.x** — PF1 optional wrapper `hooks/perf-gate.sh` + PF2
+  unbounded-query + missing-index static gate (semgrep rule pack +
+  database-reviewer § extension).
+- **v0.19.0** — A1 telemetry (budgets are still `"inf"` — breaker
+  decorative) + A2 gate-efficacy eval harness (seeded-defect
+  corpus + adversarial + trajectory metrics per L2).
+
+---
+
 ## [0.17.2] — 2026-07-03
 
 > Sync patch — closes three floaters from the parallel-session PF1 +

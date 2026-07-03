@@ -1,0 +1,54 @@
+# lighthouse-ci.yml — Lighthouse CI workflow (D2 + PF3).
+#
+# One CI workflow, two verticals:
+#   - D2 (design/a11y): accessibility ≥ 90 or FAIL
+#   - PF3 (perf):       performance, best-practices, LCP/TBT budgets
+#
+# Runs on every PR touching UI / frontend. Uses adopter's `.lighthouserc.json`
+# (starter at templates/perf/lhci.json.template) for URL list + assertions.
+#
+# Prereqs (adopter):
+#   npm install --save-dev @lhci/cli
+#   Copy templates/perf/lhci.json.template → .lighthouserc.json
+#
+# Install:
+#   cp <engine>/templates/ci/lighthouse-ci.yml.template .github/workflows/lighthouse-ci.yml
+#   # Adjust `paths` filter + start-server-command to your stack.
+
+name: Lighthouse CI (D2 a11y + PF3 perf budgets)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'templates/**'
+      - 'static/**'
+      - 'app/**'
+      - 'src/**'
+      - 'public/**'
+      - '.lighthouserc.json'
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Install Chrome (Lighthouse dep)
+        run: npx playwright install --with-deps chromium
+      - name: Install Lighthouse CI
+        run: npm install --no-save @lhci/cli
+      - name: Run Lighthouse CI
+        # Adopter: replace `npm start` with your app's dev/prod boot command.
+        # `--collect.startServerCommand` starts the app; lhci waits for
+        # `--collect.startServerReadyPattern` in stdout before firing tests.
+        run: npx lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}

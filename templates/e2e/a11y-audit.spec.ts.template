@@ -1,0 +1,124 @@
+// a11y-audit.spec.ts — WCAG 2.1 AA accessibility gate (D2, v0.18.0).
+//
+// Iterates every nav path discovered from the app and asserts axe-core
+// finds zero WCAG 2.1 AA violations. "Incomplete" findings (axe couldn't
+// automatically judge) are reported but do not fail the gate — they need
+// human review.
+//
+// This is the highest-ROI design enhancement: real, deterministic, and
+// it directly measures "premium feel" via contrast, touch targets,
+// focus order, form labels, heading hierarchy — the exact things that
+// read as "unprofessional" when broken.
+//
+// Setup (one-time in adopter project):
+//   npm install --save-dev @axe-core/playwright @playwright/test
+//   npx playwright install --with-deps chromium
+//
+// Run:
+//   E2E_BASE_URL=http://127.0.0.1:5000 npx playwright test a11y-audit.spec.ts
+//
+// Config (.axe-config.json — starter at docs/templates/design/):
+//   Extends axe's default rules with project-specific rule tuning.
+//
+// Adopter customization:
+//   - Wire `discoverNavPaths()` to your app's nav registry (same shape
+//     as templates/e2e/smoke.spec.ts.template — reuse the helper).
+//   - Add pages to SKIP_PATHS if they're known to have accepted a11y
+//     debt (with a comment linking to the ticket).
+
+import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import * as fs from "fs";
+import * as path from "path";
+
+const BASE_URL = process.env.E2E_BASE_URL || "http://127.0.0.1:5000";
+
+const CONFIG_PATH = process.env.AXE_CONFIG || ".axe-config.json";
+const AXE_CONFIG = fs.existsSync(CONFIG_PATH)
+  ? JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"))
+  : {};
+
+// Adopter: add paths here with a rationale comment (linking to ticket).
+const SKIP_PATHS: string[] = [
+  // "/legacy/reports",   // Ticket-456: pre-existing debt, scheduled refactor
+];
+
+// Reuse smoke.spec.ts helper — copy this in if your project doesn't have it.
+async function discoverNavPaths(request: any): Promise<string[]> {
+  try {
+    const res = await request.get(`${BASE_URL}/api/nav`);
+    if (res.ok()) {
+      const data = await res.json();
+      return (data.items || []).map((it: any) => it.path).filter(Boolean);
+    }
+  } catch {}
+  return ["/", "/login", "/dashboard"];
+}
+
+test.describe("D2 — WCAG 2.1 AA accessibility gate", () => {
+  test("every nav path passes axe-core WCAG 2.1 AA", async ({ page, request }) => {
+    const paths = await discoverNavPaths(request);
+    expect(paths.length).toBeGreaterThan(0);
+
+    const violations: Array<{
+      path: string;
+      id: string;
+      impact: string;
+      help: string;
+      nodes: number;
+    }> = [];
+    const incomplete: Array<{
+      path: string;
+      id: string;
+      help: string;
+    }> = [];
+
+    for (const p of paths) {
+      if (SKIP_PATHS.includes(p)) continue;
+      await page.goto(`${BASE_URL}${p}`, { waitUntil: "networkidle" });
+
+      const axe = new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]);
+
+      // Apply user rule tuning from .axe-config.json
+      if (AXE_CONFIG.disableRules) {
+        axe.disableRules(AXE_CONFIG.disableRules);
+      }
+
+      const result = await axe.analyze();
+
+      for (const v of result.violations) {
+        violations.push({
+          path: p,
+          id: v.id,
+          impact: v.impact || "unknown",
+          help: v.help,
+          nodes: v.nodes.length,
+        });
+      }
+      for (const i of result.incomplete) {
+        incomplete.push({
+          path: p,
+          id: i.id,
+          help: i.help,
+        });
+      }
+    }
+
+    if (incomplete.length) {
+      console.warn(
+        "[a11y-audit] incomplete findings (need human review):",
+        JSON.stringify(incomplete, null, 2)
+      );
+    }
+
+    if (violations.length) {
+      console.error(
+        "[a11y-audit] WCAG 2.1 AA violations:",
+        JSON.stringify(violations, null, 2)
+      );
+    }
+
+    expect(violations, "WCAG 2.1 AA violations found — see log").toEqual([]);
+  });
+});

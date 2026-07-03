@@ -1,0 +1,20 @@
+{
+  "//": "axe-core config template (D2). Move to .axe-config.json at your project root and tune. Consumed by templates/e2e/a11y-audit.spec.ts.template.",
+
+  "//tags": "WCAG version + level. axe supports wcag2a, wcag2aa, wcag2aaa, wcag21a, wcag21aa, wcag22aa. The spec template enables A + AA up to WCAG 2.1 (production-safe default).",
+
+  "//disableRules": "Rules to skip project-wide. Only add here with a rationale comment — every disabled rule is a11y debt.",
+  "disableRules": [
+    // "color-contrast": Suppress if your brand palette accepts 4.4:1 (below WCAG AA 4.5:1) with an explicit design decision. Prefer NOT disabling — the fix is usually one token adjustment.
+  ],
+
+  "//pageSpecificOverrides": "Per-path rule tuning. Use sparingly; prefer fixing the page over local exceptions.",
+  "pageSpecificOverrides": {
+    // "/legacy/reports": {
+    //   "disableRules": ["landmark-one-main"]
+    // }
+  },
+
+  "//failureThreshold": "impact levels: minor, moderate, serious, critical. Default fails on all violations regardless of impact. Set to 'serious' or 'critical' if you want to accept moderate debt temporarily.",
+  "failureThreshold": "any"
+}

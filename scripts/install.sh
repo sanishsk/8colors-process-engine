@@ -311,6 +311,26 @@ if [ -d "$ENGINE_DIR/templates/mcp" ]; then
     done
 fi
 
+# Copy design + perf template dirs (v0.18.0 — D1/D2/PF3).
+# axe-core config, Lighthouse budgets, backend p95 assertion template.
+for d in design perf; do
+    if [ -d "$ENGINE_DIR/templates/$d" ]; then
+        mkdir -p "$TARGET/docs/templates/$d"
+        for f in "$ENGINE_DIR"/templates/$d/*; do
+            [ -f "$f" ] || continue
+            dst="$TARGET/docs/templates/$d/$(basename "$f")"
+            [ -f "$dst" ] || cp "$f" "$dst"
+        done
+    fi
+done
+
+# Copy Lighthouse CI workflow into ci/ template dir (shared with existing engine-gate/quality).
+if [ -f "$ENGINE_DIR/templates/ci/lighthouse-ci.yml.template" ]; then
+    mkdir -p "$TARGET/docs/templates/ci"
+    dst="$TARGET/docs/templates/ci/lighthouse-ci.yml.template"
+    [ -f "$dst" ] || cp "$ENGINE_DIR/templates/ci/lighthouse-ci.yml.template" "$dst"
+fi
+
 # ─── --with-ponytail (P6.1) ─────────────────────────────────────────
 # Clone/refresh Ponytail decision-ladder skill into user-global skills
 # directory. Idempotent: git pull if already present. Silently skips if

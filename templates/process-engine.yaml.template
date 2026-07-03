@@ -193,6 +193,37 @@ sast_gate:
   semgrep_configs: ""              # comma-separated extra packs (e.g. "p/flask,p/django")
   allowlist: ".semgrep-allowlist.txt"
 
+# ─── Design gate (v0.18.0 — D1) ───────────────────────────────────────
+# hooks/design-review-trailer.sh requires a Design-reviewed trailer on
+# multi-file UI commits, evidence-verified against .claude/gates/.
+# Self-attest (Design-reviewed: design-critic) accepted only below the
+# multi-file threshold.
+design_gate:
+  enabled: true                    # false disables the trailer requirement
+  ui_threshold: 2                  # files >= this count → envelope-sha trailer required
+  # UI regex — override ENGINE_UI_FILES if your project uses non-standard paths.
+
+# ─── Accessibility gate (v0.18.0 — D2) ────────────────────────────────
+# axe-core Playwright spec (templates/e2e/a11y-audit.spec.ts.template)
+# + Lighthouse CI (templates/ci/lighthouse-ci.yml.template) budgets.
+# Adopter installs @axe-core/playwright + @lhci/cli locally.
+a11y_gate:
+  enabled: true                    # false to skip a11y assertions in CI
+  wcag_level: "AA"                 # A | AA | AAA (WCAG 2.1)
+  axe_config: ".axe-config.json"
+  lighthouse_a11y_min: 90          # Lighthouse a11y score floor
+
+# ─── Performance budgets (v0.18.0 — PF3) ──────────────────────────────
+# Lighthouse budgets (LCP, TBT, bundle, images) + backend p95 latency
+# assertions (templates/tests/latency-budget.test.py.template).
+# Adopter installs @lhci/cli locally.
+perf_budget:
+  enabled: true                    # false to skip perf assertions in CI
+  lighthouse_perf_min: 0.75        # Lighthouse performance score floor (0.0-1.0)
+  lhci_config: ".lighthouserc.json"
+  # Backend endpoint budgets live in templates/tests/latency-budget.test.py
+  # (adopter populates ENDPOINTS with (method, path, budget_ms) tuples).
+
 # API breaking-change gate (A9.2). Blocks a commit when a committed OpenAPI/
 # Swagger spec drops or changes an existing endpoint/param/field. Reuses the
 # ai-testing-agent differ via `ai-test api-diff` (optional — advisory skip if
