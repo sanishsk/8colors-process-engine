@@ -1,0 +1,19 @@
+# {{PROJECT_NAME}}
+
+> {{PROJECT_TAGLINE}}
+
+## Structure
+
+- `modules/` — feature modules
+- `tests/` — test suite
+- `scripts/` — CLI + one-shot scripts
+- `docs/` — architecture + process-engine references
+
+## Process engine
+
+Uses [`8colors-process-engine`](https://github.com/sanishsk/8colors-process-engine).
+See `CLAUDE.md` and `docs/process-engine/` for wiring.
+
+## License
+
+TBD.

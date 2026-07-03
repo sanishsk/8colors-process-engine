@@ -3,81 +3,104 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.17.0 shipped — first V2 wave.
-> Fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md` covering
-> security depth, design parity, performance, autonomy, and
-> landscape items. S1 (SAST hook: semgrep + bandit + gosec +
-> eslint-plugin-security) + S2 (Python-first security-reviewer
-> rewrite with auth/JWT/OAuth/payment depth + confidence scoring)
-> landed as v0.17.0. Next V2 waves: v0.18 D1+D2+PF3 (design + a11y +
-> perf budgets); v0.18.x PF1+PF2; v0.19 A1+A2 (telemetry + eval).)
+> **Last updated:** 2026-07-03 (v0.25.0 shipped — A6 partial: `pe new`
+> scaffold + first reusable domain module. Nine V2 items now shipped
+> since the fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.
+> Live-mode gate-efficacy validated end-to-end at ~$0.28 spend.)
 
 ---
 
-## One-line state
+## Current state — v0.25.0 (`93998d7` → `<v0.25.0 sha>` this session)
 
-Engine v0.17.0 committed and pushed. **Five** consecutive releases
-this sitting; V2 wave 1 begins:
-- **v0.13.0** (`3f13653`) — simplicity toolchain: P6.1 Ponytail,
-  P6.2 complexity + dead-code (ruff/xenon/vulture/knip/eslint), P6.3
-  net-LOC + file/function size, P6.4 `/simplify` chain stage, P5.4
-  duplication ratchet (jscpd).
-- **v0.14.0** (`2465bee`) — product-quality gates from 8CStudio
-  audit: P5.1 boot-smoke, P5.2 migration-lint, P5.3 design-lint
-  (multi-theme), P5.5 Playwright smoke template, P5.6 confusion-
-  budget test, P5.7 copy-lint, P5.8 auth-robustness (security-
-  reviewer + pytest template), P5.9 AI-aesthetic rubric in code-
-  reviewer.
-- **v0.15.0** (`4ee7b0c`) — P2.11 Python hygiene batch: 20 targeted
-  fixes across pe_gate / pe_orchestrator / baseline / research_index,
-  22 new unittest cases, 86 tests pass overall.
-- **v0.16.0** (`32e4a54`) — P7.4 skills-audit tool + `docs/
-  SKILLS.md` core-20 curation; P7.5 `docs/EXECUTION_PATTERNS.md`
-  with worktree / headless / background recipes; RHYTHM.md refs.
-- **v0.17.0** (this commit) — **V2 wave 1**. S1 SAST hook
-  (`hooks/sast-scan.sh` — semgrep + bandit + gosec + eslint) with
-  yaml toggles + FP allowlist template. S2 security-reviewer
-  rewrite: de-Node-ified, Python-first pattern table, auth depth
-  (session/JWT/OAuth/reset), payment + webhook §, confidence
-  scoring 0.0–1.0 with WARN <0.5 routing.
+**V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
+
+| Item | Status | Release |
+|---|---|---|
+| S1 SAST hook | ✅ SHIPPED | v0.17.0 |
+| S2 Python-first security-reviewer | ✅ SHIPPED | v0.17.0 |
+| D1 design-critic agent | ✅ SHIPPED | v0.18.0 |
+| D2 a11y + Lighthouse a11y | ✅ SHIPPED | v0.18.0 |
+| PF3 perf budgets | ✅ SHIPPED | v0.18.0 |
+| PF2 static perf gate | ✅ SHIPPED | v0.18.1 |
+| A1 telemetry parser | ✅ SHIPPED | v0.19.0 |
+| A2 gate-efficacy corpus | ✅ SEEDED across 5 gates | v0.19.0 → v0.20.0 |
+| L1 OTel spans | 🟡 PARTIAL (per-turn; span-tree TODO) | v0.19.0 |
+| L2 trajectory eval | 🟡 PARTIAL (adversarial fixtures; `--live` metrics TODO) | v0.19.0 → v0.21.0 |
+| L4 cost attribution | 🟡 PARTIAL (per-turn cost; retro surfacing TODO) | v0.19.0 |
+| A4 exec primitive | 🟡 PARTIAL (`pe agent run` shipped; auto-escalation loop TODO) | v0.21.0 |
+| A3 incident synthesizer | ✅ SHIPPED | v0.22.0 |
+| A5 Ponytail universal prereq | ✅ SHIPPED | v0.23.0 |
+| L3 memory governance | ✅ SHIPPED | v0.24.0 |
+| A6 domain layer | 🟡 PARTIAL (`pe new` + `api-credentials`; auth/tenancy/billing TODO) | v0.25.0 |
+
+**Not started yet:** S3 (auth/webhook/payment pytest templates), S4
+(LLM-agent threat hardening), A7 (cross-session memory learning),
+A8 (native plugin migration), A9 higher tiers, PF1 (runtime N+1),
+PF4/PF5 (soak + load), PF6 (perf-reviewer agent), D3/D4.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Re-install adopters against v0.17.0.** New security template
-   dir + `sast_gate` yaml section land via the installer. Adopters
-   who want SAST enforcement install semgrep/bandit locally:
-   ```bash
-   pipx install semgrep bandit
-   pe install /Users/sanishsasikumar/Documents/8Colors/8CStudio
-   pe install /Users/sanishsasikumar/Documents/Origyn
-   ```
+1. **Adopters are already synced through v0.25.0.** Both 8CStudio
+   and Origyn re-installed as of this session. No `pe install`
+   needed on next session unless a new release ships.
 
-2. **Continue V2 waves (per plan §Suggested execution order).**
+2. **Continue V2 per remaining priority order** (operator's call
+   each release):
 
-   - **v0.18** — **D1 + D2 + PF3** (design parity + a11y + perf
-     budgets). D1 = new design-critic agent with verified envelope;
-     D2 = axe-core Playwright + Lighthouse CI; PF3 shares
-     Lighthouse wiring with D2 for perf budgets (LCP/TBT/bundle) +
-     backend p95 latency assertions.
-   - **v0.18.x** — **PF1 + PF2** (runtime N+1 gate via nplusone +
-     query-count assertions; unbounded-query + missing-index static
-     gate via semgrep rules).
-   - **v0.19** — **A1 + A2** (real telemetry parsing +
-     gate-efficacy eval harness with seeded-defect corpus +
-     adversarial fixtures per L2). Measurement first.
-   - **v0.20** — **S3 + S4 + A5** (auth/webhook/payment pytest
-     templates + LLM-agent threat hardening + Ponytail-as-default).
-   - **v0.20.x** — **PF6 + PF4 + PF5** (perf-reviewer agent + soak
-     + load).
-   - **After telemetry** — **A3 + A4** (self-improvement loop +
-     closed execution).
-   - **After 8CStudio Delivery settles** — **A6 + A8** (domain
-     scaffold + native plugin migration).
+   - **A4 completion** — orchestrator auto-escalation loop.
+     Consumes the `pe agent run` primitive shipped in v0.21.0.
+     Requires `--auto-execute` flag gated by `--enforce` (still
+     `tested = false` per §9 watchpoint). Ship AFTER first-fire
+     evidence on enforce-mode.
+   - **S3 + S4** — security depth. S3 = auth/webhook/payment pytest
+     templates (deferred from v0.17). S4 = LLM-agent threat hardening
+     (prompt-injection detection PostToolUse hook, transcript-guard,
+     `pe verify`).
+   - **A6 completion** — remaining domain modules. `auth` first
+     (closes the placeholder decorators in `api-credentials`); then
+     `tenancy`, then `billing`. Each ships when the pattern proves
+     stable in ≥ 2 adopters.
+   - **A7** — cross-session agent memory (retrieve prior decisions +
+     RAG upgrade to SQLite FTS5 hybrid). Depends on A1, A2 —
+     unblocked now.
+   - **PF1** — runtime N+1 gate via query-count assertions.
+     Complements PF2's static gate.
+   - **PF4/PF5** — soak + load templates (perf-reviewer agent
+     PF6 covers these as a package).
+   - **A8** — native Claude Code plugin migration (before widening
+     the beta).
 
 3. **8CStudio #227 dev-env repair** — deliberately deferred until
-   the V2 waves settle per operator direction "lets finish all of
-   engine work first". Product tests can proceed with 8CStudio /
-   Origyn while V2 rolls out.
+   V2 items settle per operator direction. Product tests can
+   proceed with 8CStudio / Origyn while V2 continues.
+
+## Real-project validation (v0.23.1 live-mode smoke — 2026-07-03)
+
+Live-mode gate-efficacy invoked end-to-end against the real
+Anthropic API caught two silent-zero bugs in `pe agent run`'s cost
+accounting (fixed as v0.23.1, 5 regression tests added, verified
+with second live invocation). Total live-mode spend so far: **$0.28**.
+
+- 8CStudio: `pe telemetry collect` → 3475 turns, ~$2309 grand total
+- Origyn: `pe telemetry collect` → 454 turns, ~$332 grand total
+- security-reviewer/pass-parameterized-orm live: correct PASS
+  verdict, cost $0.150 accurate
+
+## Historical: what shipped in earlier waves
+
+The v0.17.0 → v0.25.0 sequence expanded the engine substantially:
+
+- **v0.17.x** — S1 SAST hook + S2 security-reviewer rewrite
+- **v0.18.x** — D1 design-critic + D2 a11y gate + PF3 perf budgets +
+  PF2 static perf gate
+- **v0.19.0** — A1 telemetry + A2 corpus (security-reviewer seeded) +
+  L1/L2/L4 partial
+- **v0.20.0** — A2 fill-out (all 5 gates seeded + schema drift fix)
+- **v0.21.0** — A4 primitive (`pe agent run`) + `--live` mode
+- **v0.22.0** — A3 incident synthesizer + Proposal Envelope schema
+- **v0.23.0/1** — A5 Ponytail default-on + preflight hook + cost fix
+- **v0.24.0** — L3 memory governance (`pe memory`)
+- **v0.25.0** — A6 partial (`pe new` scaffold + `api-credentials`)
 
 ## What the v0.10.0 P1 bundle ships (6 items — condensed)
 

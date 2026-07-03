@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Re-enter password{% endblock %}
+
+{% block content %}
+<div class="max-w-sm mx-auto py-16">
+  <h1 class="text-lg font-serif text-slate-900 mb-1">Confirm your password</h1>
+  <p class="text-sm text-slate-500 mb-8">
+    You're about to access API credentials. For safety, re-enter your
+    password. This opens a 15-minute step-up window.
+  </p>
+  <form method="post" class="space-y-6">
+    {{ csrf_token() }}
+    <div>
+      <label class="block text-xs uppercase tracking-wide text-slate-500 mb-1">Password</label>
+      <input type="password" name="password"
+             class="w-full border-b border-slate-300 py-1 text-sm bg-transparent focus:outline-none focus:border-slate-900"
+             autocomplete="current-password" required>
+    </div>
+    <button type="submit"
+            class="text-sm text-slate-900 border-b border-slate-400 hover:border-slate-900 pb-0.5">
+      Continue
+    </button>
+  </form>
+</div>
+{% endblock %}

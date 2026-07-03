@@ -1,0 +1,33 @@
+"""{{PROJECT_NAME}} entrypoint — Flask app factory + dev-server runner.
+
+Production runs behind gunicorn / uwsgi. Development runs via
+`python run.py` (or `flask run`).
+"""
+
+from __future__ import annotations
+
+import os
+from flask import Flask
+from dotenv import load_dotenv
+
+
+def create_app() -> Flask:
+    load_dotenv()
+    app = Flask(__name__)
+    app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
+    app.config["DATABASE_URL"] = os.environ["DATABASE_URL"]
+
+    # Register blueprints as the project grows:
+    # from modules.auth.blueprint import bp as auth_bp
+    # app.register_blueprint(auth_bp)
+
+    @app.get("/health")
+    def health() -> dict:
+        return {"status": "ok"}
+
+    return app
+
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 5000)), debug=True)

@@ -75,6 +75,10 @@ SUBCOMMANDS
     incident list         List materialized proposals in the current project.
     memory <sub>          L3 auto-memory governance: ls / show / rm / verify /
                           stale. Inspect + prune ~/.claude/projects/<slug>/memory/.
+    new <name> [--stack]  A6 scaffold — deterministic template drop + git init +
+                          auto pe install. Stacks: python-flask (default), generic.
+    module add <name>     A6 domain module — materialize a reusable module
+                          (e.g. api-credentials) into <project>/modules/<name>/.
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
@@ -1159,6 +1163,84 @@ EOF
     esac
 }
 
+cmd_new() {
+    # A6 scaffold. `pe new` is a top-level shortcut that maps to
+    # pe_new.py's `scaffold` subcommand — the operator types
+    # `pe new "Acme Corp" --stack python-flask`, we prepend
+    # `scaffold`. Zero API cost; deterministic template drop.
+    local py; py="$(pe_python)" || exit 1
+    if [ $# -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+        cat <<EOF
+pe new <name> [--stack python-flask|generic] [--dir <parent>]
+              [--tagline "<one-liner>"] [--no-install]
+
+Scaffolds a fresh project directory from templates/scaffold/<stack>/.
+Substitutes {{PROJECT_NAME}} / {{PROJECT_SLUG}} / {{PROJECT_TAGLINE}}
+placeholders, initializes git, then runs \`pe install\` on the new
+directory unless --no-install is passed.
+
+The complement to \`agents/project-kickstarter.md\` — that agent does
+interactive Q&A + reasoning; \`pe new\` is the deterministic
+template-drop path (zero API cost).
+
+Stacks
+    python-flask   — Flask 3 + SQLAlchemy 2 + pytest + ruff + mypy.
+                     Ships modules/, tests/, pyproject.toml, run.py,
+                     .env.example, smoke test.
+    generic        — Minimal, stack-agnostic tree. modules/, tests/,
+                     scripts/, docs/, CLAUDE.md, README.md.
+
+Post-scaffold
+    cd <name>
+    <install deps for your stack>
+    <restart Claude Code>
+
+See docs/SCAFFOLD.md for the full doctrine.
+EOF
+        return 0
+    fi
+    exec "$py" "$ENGINE_DIR/scripts/pe_new.py" scaffold "$@"
+}
+
+cmd_module() {
+    # A6 domain-module dropper. `pe module add <name>` materializes
+    # templates/domain-modules/<name>/ into a project's modules/
+    # tree. Never overwrites existing files.
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        add)
+            local py; py="$(pe_python)" || exit 1
+            exec "$py" "$ENGINE_DIR/scripts/pe_new.py" module add "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe module — reusable domain-module dropper (A6)
+
+SUBCOMMANDS
+    add <name> [--project <path>]
+        Materialize a reusable module into <project>/modules/<name>/.
+        Never overwrites existing files (reports skipped).
+
+AVAILABLE MODULES
+    api-credentials    Encrypted API-key admin (Python/Flask).
+                       Extracted from operator's rules/common/
+                       api-credentials.md doctrine. Ships models,
+                       service, admin blueprint, templates,
+                       migration, tests.
+
+See docs/SCAFFOLD.md § domain modules for the roadmap of upcoming
+modules (auth, tenancy, billing, ...) and how to author your own.
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe module' subcommand: $sub" >&2
+            echo "Run 'pe module help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -1296,6 +1378,8 @@ case "$cmd" in
     agent)      cmd_agent "$@" ;;
     incident)   cmd_incident "$@" ;;
     memory)     cmd_memory "$@" ;;
+    new)        cmd_new "$@" ;;
+    module)     cmd_module "$@" ;;
     gate)       cmd_gate "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;

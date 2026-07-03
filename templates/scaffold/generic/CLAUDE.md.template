@@ -1,0 +1,36 @@
+# {{PROJECT_NAME}} — Project Rules
+
+> Project-scoped rules. Extends the operator's global rules at
+> `~/.claude/CLAUDE.md`.
+
+## Structure
+
+```
+modules/           — feature modules
+tests/             — test suite (framework of your choice)
+scripts/           — CLI + one-shot scripts
+docs/              — architecture + process-engine references
+```
+
+## Non-negotiable rules
+
+1. **No hardcoded business values** — rates, thresholds, categories
+   live in config, not scattered in code.
+2. **Server-side validation** — never trust the frontend / client.
+3. **Every feature has a test** — TDD workflow is the default.
+4. **Ponytail first** — before adding a file / dep / abstraction, walk
+   the decision-ladder.
+
+## 8colors-process-engine wiring
+
+- Agents / commands / skills / hooks installed via `pe install`.
+- Envelope contract for gates: `docs/process-engine/E1_GATE_ENVELOPE.md`.
+- Ponytail preflight fires on Write/Edit (v0.23.0+).
+
+## Anti-patterns to reject in review
+
+- New service / subsystem when a stdlib function would do
+- New dependency without `Ponytail: allow <reason>`
+- Business value hardcoded as a magic number
+- Silently swallowing exceptions
+- `> 800 lines` in a single file (extract or split)

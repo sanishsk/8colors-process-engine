@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Env / secrets — never commit
+.env
+.env.local
+.env.*.local
+credentials.json
+*.pem
+
+# Test / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# 8colors-process-engine runtime state (per-machine, regenerable)
+.pe/
+.playwright-mcp/
+
+# Dev-log snapshots (regenerable)
+docs/dev-log/daily/
+docs/dev-log/weekly/
+docs/dev-log/monthly/
+
+# RAG index (regenerable)
+*.research-index.sqlite
+
+# Local process-engine overrides
+.process-engine.local.yaml

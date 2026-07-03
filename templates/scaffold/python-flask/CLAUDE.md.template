@@ -1,0 +1,76 @@
+# {{PROJECT_NAME}} — Project Rules
+
+> Project-scoped rules. Extends the operator's global rules at
+> `~/.claude/CLAUDE.md` and the engine's shared rules at
+> `docs/process-engine/`.
+
+## Stack
+
+- **Language:** Python 3.11+
+- **Framework:** Flask
+- **DB:** PostgreSQL (via SQLAlchemy)
+- **Tests:** pytest
+- **Linter:** ruff
+- **Type-checker:** mypy (or pyright)
+
+## Structure
+
+```
+modules/           — feature modules (auth, tenancy, billing, ...)
+tests/             — pytest suite (mirrors modules/ layout)
+scripts/           — CLI + one-shot scripts
+docs/              — architecture + design + process-engine wiring
+migrations/        — schema migrations (in commit order)
+run.py             — Flask entrypoint
+```
+
+## Non-negotiable rules
+
+1. **Schema is the source of truth** — types + validation + constraints
+   flow from the model, not scattered constants.
+2. **No hardcoded business values** — rates, thresholds, categories
+   live in the DB or config, not `if amount > 100:` in code.
+3. **Parameterized queries only** — never string-concatenate user input
+   into SQL. SQLAlchemy ORM or explicit `%s` placeholders.
+4. **Server-side validation** — every endpoint validates input; never
+   trust the frontend.
+5. **Every feature has a test** — TDD workflow (red → green → refactor)
+   is the default; ~80% coverage floor.
+6. **Ponytail first** — before adding a file / dep / abstraction, walk
+   the decision-ladder. Every new dep needs
+   `Ponytail: allow <reason>` in the envelope.
+
+## 8colors-process-engine wiring
+
+- Agents / commands / skills / hooks installed via `pe install`.
+- Weekly retro fires Friday 17:00 (macOS launchd) — see
+  `.process-engine.yaml`.
+- Envelope contract for gates: see
+  `docs/process-engine/E1_GATE_ENVELOPE.md`.
+- Ponytail preflight fires on Write/Edit before every save (v0.23.0+).
+
+## Quality gates active in this project
+
+- `pre-commit` — SAST scan, secrets scan, deps audit, docs
+  consistency check.
+- `code-reviewer` agent — mandatory before every commit that changes
+  behavior.
+- `security-reviewer` agent — mandatory for auth / payment / secrets
+  paths.
+- `tdd-guide` agent — enforces red-first when adding a new feature.
+
+## Anti-patterns to reject in review
+
+- New service / subsystem when a stdlib function would do
+- New dependency without `Ponytail: allow <reason>`
+- Business value hardcoded as a magic number or string
+- Raw SQL with string interpolation
+- Silently swallowing exceptions
+- `> 800 lines` in a single file (extract or split)
+
+## Deploy / release
+
+- `main` branch is release-quality by policy.
+- Every commit gets a review trailer via
+  `hooks/code-review-trailer.sh`.
+- Version bumps happen in `VERSION` + this file's frontmatter (if any).

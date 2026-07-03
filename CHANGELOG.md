@@ -7,6 +7,144 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.25.0] — 2026-07-03
+
+> **A6 (partial) — `pe new` project scaffolder + first reusable domain
+> module (`api-credentials`).** The plan called this the "biggest
+> structural gap" and marked it Effort: L. Full A6 = scaffold + a
+> whole library of reusable SaaS modules (auth, tenancy, billing,
+> credentials, ...). This release ships the SCAFFOLD half and ONE
+> module as a proof-of-shape. The remaining modules land as each
+> pattern proves itself across ≥ 2 adopters — the engine principle
+> is "extract, don't architect in advance."
+
+### Added — `pe new` scaffold
+
+- **`scripts/pe_new.py`** — deterministic template-drop scaffolder.
+  Zero API cost. Substitutes `{{PROJECT_NAME}}` / `{{PROJECT_SLUG}}`
+  / `{{PROJECT_TAGLINE}}` placeholders, runs `git init -b main`,
+  then chains into `pe install` on the new directory (unless
+  `--no-install`).
+
+- **`pe new <name> [--stack python-flask|generic] [--dir <parent>]
+  [--tagline "..."] [--no-install]`** — 30-second fresh-project path.
+  Slugifies the display name for the directory (`"Acme Invoices"` →
+  `acme-invoices`). Refuses to run if the target directory exists and
+  is non-empty (exit 1). Rejects unknown stacks with exit 3.
+
+- **`templates/scaffold/python-flask/`** — Flask 3 + SQLAlchemy 2 +
+  pytest + ruff + mypy stack. Ships `run.py` (app factory + /health
+  endpoint), `pyproject.toml` (deps + tool config), `.env.example`
+  (SECRET_KEY, DATABASE_URL, PORT), `.gitignore` (Python + engine),
+  `CLAUDE.md` (project rules), `README.md`, `modules/__init__.py`,
+  `tests/__init__.py`, `tests/test_smoke.py` (proves boot).
+
+- **`templates/scaffold/generic/`** — stack-agnostic minimal tree.
+  `modules/`, `tests/`, `scripts/`, `docs/`, `.gitignore`,
+  `CLAUDE.md`, `README.md`. Extends any language / framework.
+
+- **Complementary to `agents/project-kickstarter.md`** — that agent
+  does interactive Q&A + Opus reasoning; `pe new` is the
+  deterministic drop when the operator already knows the stack.
+  Both paths end with the same `pe install`.
+
+### Added — `pe module add` domain-module dropper
+
+- **`pe module add <module> [--project <path>]`** — materializes a
+  reusable module into `<project>/modules/<name>/`. Never overwrites
+  existing files (reports "skipped" per collision). Exits 1 if EVERY
+  file is a collision ("nothing written"). Exits 3 on unknown module.
+
+- **`templates/domain-modules/api-credentials/`** — first reusable
+  module. Extracted from the operator's global doctrine
+  (`~/.claude/rules/common/api-credentials.md`) — this is the
+  CODE side of the same pattern. Ships 8 files:
+    * `README.md` — post-materialization steps (deps, env-var,
+      blueprint registration, migration)
+    * `models/api_credential.py` — encrypted row + audit table
+      SQLAlchemy models
+    * `credential_service.py` — 3-layer fallback (cache → encrypted
+      DB → legacy env var), Fernet encryption, 60-second in-process
+      cache, `invalidate_cache()`, `encrypt_for_storage()`
+    * `blueprints/admin_credentials.py` — owner-only + step-up
+      auth + audit-log blueprint. Write-only responses (last-4
+      preview only). CSRF + rate-limit as doctrine.
+    * `templates_admin/api_credentials.html` — write-only admin form
+    * `templates_admin/reauth.html` — step-up password page
+    * `migrations/migrate_api_credentials.py` — CREATE TABLE
+      migration (idempotent via IF NOT EXISTS)
+    * `tests/test_api_credentials.py` — coverage floor:
+      encrypt/decrypt roundtrip, master-key-required-for-writes,
+      env-var fallback, cache invalidation, plaintext-never-in-logs
+
+### Added — tests
+
+- **`tests/test_pe_new.sh`** — 27 smoke tests:
+    * python-flask scaffold creates slugified dir, ships all 9
+      expected files (README, run.py, pyproject.toml, CLAUDE.md,
+      .gitignore, .env.example, 2× __init__.py, test_smoke.py)
+    * placeholder substitution (name, slug, tagline in the right
+      files)
+    * git init runs
+    * generic scaffold ships baseline files + excludes
+      python-specific ones
+    * refuses to overwrite non-empty target (exit 1)
+    * unknown --stack rejected (exit 3)
+    * pe module add materializes all 7 files
+    * second pe module add reports "skipped" (idempotency)
+    * unknown module rejected (exit 3)
+
+- All 12 test scripts + `pe docs check` green (11 pre-existing +
+  1 new). Total unit-test count across the suite continues to grow
+  monotonically as new surfaces ship.
+
+### Added — `docs/SCAFFOLD.md`
+
+Doctrine doc: two-surface architecture (`pe new` for fresh, `pe
+module add` for existing), available stacks + modules table,
+placeholder substitution rules, `.template` suffix convention, the
+no-overwrite policy, roadmap for next modules (auth, tenancy,
+billing — deferred to follow-up releases per "extract, don't
+architect in advance" principle), and how `pe new` complements
+`project-kickstarter` and `project-onboarder`.
+
+### Alignment sweep
+
+- `docs/ENHANCEMENT_PLAN_V2.md` A6 marker: `MISSING` →
+  `PARTIAL SHIPPED (scaffold + 1 module; module library deferred)`.
+- `plugin.json.description` grew a summary of the two new surfaces.
+- `README.md` badge → 0.25.0.
+- `CHANGELOG` (this entry) documents scope + deferrals honestly.
+
+### Notes
+
+- **What's deferred to follow-ups** (not this release):
+    * `auth` module (session + JWT + OAuth + password reset) —
+      closes the last placeholder in `api-credentials` (which
+      currently placeholder-decorates its blueprint with
+      `owner_required` / `require_password_reauth` stubs).
+    * `tenancy` module (multi-tenant `org_id` scoping + RLS setup).
+    * `billing` module (Stripe / Razorpay integration with webhook
+      HMAC verification + idempotency).
+    * Each ships when it's genuinely reusable across ≥ 2 projects.
+- The `api-credentials` module's blueprint currently has PLACEHOLDER
+  decorators — this is intentional and documented in the module's
+  README. Materialization on a project that doesn't yet have an
+  auth module surfaces the gap immediately (the placeholder aborts
+  with 403). Adopters that want to use `api-credentials` today
+  must either bring their own auth or wait for the `auth` module.
+- Total scaffolded project boot time end-to-end (fresh dir → `pe
+  new` → `.venv` → `pytest -q`): ~90 seconds on a typical machine.
+
+### Migration
+
+- No breaking changes. `pe new` + `pe module add` are new
+  subcommands; existing workflow untouched.
+- Adopters: `pe upgrade` picks up the new subcommands. No
+  re-install required — existing projects are already scaffolded.
+
+---
+
 ## [0.24.0] — 2026-07-03
 
 > **L3 — auto-memory governance (inspect / verify / delete /

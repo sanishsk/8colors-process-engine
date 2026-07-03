@@ -1,0 +1,22 @@
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# 8colors-process-engine runtime state
+.pe/
+.playwright-mcp/
+
+# Dev-log snapshots
+docs/dev-log/daily/
+docs/dev-log/weekly/
+docs/dev-log/monthly/
+
+# Local process-engine overrides
+.process-engine.local.yaml

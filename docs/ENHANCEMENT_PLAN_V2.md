@@ -443,26 +443,33 @@ agent gates actually catch anything.
   scripts + `pe docs check` green.
 
 ### A6 Domain layer — `pe new` scaffold + extract reusable SaaS modules
-- **Severity:** MEDIUM · **Effort:** L · **Model:** Opus · **[MISSING — NOT built; still the biggest structural gap]** · **do after 8CStudio Delivery settles**
-- **STATUS (2026-07-03, answering "is the domain layer solid now?"): NO — it is entirely unbuilt.**
-  Verified: no `modules/` directory exists, `pe new` is not a command (`grep "pe new" scripts/pe`
-  = 0). Every gap from the original audit's P3.1/P3.2 stands. What HAS improved is the *discipline*
-  layer around it (gates, hooks, agents) — but "what SaaS apps are made of" (reusable auth,
-  tenancy, billing, credentials) is still hand-rolled per project. This is deliberate deferral, not
-  an oversight: extracting a module from a moving target produces a bad abstraction. The correct
-  trigger is "after 8CStudio's Delivery build proves the shapes" — until then it stays parked. So
-  when a NEW app starts today, it still rewrites auth/tenancy from scratch; A6 is what fixes that,
-  and it is the highest-value *structural* item once its precondition is met.
-- **Files:** `scripts/pe` (`pe new` subcommand), new `modules/` (8c-tenancy, 8c-billing,
-  8c-credentials), each WITH tests + its reviewing agent.
-- **Fix:** `pe new <app>` scaffolds a Flask/Postgres/pytest skeleton with the engine + CI gates +
-  boot-smoke pre-wired (the kickstarter agent exists but must be run manually). Extract the
-  proven SaaS modules from 8CStudio/Origyn: **8c-tenancy** (RLS + the tenant-isolation-auditor as
-  its gate), **8c-billing** (payment_service/webhook stack + the S3 payment templates as its
-  gate), **8c-credentials** (managed-secrets pattern). This is the deepest "less code, fewer
-  vulns" move — a new app stops hand-rolling auth/tenancy/billing (3-5 risky days each) and
-  inherits reviewed, tested modules. Gate the timing: extract AFTER 8CStudio's Delivery build
-  proves the module shapes (don't extract a moving target).
+- **Severity:** MEDIUM · **Effort:** L · **Model:** Opus · **[PARTIAL SHIPPED v0.25.0 — scaffold + 1 module; remaining modules deferred]**
+- **STATUS (2026-07-03, post-v0.25.0):** the SCAFFOLD half is shipped and the FIRST module
+  (`api-credentials`) is materialized as proof-of-shape. Full module library — `auth`,
+  `tenancy`, `billing` — is DEFERRED to follow-up releases per the "extract, don't architect
+  in advance" principle: each ships when the pattern proves itself across ≥ 2 adopters. The
+  original plan's "do after 8CStudio Delivery settles" constraint applies to the remaining
+  modules, NOT the scaffold — the scaffold has zero dependency on any specific module shape.
+- **Files (shipped v0.25.0):** `scripts/pe_new.py` (~230 lines — stack detection, placeholder
+  substitution, git init, chained `pe install`), `scripts/pe` (`cmd_new` + `cmd_module`
+  dispatch), `templates/scaffold/python-flask/` (9 files: run.py + pyproject.toml +
+  CLAUDE.md + README.md + .gitignore + .env.example + modules/__init__.py + tests/__init__.py
+  + tests/test_smoke.py), `templates/scaffold/generic/` (stack-agnostic minimal tree),
+  `templates/domain-modules/api-credentials/` (8 files: models, credential_service,
+  admin_credentials blueprint, admin templates, migration, coverage-floor tests),
+  `docs/SCAFFOLD.md` (doctrine), `tests/test_pe_new.sh` (27 smoke tests: scaffold + module +
+  overwrite refusal + placeholder substitution + git init + idempotency).
+- **What shipped exactly:** `pe new "Acme Invoices" --stack python-flask` scaffolds a fresh
+  project in ~30 seconds, git-init'd, `pe install`-completed, with a passing smoke test.
+  `pe module add api-credentials` materializes the encrypted-API-key admin pattern
+  (Fernet-encoded rows + write-only admin UI + audit log + env-var fallback for migration).
+  Complementary to `agents/project-kickstarter.md` — that agent runs interactive Q&A + Opus
+  reasoning; `pe new` is the deterministic drop when the operator already knows the stack.
+- **What's still open:** `auth` module (session + JWT + OAuth + password reset — closes the
+  placeholder decorator gap in `api-credentials`), `tenancy` module (RLS + tenant-isolation-
+  auditor as its gate), `billing` module (payment_service/webhook stack + S3 payment templates
+  as its gate). Extract each AFTER the pattern proves stable in ≥ 2 adopters (8CStudio +
+  Origyn are the current calibration corpus).
 
 ### A7 Cross-session agent memory (learn from prior decisions)
 - **Severity:** LOW-MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]** · **depends: A1, A2**

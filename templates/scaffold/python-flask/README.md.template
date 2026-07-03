@@ -1,0 +1,57 @@
+# {{PROJECT_NAME}}
+
+> {{PROJECT_TAGLINE}}
+
+## Quick start
+
+```bash
+# 1. Set up the virtualenv
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+# 2. Copy the env template + fill in real values
+cp .env.example .env
+
+# 3. Initialize the database (once created)
+# ... project-specific instructions here ...
+
+# 4. Run
+python run.py
+```
+
+## Development
+
+Tests:
+
+```bash
+pytest -q
+pytest --cov=modules -q  # with coverage
+```
+
+Lint + type-check:
+
+```bash
+ruff check .
+mypy modules/
+```
+
+## Process engine
+
+This project uses [`8colors-process-engine`](https://github.com/sanishsk/8colors-process-engine).
+Agents, hooks, and workflow rules are wired via `pe install`. See
+`docs/process-engine/` for the reference docs, and the "8colors-
+process-engine wiring" section of `CLAUDE.md`.
+
+## Repository layout
+
+- `modules/` — feature modules (one directory per bounded context)
+- `tests/` — pytest suite (mirrors `modules/` layout)
+- `scripts/` — CLI + one-shot scripts
+- `migrations/` — schema migrations (numbered, in commit order)
+- `docs/` — architecture + design docs + process-engine references
+- `run.py` — Flask entrypoint
+
+## License
+
+TBD.

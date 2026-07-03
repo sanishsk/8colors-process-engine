@@ -1,0 +1,22 @@
+"""Smoke test — the app boots and /health returns ok.
+
+This is the "app won't boot" gate: if this test fails, no deploy
+should proceed. Every future test file goes alongside this one.
+"""
+
+from __future__ import annotations
+
+import os
+
+os.environ.setdefault("SECRET_KEY", "test-secret-not-real")
+os.environ.setdefault("DATABASE_URL", "postgresql://localhost/test")
+
+from run import create_app  # noqa: E402  — env vars set first
+
+
+def test_health_endpoint_returns_ok() -> None:
+    app = create_app()
+    client = app.test_client()
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.get_json() == {"status": "ok"}
