@@ -1,0 +1,15 @@
+{
+  "//": "ai-testing-agent MCP server (engine item A9). Merge the `ai-testing-agent` key into your project's .mcp.json `mcpServers` object. See templates/mcp/README.md.",
+  "mcpServers": {
+    "ai-testing-agent": {
+      "command": "ai-test-mcp",
+      "args": [],
+      "env": {
+        "//AI_TEST_BASE_URL": "Base URL of the running app under test, e.g. http://localhost:5001",
+        "//AI_TEST_AUTH_URL": "Optional login path for session auth, e.g. /login",
+        "//AI_TEST_AUTH_USERNAME": "Optional test-user username (never a real secret in git)",
+        "//AI_TEST_AUTH_PASSWORD": "Optional test-user password — source from env/secret manager, NOT hardcoded"
+      }
+    }
+  }
+}

@@ -299,6 +299,18 @@ if [ -d "$ENGINE_DIR/templates/security" ]; then
     done
 fi
 
+# Copy MCP registration templates (A9.1 — ai-testing-agent + future MCPs).
+# The engine cataloges MCP servers gate agents consume; adopters
+# merge the .mcp.json snippets into their project .mcp.json.
+if [ -d "$ENGINE_DIR/templates/mcp" ]; then
+    mkdir -p "$TARGET/docs/templates/mcp"
+    for f in "$ENGINE_DIR"/templates/mcp/*; do
+        [ -f "$f" ] || continue
+        dst="$TARGET/docs/templates/mcp/$(basename "$f")"
+        [ -f "$dst" ] || cp "$f" "$dst"
+    done
+fi
+
 # ─── --with-ponytail (P6.1) ─────────────────────────────────────────
 # Clone/refresh Ponytail decision-ladder skill into user-global skills
 # directory. Idempotent: git pull if already present. Silently skips if
