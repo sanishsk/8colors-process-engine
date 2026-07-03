@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}New organization{% endblock %}
+
+{% block content %}
+<div class="max-w-sm mx-auto py-16">
+  <h1 class="text-lg font-serif text-slate-900 mb-8">Create organization</h1>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}
+      <p class="text-sm mb-4 {% if category == 'error' %}text-rose-700{% else %}text-slate-500{% endif %}">
+        {{ msg }}
+      </p>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="post" class="space-y-6">
+    {{ csrf_token() }}
+    <div>
+      <label class="block text-xs uppercase tracking-wide text-slate-500 mb-1">Name</label>
+      <input type="text" name="display_name" required minlength="2" maxlength="128"
+             class="w-full border-b border-slate-300 py-1 text-sm bg-transparent focus:outline-none focus:border-slate-900">
+      <p class="text-xs text-slate-400 mt-1">
+        The URL slug will be derived automatically.
+      </p>
+    </div>
+    <button type="submit"
+            class="text-sm text-slate-900 border-b border-slate-400 hover:border-slate-900 pb-0.5">
+      Create
+    </button>
+  </form>
+</div>
+{% endblock %}

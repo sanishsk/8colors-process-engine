@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}{{ org.display_name }} — Members{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-12">
+  <header class="mb-8">
+    <p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Organization</p>
+    <h1 class="text-lg font-serif text-slate-900">{{ org.display_name }}</h1>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}
+      <p class="text-sm mb-4 {% if category == 'error' %}text-rose-700{% else %}text-slate-500{% endif %}">
+        {{ msg }}
+      </p>
+    {% endfor %}
+  {% endwith %}
+
+  <table class="w-full text-sm">
+    <thead class="border-b border-slate-200 text-slate-500 uppercase tracking-wide text-xs">
+      <tr>
+        <th class="text-left py-2 font-normal">User</th>
+        <th class="text-left py-2 font-normal">Role</th>
+        <th class="text-right py-2 font-normal">Joined</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in memberships %}
+      <tr class="border-b border-slate-100">
+        <td class="py-3 text-slate-900">#{{ m.user_id }}</td>
+        <td class="py-3 text-slate-700">{{ m.role.value }}</td>
+        <td class="py-3 text-right text-slate-500 tabular-nums">
+          {{ m.created_at.strftime("%Y-%m-%d") }}
+        </td>
+        <td class="py-3 text-right">
+          <form method="post"
+                action="{{ url_for('tenancy.remove_member', slug=org.slug, membership_id=m.id) }}"
+                onsubmit="return confirm('Remove this member?');"
+                class="inline">
+            {{ csrf_token() }}
+            <button type="submit"
+                    class="text-xs text-rose-700 border-b border-rose-300 hover:border-rose-700">
+              Remove
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

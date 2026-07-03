@@ -198,7 +198,41 @@ else
     record_fail "combined pe module add api-credentials failed"
 fi
 
-# ─── 9. pycache in template does not break scaffold ─────────────────────
+# ─── 9. tenancy module materializes cleanly + tri-composes ─────────────
+scenario_ten="$WORK/tenancy"
+mkdir -p "$scenario_ten"
+cd "$scenario_ten"
+"$PE" new "Ten Target" --stack python-flask --no-install > /dev/null 2>&1
+cd ten-target
+if "$PE" module add tenancy > /dev/null 2>&1; then
+    for expected in README.md context.py decorators.py scoping.py rls.py \
+                    models/organization.py \
+                    blueprints/tenancy.py \
+                    templates_tenancy/orgs_list.html \
+                    templates_tenancy/orgs_switch.html \
+                    templates_tenancy/orgs_new.html \
+                    templates_tenancy/orgs_members.html \
+                    migrations/migrate_tenancy.py \
+                    tests/test_tenancy.py; do
+        if [ -f "modules/tenancy/$expected" ]; then
+            record_pass "tenancy module materialized $expected"
+        else
+            record_fail "tenancy module MISSING $expected"
+        fi
+    done
+else
+    record_fail "pe module add tenancy exited non-zero"
+fi
+# Tri-composite install: auth + tenancy + api-credentials must coexist.
+"$PE" module add auth > /dev/null 2>&1
+"$PE" module add api-credentials > /dev/null 2>&1
+if [ -d "modules/auth" ] && [ -d "modules/tenancy" ] && [ -d "modules/api_credentials" ]; then
+    record_pass "auth + tenancy + api-credentials tri-composite install"
+else
+    record_fail "tri-composite install left one module missing"
+fi
+
+# ─── 10. pycache in template does not break scaffold ────────────────────
 # Regression: v0.25.0 reviewer caught a stray __pycache__/ in a
 # template that would crash `pe module add` with UnicodeDecodeError.
 # The walker now prunes __pycache__ before descent — verify a rogue

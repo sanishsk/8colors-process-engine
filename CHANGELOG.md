@@ -7,6 +7,149 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.27.0] — 2026-07-03
+
+> **A6 tenancy module — third reusable domain module ships.**
+> Multi-tenant `org_id` scoping + PostgreSQL RLS setup for Flask
+> projects. Adds Organization + Membership models, session-based
+> current-org context, decorators, `scoped_query` helper,
+> `apply_rls_to_table` migration helper (with FORCE mode — blocks
+> superuser bypass), and a basic org-switcher blueprint. Composes
+> with `auth` (v0.26.0) and `api-credentials` (v0.25.0) — the three
+> modules install side-by-side without conflict.
+
+### Added — `templates/domain-modules/tenancy/` (13 files)
+
+- **`README.md`** — post-materialization steps, two-layer defense
+  doctrine (application `scoped_query` + database RLS), composition
+  with `auth`, OrgRole-vs-User.role distinction.
+
+- **`models/organization.py`** — `Organization` (slug-keyed URL-safe
+  identifier + display_name + created_by + is_disabled soft-lock)
+  + `Membership` (user↔org join with `role`, unique per pair) +
+  `OrgRole` enum (owner/admin/member — deliberately distinct type
+  from `auth.Role` so `require_org_role(Role.owner)` reads wrong at
+  the type level).
+
+- **`context.py`** — session-based current-org context:
+    * `current_org_id()` / `require_current_org()` / `set_current_org()`
+    * `init_tenancy_context(app)` — wires two `before_request` hooks:
+      populate `g.current_org_id` from signed session, and emit
+      `SET LOCAL app.current_org_id = <int>` on the DB session so
+      RLS policies resolve correctly. Idempotent — safe to call
+      multiple times. Emits `'0'` when no org active → RLS returns
+      zero rows (safe default, no data leaks).
+
+- **`decorators.py`** — `require_membership` (member of current org
+  or 403; redirects to /orgs/switch when no org set) +
+  `require_org_role(OrgRole)` (factory decorator; enforces
+  per-org role; aborts 500 if used without `require_membership`
+  above it — explicit engineering error, no silent-pass).
+
+- **`scoping.py`** — `scoped_query(cls)` — the ONE-way path for
+  tenant-safe queries. Auto-adds `WHERE org_id = <current>`.
+  Raises `TenancyMisuse` when: (a) the model has no `org_id` column,
+  or (b) no current org context is set. Loud failure beats silent
+  empty-result. Plus `with_current_org(org_id)` context manager
+  for job runners / batch scripts without an HTTP request.
+
+- **`rls.py`** — `apply_rls_to_table(name, session)` migration
+  helper. Idempotent. Does three things:
+    1. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY;`
+    2. `ALTER TABLE ... FORCE ROW LEVEL SECURITY;` — blocks even
+       superuser `BYPASSRLS` role attribute. This is the difference
+       between a shipping-safe deploy and a CVE-worthy silent leak.
+    3. `CREATE POLICY tenant_isolation ... USING (org_id =
+       current_setting('app.current_org_id')::bigint);` — synthesized
+       via `DO $$ ... IF NOT EXISTS ... $$` block since PostgreSQL
+       lacks `CREATE POLICY IF NOT EXISTS`.
+    * Rejects table names outside `[a-z0-9_]+` — defensive against
+      SQL identifier smuggling if a caller ever mistakenly passes
+      user input.
+    * `rls_is_enabled(name)` diagnostic + `drop_rls_from_table(name)`
+      for de-tenanting migrations (documented as dangerous).
+
+- **`blueprints/tenancy.py`** — `/orgs`, `/orgs/switch`, `/orgs/new`,
+  `/orgs/<slug>/members`, `/orgs/<slug>/members/<id>/remove`.
+    * POST /orgs/switch — CSRF-protected (POST-only to prevent
+      CSRF-via-img-src).
+    * POST /orgs/new — creates org + auto-adds creator as
+      OrgRole.owner. Slugifies with -2/-3/... on collision.
+    * POST /orgs/<slug>/members/<id>/remove — @require_org_role(OrgRole.owner)
+      gated. Refuses to remove the last owner.
+
+- **`templates_tenancy/*.html`** — 4 templates. Flask + Tailwind,
+  slate palette + tabular-nums, extends `base.html`.
+
+- **`migrations/migrate_tenancy.py`** — CREATE TABLE organizations
+  + memberships + indexes. Idempotent. `organizations` and
+  `memberships` themselves do NOT get RLS (they're read BEFORE
+  `SET LOCAL` fires — chicken-and-egg). New tenant-scoped tables
+  call `apply_rls_to_table` in their own migration.
+
+- **`tests/test_tenancy.py`** — 12 coverage-floor tests:
+    * OrgRole enum: owner/admin_or_owner + type-distinctness from
+      `auth.Role` (regression guard against import-the-wrong-Role
+      silent-pass)
+    * scoped_query: rejects missing org_id column, rejects
+      no-current-org
+    * require_membership: unauthenticated redirects to login,
+      no-org redirects to switch
+    * require_org_role: owner-admits-owner, owner-rejects-admin,
+      admin-admits-{admin,owner}, admin-rejects-member,
+      missing-membership-context-is-500
+    * rls.apply_rls_to_table: rejects SQL identifier smuggling,
+      accepts snake_case + alnum
+    * context: set/get round-trip through session, init is
+      idempotent (double-init doesn't double-register
+      before_request hooks)
+
+### Added — tests
+
+- **`tests/test_pe_new.sh`** grew 39 → 53 tests. New coverage:
+  tenancy module materializes all 13 files, tri-composite install
+  (`auth + tenancy + api-credentials`) leaves all three module
+  directories intact.
+
+### Updated
+
+- `docs/SCAFFOLD.md` — tenancy row added to the modules table.
+- `plugin.json.description` — mentions tenancy's decorators + RLS
+  helper.
+- `README.md` badge → 0.27.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` A6 marker: adds "SHIPPED v0.27.0
+  for tenancy — billing remains queued".
+
+### Alignment
+
+- All 12 test scripts + `pe docs check` green after the release.
+- Total module inventory: **3** — `auth` (v0.26.0), `tenancy`
+  (v0.27.0), `api-credentials` (v0.25.0). Cross-references between
+  them (auth decorators ← api-credentials placeholder resolution;
+  tenancy depends on users table from auth) all work.
+
+### Notes — what's deliberately deferred from tenancy's scope
+
+- **Email invitations** — needs email transport wired first (same
+  reason password-reset is deferred from auth).
+- **Cross-org resource sharing** — no doctrine yet on how a project
+  or invoice can appear in two orgs. Ship when the operator's
+  8CStudio Delivery build proves a shape.
+- **Org-level API keys** — worth a future extension of the
+  api-credentials module.
+- **Advanced RLS policies** — the module ships the standard
+  `org_id = current` policy. Row-level ACLs, time-based visibility,
+  role-based row filtering all get added per project need.
+
+### Migration
+
+- No breaking changes. `pe module add tenancy` is a new drop-in.
+  Requires `auth` module for the `users(id)` FK reference.
+- Adopters: `pe upgrade` picks up the new module. `pe module add
+  tenancy` in the target project when ready.
+
+---
+
 ## [0.26.0] — 2026-07-03
 
 > **A6 auth module — closes the placeholder decorators in

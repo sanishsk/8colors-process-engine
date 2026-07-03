@@ -443,7 +443,7 @@ agent gates actually catch anything.
   scripts + `pe docs check` green.
 
 ### A6 Domain layer — `pe new` scaffold + extract reusable SaaS modules
-- **Severity:** MEDIUM · **Effort:** L · **Model:** Opus · **[SHIPPED v0.25.0 for scaffold + api-credentials; SHIPPED v0.26.0 for auth (closes api-credentials placeholder decorators); tenancy/billing on next-release queue per "extract when stable in ≥ 2 adopters" doctrine]**
+- **Severity:** MEDIUM · **Effort:** L · **Model:** Opus · **[SHIPPED v0.25.0 for scaffold + api-credentials; SHIPPED v0.26.0 for auth (closes api-credentials placeholder decorators); SHIPPED v0.27.0 for tenancy (Organization + Membership + OrgRole + FORCE-mode RLS helper + org switcher blueprint); billing remains on next-release queue per "extract when stable in ≥ 2 adopters" doctrine]**
 - **STATUS (2026-07-03, post-v0.25.0):** the SCAFFOLD half is shipped and the FIRST module
   (`api-credentials`) is materialized as proof-of-shape. Full module library — `auth`,
   `tenancy`, `billing` — is DEFERRED to follow-up releases per the "extract, don't architect

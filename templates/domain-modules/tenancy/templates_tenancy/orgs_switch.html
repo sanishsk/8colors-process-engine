@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Switch organization{% endblock %}
+
+{% block content %}
+<div class="max-w-sm mx-auto py-16">
+  <h1 class="text-lg font-serif text-slate-900 mb-8">Switch organization</h1>
+
+  {% if memberships %}
+  <form method="post" class="space-y-4">
+    {{ csrf_token() }}
+    {% for m, org in memberships %}
+    <label class="flex items-center gap-3 text-sm cursor-pointer">
+      <input type="radio" name="slug" value="{{ org.slug }}" required
+             class="text-slate-900">
+      <span class="text-slate-700">{{ org.display_name }}</span>
+      <span class="text-xs uppercase tracking-wide text-slate-400">{{ m.role.value }}</span>
+    </label>
+    {% endfor %}
+    <button type="submit"
+            class="text-sm text-slate-900 border-b border-slate-400 hover:border-slate-900 pb-0.5 mt-4">
+      Switch
+    </button>
+  </form>
+  {% else %}
+  <p class="text-sm text-slate-500">
+    No organizations.
+    <a href="{{ url_for('tenancy.new') }}" class="text-slate-900 border-b border-slate-400">Create one.</a>
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

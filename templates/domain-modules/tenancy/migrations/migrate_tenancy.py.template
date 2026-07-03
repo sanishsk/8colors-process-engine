@@ -1,0 +1,66 @@
+"""Migration: add organizations + memberships tables.
+
+Idempotent — safe to re-run. Rename to your project's migration
+numbering convention (e.g. `migrate_042_tenancy.py`).
+
+Depends on the `users` table from the `auth` module (v0.26.0) —
+apply the auth migration first.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import text
+
+
+def upgrade(session) -> None:
+    session.execute(text("""
+        CREATE TABLE IF NOT EXISTS organizations (
+            id BIGSERIAL PRIMARY KEY,
+            slug VARCHAR(64) NOT NULL UNIQUE,
+            display_name VARCHAR(128) NOT NULL,
+            created_by BIGINT NOT NULL REFERENCES users(id),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            is_disabled VARCHAR(1) NOT NULL DEFAULT '0'
+        );
+    """))
+    session.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_organizations_slug ON organizations (slug);"
+    ))
+
+    session.execute(text("""
+        CREATE TABLE IF NOT EXISTS memberships (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id),
+            org_id BIGINT NOT NULL REFERENCES organizations(id),
+            role VARCHAR(16) NOT NULL DEFAULT 'member',
+            invited_by BIGINT REFERENCES users(id),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT uq_memberships_user_org UNIQUE (user_id, org_id)
+        );
+    """))
+    session.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_memberships_user_id ON memberships (user_id);"
+    ))
+    session.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_memberships_org_id ON memberships (org_id);"
+    ))
+    session.commit()
+
+    # NOTE: RLS is applied per-tenant-scoped table, not on
+    # `organizations` / `memberships` themselves — those are lookup
+    # tables read by the tenancy context BEFORE the SET LOCAL fires.
+    # Applying RLS here would create a chicken-and-egg problem.
+    #
+    # When you add a new tenant-scoped table (invoices, projects, ...):
+    #
+    #     from modules.tenancy.rls import apply_rls_to_table
+    #     apply_rls_to_table("invoices", session)
+    #
+    # See modules/tenancy/rls.py for the helper.
+
+
+def downgrade(session) -> None:
+    session.execute(text("DROP TABLE IF EXISTS memberships;"))
+    session.execute(text("DROP TABLE IF EXISTS organizations;"))
+    session.commit()

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Your organizations{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-12">
+  <header class="flex items-baseline justify-between mb-8">
+    <h1 class="text-lg font-serif text-slate-900">Your organizations</h1>
+    <a href="{{ url_for('tenancy.new') }}"
+       class="text-sm text-slate-700 border-b border-slate-400 hover:border-slate-900">
+      New organization
+    </a>
+  </header>
+
+  {% if memberships %}
+  <dl class="space-y-3 text-sm">
+    {% for m, org in memberships %}
+    <div class="flex items-baseline justify-between border-b border-slate-100 pb-3">
+      <dt>
+        <a href="{{ url_for('tenancy.members', slug=org.slug) }}" class="text-slate-900 hover:underline">
+          {{ org.display_name }}
+        </a>
+        <span class="text-xs uppercase tracking-wide text-slate-400 ml-2">{{ m.role.value }}</span>
+      </dt>
+      <dd>
+        <form method="post" action="{{ url_for('tenancy.switch') }}" class="inline">
+          {{ csrf_token() }}
+          <input type="hidden" name="slug" value="{{ org.slug }}">
+          <button type="submit"
+                  class="text-xs text-slate-500 border-b border-slate-300 hover:border-slate-900">
+            Switch to
+          </button>
+        </form>
+      </dd>
+    </div>
+    {% endfor %}
+  </dl>
+  {% else %}
+  <p class="text-sm text-slate-500 py-16 text-center">
+    You're not a member of any organization yet.
+    <a href="{{ url_for('tenancy.new') }}" class="text-slate-900 border-b border-slate-400">Create one.</a>
+  </p>
+  {% endif %}
+</div>
+{% endblock %}
