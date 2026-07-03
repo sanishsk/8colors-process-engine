@@ -39,6 +39,7 @@ Neither alone is sufficient; together they cover both halves.
 | Vuln patterns in source (injection sinks, unsafe eval, crypto) | **S1** `sast-scan.sh` (semgrep + bandit + gosec) ✅ | — | **Engine** |
 | Security judgment on the diff | **S2** `security-reviewer` ✅ | — | **Engine** |
 | Live injection / XSS / SSRF / command probes | — | `run_security_scan` (OWASP API Top-10 payloads) ✅ | **Agent** |
+| Deep DAST (spider + full passive ruleset) | — | `run_dast_scan` (OWASP ZAP baseline) ✅ | **Agent** |
 | Auth-bypass probing (missing/empty/malformed/wrong-scheme token) | — | `run_security_scan` auth journeys ✅ | **Agent** |
 | BOLA / rate-limit / mass-assignment / CORS / method-tampering | — | `run_security_scan` journeys ✅ | **Agent** |
 | Property/spec fuzzing | — | `schemathesis` + `hypothesis` ✅ | **Agent** |
@@ -50,13 +51,13 @@ Neither alone is sufficient; together they cover both halves.
 | Container / IaC / secrets-history depth | **S5** | ❌ | **Engine** |
 | Tenant-isolation (cross-tenant leak) | **S6** `tenant-isolation-auditor` | ❌ | **Engine** |
 
-**Verdict on "are the security checks good enough?"** Breadth is good; **depth
-is shallow**. The agent's scanner is a *probe*, not a pentest — it sends ~2
-payloads at the first writable endpoint per category. Combined with the
-engine's static SAST + SCA + secrets, this is a solid **smoke gate**, but it
-does **not** justify a "pentested / hardened" claim. Two things move the
-needle most: (1) an active DAST scanner (OWASP ZAP) in the agent for real
-depth; (2) the engine keeping **S4** — the agent covers *none* of the
+**Verdict on "are the security checks good enough?"** Materially stronger now.
+The built-in `run_security_scan` is still a shallow *probe* (~2 payloads at the
+first writable endpoint per category), but `run_dast_scan` (OWASP ZAP baseline —
+**SHIPPED 2026-07-03**) adds real spider + full-passive-ruleset DAST depth on
+top. Combined with the engine's static SAST + SCA + secrets, that is a genuine
+security battery (static + probe + deep DAST). The remaining structural gap is
+**S4** — the agent covers *none* of the
 LLM/agent-threat class, which is the scariest for SaaS built *by* agents.
 
 ## Performance coverage
@@ -114,9 +115,9 @@ Only tools that fill a *real* gap and don't duplicate something already
 present (semgrep, bandit, schemathesis, locust, playwright, deepdiff,
 pact are already integrated):
 
-1. **OWASP ZAP** (baseline/active scan) → **agent**. Turns the shallow probe
-   into real DAST depth. Biggest single security upgrade. Runtime-shaped, so
-   it fits the agent as an optional runner behind `run_security_scan`.
+1. ~~**OWASP ZAP** (baseline/active scan) → agent~~ — ✅ **SHIPPED 2026-07-03**
+   as `run_dast_scan` / `ai-test dast` (feature-detected ZAP binary or Docker,
+   graceful advisory when absent). Was the biggest single security upgrade.
 2. **`nplusone`** (Python, SQLAlchemy/Django) → **engine template** (NOT the
    agent). It's an *in-process* ORM hook, so it belongs in the adopter's own
    test suite via `templates/tests/query-count.test.py.template` (already

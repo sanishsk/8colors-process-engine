@@ -7,7 +7,7 @@ they don't re-implement heavy test execution. Copied into adopters at
 ## ai-testing-agent
 
 The standalone [ai-testing-agent](../../docs/AI_TESTING_AGENT_VALIDATION.md)
-(38k LOC, 679 passing tests) exposes its capabilities as **9 MCP tools**.
+(38k LOC, 685 passing tests) exposes its capabilities as **10 MCP tools**.
 The engine **orchestrates and owns verdicts**; the testing-agent
 **executes** (fuzz, resilience, visual diff, api-diff, security). This is
 engine model (A) — call it, don't duplicate it.
@@ -51,6 +51,7 @@ Tools then appear to agents as `mcp__ai-testing-agent__*`.
 |---|---|---|
 | `compare_api_specs` | code-reviewer / api-diff step | **S3** API-contract breaking-change gate (replaces planned oasdiff build) |
 | `run_security_scan` | security-reviewer | **S3** OWASP API Top-10 execution (payload runner; SAST stays S1/semgrep) |
+| `run_dast_scan` | security-reviewer | deep DAST (OWASP ZAP baseline) — beyond `run_security_scan`'s targeted probes |
 | `run_resilience_tests` | performance-reviewer | **PF6** resilience/load foundation |
 | `run_visual_regression` | design-critic | **D3** visual regression (SSIM/perceptual-hash + baselines) |
 | `run_pipeline` | e2e-runner | smoke/comprehensive test execution |
