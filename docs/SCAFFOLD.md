@@ -44,7 +44,8 @@ directory listing.
 | Module | What it ships | Deps to add |
 |---|---|---|
 | `auth` (v0.26.0) | Session-based auth. User model + Role enum (owner/admin/member), bcrypt hashing (12 rounds, 2026 OWASP min), `@login_required` / `@owner_required` / `@admin_required` / `@require_password_reauth` decorators, /login /logout /reauth routes, 15-min step-up window, IP-scoped rate limit (5/15min), CSRF-protected forms, `create_owner` bootstrap script, 15+ coverage-floor tests. | `Flask-Login`, `Flask-WTF`, `bcrypt` |
-| `tenancy` (v0.27.0) | Multi-tenant `org_id` scoping + PostgreSQL FORCE-mode RLS. Organization + Membership models, OrgRole enum (distinct type from `auth.Role`), session-based current-org context, `@require_membership` / `@require_org_role` decorators, `scoped_query` helper (loud-failure on missing context), `apply_rls_to_table` migration helper (superuser-bypass-proof), org switcher/create/members blueprint, 12 coverage-floor tests. | (no new deps — reuses `Flask-Login`, `Flask-WTF`, SQLAlchemy from `auth`) |
+| `tenancy` (v0.27.0) | Multi-tenant `org_id` scoping + PostgreSQL FORCE-mode RLS. Organization + Membership models, OrgRole enum (distinct type from `auth.Role`), session-based current-org context, `@require_membership` / `@require_org_role` decorators, `scoped_query` helper (loud-failure on missing context), `apply_rls_to_table` migration helper (superuser-bypass-proof), org switcher/create/members blueprint, 15 coverage-floor tests. | (no new deps — reuses `Flask-Login`, `Flask-WTF`, SQLAlchemy from `auth`) |
+| `billing` (v0.28.0) | Payment processing. Charge / Refund / PaymentEvent models (idempotency ledger), Decimal-only money helpers (float rejection regression-tested), PaymentProvider protocol + Stripe PaymentIntent adapter, server-side amount authority (`create_charge_for_order` — client never passes amount), HMAC-verified Stripe webhook handler with idempotency-by-event_id, FORCE-mode RLS on all three tables, org-scoped receipt page, 15+ coverage-floor tests. Depends on `auth` + `tenancy` (charges org-scoped) and optionally `api-credentials` (Stripe secret via credential service). | `stripe>=8.0` |
 | `api-credentials` (v0.25.0) | Encrypted API-key admin (Fernet + write-only admin UI + audit log). Placeholder decorators resolve to real `auth` module decorators when both installed. | `cryptography`, `Flask-WTF`, `Flask-Login` |
 
 Modules land as a directory under `templates/domain-modules/<name>/`.
@@ -54,31 +55,40 @@ project-specific docs to add to `CLAUDE.md`.
 
 ## Recommended install pairing
 
-The three shipped modules compose to a full multi-tenant SaaS
-skeleton:
+The four shipped modules compose to a full multi-tenant SaaS
+skeleton with payments:
 
 ```bash
 cd ~/code/my-project
-pe module add auth              # first — provides the decorators + User FK
+pe module add auth              # first — provides decorators + User FK
 pe module add tenancy           # second — depends on users(id) from auth
-pe module add api-credentials   # third — imports from modules.auth.decorators
+pe module add api-credentials   # third — imports auth decorators (also
+                                #         gates the Stripe secret admin)
+pe module add billing           # last — depends on all three above
 ```
 
-Without `auth`, `tenancy`'s memberships table can't reference
+Without `auth`: `tenancy`'s memberships table can't reference
 `users(id)`; `api-credentials`'s admin endpoints abort 403 by
-default (safe-by-default placeholder). All three modules install
-side-by-side without directory conflict.
+default (safe-by-default placeholder).
+Without `tenancy`: `billing`'s charges have no `org_id` FK — the
+migration will fail. Billing REQUIRES tenancy.
+Without `api-credentials`: `billing` still works, falling back to
+the raw `STRIPE_SECRET_KEY` env var (still functional, less audited).
+All four modules install side-by-side without directory conflict.
 
 ## Roadmap (next modules — deferred to follow-up releases)
-- `billing` — Stripe / Razorpay integration with webhook HMAC
-  verification + idempotency-key handling. Ships when the pattern
-  stabilises across ≥ 2 adopters.
 - `password-reset` — email-token flow (deferred from v0.26.0 auth
   scope; needs email transport wired first).
 - OAuth / JWT surfaces — separate blueprint additions per project
   need; not batched into `auth`.
 - Email invitations for tenancy — same email-transport dependency
   as `password-reset`.
+- Razorpay adapter for `billing` — same PaymentProvider protocol
+  as the Stripe adapter; ships when the operator's Razorpay-first
+  projects (India-market) call for it.
+- Subscription billing — recurring charges, plan/tier management.
+  Extends the billing module; ships after adopters have proven the
+  one-off charge shape.
 
 Each ships when it's genuinely reusable across ≥ 2 projects, not
 speculatively. The engine's principle: extract from adopters, don't

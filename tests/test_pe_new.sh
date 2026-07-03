@@ -232,7 +232,42 @@ else
     record_fail "tri-composite install left one module missing"
 fi
 
-# ─── 10. pycache in template does not break scaffold ────────────────────
+# ─── 10. billing module materializes cleanly + quad-composite install ──
+scenario_bill="$WORK/billing"
+mkdir -p "$scenario_bill"
+cd "$scenario_bill"
+"$PE" new "Bill Target" --stack python-flask --no-install > /dev/null 2>&1
+cd bill-target
+if "$PE" module add billing > /dev/null 2>&1; then
+    for expected in README.md money.py provider.py service.py \
+                    models/payment.py \
+                    providers/stripe.py \
+                    webhooks/stripe.py \
+                    blueprints/billing.py \
+                    templates_billing/receipt.html \
+                    migrations/migrate_billing.py \
+                    tests/test_billing.py; do
+        if [ -f "modules/billing/$expected" ]; then
+            record_pass "billing module materialized $expected"
+        else
+            record_fail "billing module MISSING $expected"
+        fi
+    done
+else
+    record_fail "pe module add billing exited non-zero"
+fi
+# Quad-composite: auth + tenancy + api-credentials + billing.
+"$PE" module add auth > /dev/null 2>&1
+"$PE" module add tenancy > /dev/null 2>&1
+"$PE" module add api-credentials > /dev/null 2>&1
+if [ -d "modules/auth" ] && [ -d "modules/tenancy" ] && \
+   [ -d "modules/api_credentials" ] && [ -d "modules/billing" ]; then
+    record_pass "auth + tenancy + api-credentials + billing quad-composite install"
+else
+    record_fail "quad-composite install left one module missing"
+fi
+
+# ─── 11. pycache in template does not break scaffold ────────────────────
 # Regression: v0.25.0 reviewer caught a stray __pycache__/ in a
 # template that would crash `pe module add` with UnicodeDecodeError.
 # The walker now prunes __pycache__ before descent — verify a rogue

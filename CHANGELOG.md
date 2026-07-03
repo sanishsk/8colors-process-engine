@@ -7,6 +7,156 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.28.0] — 2026-07-03
+
+> **A6 billing module — fourth (and final planned) reusable domain
+> module ships. A6 module library is now COMPLETE for the operator's
+> SaaS baseline.** Payment processing for Flask projects: Charge /
+> Refund / PaymentEvent models (idempotency ledger), Decimal-only
+> money helpers, PaymentProvider protocol with a Stripe PaymentIntent
+> adapter, server-side amount authority (client NEVER passes the
+> amount), HMAC-verified Stripe webhook handler with idempotency-by-
+> event_id, and FORCE-mode RLS applied to all three tables via
+> tenancy's `apply_rls_to_table` helper.
+
+### Added — `templates/domain-modules/billing/` (11 files)
+
+- **`README.md`** — six-part contract: server-side amount authority,
+  Money as Decimal (never float), webhook HMAC verification,
+  idempotency by event_id, test/live key separation via credential
+  service, tenancy scoping with FORCE-mode RLS.
+
+- **`money.py`** — Decimal/int-cents helpers. `to_cents()` REJECTS
+  FLOATS LOUDLY (raises `MoneyError`) — the exact bug this module
+  exists to prevent. `format_money()` is DISPLAY ONLY. Zero-
+  decimal currency handling (JPY, KRW, VND). Regression-tested:
+  `0.1 + 0.2 == 0.3` in Decimal (fails in float).
+
+- **`models/payment.py`** — three tables + two typed enums. `Charge`
+  (org_id + user_id + amount_cents BIGINT + currency VARCHAR 3 +
+  provider + `provider_charge_id` unique per provider + `ChargeStatus`).
+  `Refund` (charge_id + amount_cents + reason + `RefundStatus`).
+  `PaymentEvent` — the idempotency ledger, unique on
+  (provider, event_id). Duplicate webhook deliveries hit the
+  constraint and skip silently.
+
+- **`provider.py`** — protocol + factory. `PaymentProvider`
+  runtime-checkable Protocol. `CreateChargeResult` + `VerifiedEvent`
+  frozen dataclasses. `WebhookSignatureError` (subclass — NEVER
+  catch and treat as valid). `register_provider()` + `get_provider()`
+  factory. `_get_credential()` reads via `api-credentials` if
+  installed, falls back to legacy env var.
+
+- **`providers/stripe.py`** — Stripe adapter using the PaymentIntent
+  API. Reads secret via credential service or `STRIPE_SECRET_KEY`.
+  Reads webhook secret from `STRIPE_WEBHOOK_SECRET`. `verify_webhook`
+  uses `stripe.Webhook.construct_event` and reclassifies ANY
+  exception as `WebhookSignatureError`. Logs ONLY payload length +
+  provider name on signature failure (never raw payload / signature
+  — leak to attacker probing endpoint).
+
+- **`service.py`** — `create_charge_for_order()` — the ONE-way path
+  for creating a charge. Server-side amount lookup — reads
+  `order.total_cents`, NEVER accepts amount from caller. Cross-tenant
+  guard: raises `OrderNotChargeable` if the order belongs to a
+  different org. Persists pending Charge BEFORE calling provider —
+  mid-flight provider crash still surfaces in ops.
+
+- **`webhooks/stripe.py`** — `handle_stripe_webhook()`. HMAC verify
+  first. Idempotency via INSERT + `IntegrityError` catch on duplicate.
+  Dispatch to per-event handlers (`payment_intent.succeeded`,
+  `payment_intent.payment_failed`, `charge.refunded`). Unknown types
+  ignored (never 500 — Stripe retries 5xx forever). All downstream
+  failures logged + rolled back; NEVER propagate to Stripe.
+
+- **`blueprints/billing.py`** — `POST /checkout/<order_id>`
+  (@require_membership → server-side amount), `POST /webhooks/stripe`
+  (public, HMAC-gated, CSRF-exempted), `GET /receipts/<charge_id>`
+  (@require_membership + explicit org_id match check).
+
+- **`templates_billing/receipt.html`** — Flask + Tailwind, slate
+  palette, tabular-nums. Status badges by state.
+
+- **`migrations/migrate_billing.py`** — CREATE charges + refunds +
+  payment_events + indexes. Idempotent. Calls `apply_rls_to_table`
+  on each — hard-depends on tenancy (import fails if tenancy not
+  installed; correct behavior — billing without tenancy is a
+  cross-tenant leak).
+
+- **`tests/test_billing.py`** — 15 coverage-floor tests:
+    * Money: Decimal roundtrip, string parse, int passthrough,
+      float rejected loudly, no-float-drift regression, zero-
+      decimal currency (JPY), currency case, invalid amounts,
+      display-only `format_money`.
+    * Provider factory: unknown raises, registered returned,
+      credential service preferred over env, env-var fallback.
+    * Webhook: signature error raised on bad sig.
+    * Enums: status values + terminal states.
+
+### Added — tests
+
+- **`tests/test_pe_new.sh`** grew 53 → 65 tests. New coverage:
+  billing module materializes all 11 files, quad-composite install
+  (`auth + tenancy + api-credentials + billing`) leaves all four
+  directories intact.
+
+### Updated
+
+- `docs/SCAFFOLD.md` — billing row added, 4-module install pairing
+  documented, roadmap updated (Razorpay adapter + subscription
+  billing deferred, email flows still queued).
+- `plugin.json.description` — mentions billing's payment surfaces.
+- `README.md` badge → 0.28.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` A6 marker: A6 module library is
+  now COMPLETE for the operator's SaaS baseline; only extensions
+  (email flows, adapters, subscriptions) remain.
+
+### Reviewer fixes (applied pre-commit)
+
+- **CRITICAL — RLS gap on `payment_events`:** column was `org_id BIGINT
+  REFERENCES organizations(id)` (nullable). Account-level Stripe events
+  (`account.updated`, `balance.available`, …) have no order metadata →
+  `_extract_org_id` returned `None` → row persisted with `org_id=NULL`
+  → FORCE-mode RLS cannot filter NULL rows → cross-tenant visibility.
+  **Fix:** `org_id BIGINT NOT NULL REFERENCES organizations(id)` +
+  webhook handler now returns `{"status":"ignored","reason":"no_org_id"}`
+  BEFORE persisting when metadata is absent. Account-level events are
+  not persisted at all (they can be picked up from Stripe's own
+  dashboard).
+- **HIGH — silent `STRIPE_WEBHOOK_SECRET` misconfiguration in prod:**
+  StripeAdapter previously logged a `WARNING` and deferred failure to
+  the first webhook call. **Fix:** in dev the warning stays (dev
+  environments legitimately don't need webhooks), but if
+  `STRIPE_LIVE_MODE=1` is set the adapter now raises `ProviderError`
+  at startup — a misconfigured production deploy fails loudly instead
+  of silently 400-ing every webhook.
+
+### Alignment
+
+- All 12 test scripts + `pe docs check` green at v0.28.0.
+- Total module inventory: **4** — `auth`, `tenancy`,
+  `api-credentials`, `billing`. Full multi-tenant SaaS baseline with
+  payments in one install.
+
+### Notes — what's deliberately deferred from billing's scope
+
+- **Razorpay adapter** — same PaymentProvider protocol as Stripe;
+  ships when the operator's Razorpay-first projects call for it.
+- **Subscription billing** — recurring charges, plan/tier
+  management. Ships after adopters prove the one-off charge shape.
+- **Refund UI** — the schema + `refund()` method are ready; the
+  admin UI for initiating refunds is per-project.
+- **Invoice PDF** — receipt.html is HTML; PDF generation per
+  project need (WeasyPrint / ReportLab).
+
+### Migration
+
+- No breaking changes. `pe module add billing` is a new drop-in.
+  REQUIRES `auth` + `tenancy`; recommended with `api-credentials`.
+- Adopters: `pe upgrade` picks up the new module.
+
+---
+
 ## [0.27.0] — 2026-07-03
 
 > **A6 tenancy module — third reusable domain module ships.**

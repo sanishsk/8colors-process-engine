@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Receipt #{{ charge.id }}{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto py-16">
+  <p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Receipt</p>
+  <h1 class="text-lg font-serif text-slate-900 mb-8">Charge #{{ charge.id }}</h1>
+
+  <dl class="space-y-3 text-sm">
+    <div class="flex justify-between">
+      <dt class="text-slate-500">Amount</dt>
+      <dd class="text-slate-900 tabular-nums">{{ amount_display }}</dd>
+    </div>
+    <div class="flex justify-between">
+      <dt class="text-slate-500">Status</dt>
+      <dd>
+        {% if charge.status.value == 'succeeded' %}
+          <span class="text-emerald-700">Succeeded</span>
+        {% elif charge.status.value == 'failed' %}
+          <span class="text-rose-700">Failed</span>
+        {% elif charge.status.value == 'refunded' %}
+          <span class="text-slate-500">Refunded</span>
+        {% elif charge.status.value == 'partially_refunded' %}
+          <span class="text-slate-500">Partially refunded</span>
+        {% else %}
+          <span class="text-slate-500">{{ charge.status.value }}</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div class="flex justify-between">
+      <dt class="text-slate-500">Provider</dt>
+      <dd class="text-slate-700">{{ charge.provider }}</dd>
+    </div>
+    <div class="flex justify-between">
+      <dt class="text-slate-500">Order</dt>
+      <dd class="text-slate-500 tabular-nums">#{{ charge.order_ref }}</dd>
+    </div>
+    <div class="flex justify-between">
+      <dt class="text-slate-500">Date</dt>
+      <dd class="text-slate-500 tabular-nums">
+        {{ charge.created_at.strftime("%Y-%m-%d %H:%M UTC") }}
+      </dd>
+    </div>
+    {% if charge.failure_message %}
+    <div class="pt-3 border-t border-slate-200">
+      <dt class="text-xs uppercase tracking-wide text-slate-500 mb-1">Failure</dt>
+      <dd class="text-rose-700 text-xs">{{ charge.failure_message }}</dd>
+    </div>
+    {% endif %}
+  </dl>
+</div>
+{% endblock %}

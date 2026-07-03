@@ -3,14 +3,15 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.25.0 shipped — A6 partial: `pe new`
-> scaffold + first reusable domain module. Nine V2 items now shipped
-> since the fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.
-> Live-mode gate-efficacy validated end-to-end at ~$0.28 spend.)
+> **Last updated:** 2026-07-03 (v0.28.0 shipped — A6 billing module
+> closes the SaaS module library: auth + tenancy + api-credentials +
+> billing all shipped. Nine V2 items shipped since the fresh 360°
+> re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`. Live-mode
+> gate-efficacy validated end-to-end at ~$0.28 spend.)
 
 ---
 
-## Current state — v0.25.0 (`93998d7` → `<v0.25.0 sha>` this session)
+## Current state — v0.28.0 (`93998d7` → `<v0.28.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -35,7 +36,7 @@
 | A4 exec primitive | ✅ SHIPPED (primitive); 🔒 GATED (auto-escalation on §9 evidence) | v0.21.0 |
 | A5 Ponytail universal prereq | ✅ SHIPPED | v0.23.0 |
 | L3 memory governance | ✅ SHIPPED | v0.24.0 |
-| A6 scaffold + api-credentials + auth + tenancy | ✅ SHIPPED (billing queued) | v0.25.0 → v0.27.0 |
+| A6 scaffold + api-credentials + auth + tenancy + billing | ✅ SHIPPED (module library COMPLETE) | v0.25.0 → v0.28.0 |
 
 **PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
 with a named prerequisite, on a specific release queue, or
@@ -49,9 +50,9 @@ load), PF6 (perf-reviewer agent), D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters are already synced through v0.25.0.** Both 8CStudio
-   and Origyn re-installed as of this session. No `pe install`
-   needed on next session unless a new release ships.
+1. **Adopters need to be re-installed at v0.28.0.** Run `pe install`
+   in both 8CStudio and Origyn to pick up the billing module +
+   quad-composite install support.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -65,10 +66,11 @@ load), PF6 (perf-reviewer agent), D3 (visual-regression).
      templates (deferred from v0.17). S4 = LLM-agent threat hardening
      (prompt-injection detection PostToolUse hook, transcript-guard,
      `pe verify`).
-   - **A6 completion** — remaining domain modules. `auth` first
-     (closes the placeholder decorators in `api-credentials`); then
-     `tenancy`, then `billing`. Each ships when the pattern proves
-     stable in ≥ 2 adopters.
+   - **A6 extensions** — module library baseline is COMPLETE
+     (scaffold + api-credentials + auth + tenancy + billing all
+     shipped). Only extensions remain deferred: email flows
+     (verify + password-reset), Razorpay adapter, subscription
+     billing. Each ships when a real adopter needs it.
    - **A7** — cross-session agent memory (retrieve prior decisions +
      RAG upgrade to SQLite FTS5 hybrid). Depends on A1, A2 —
      unblocked now.
