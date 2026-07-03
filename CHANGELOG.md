@@ -7,6 +7,126 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.22.0] — 2026-07-03
+
+> **A3 — incident → gate synthesizer (the self-improvement loop).**
+> Closes §0's meta-principle: *incidents become gates automatically
+> instead of waiting for a human to notice the pattern.* Ships as one
+> new specialist agent (`agents/incident-synthesizer.md`) with a hard
+> anti-abuse contract, one CLI wrapper (`pe incident propose`), one
+> JSON schema (`schemas/proposal-envelope.schema.json`), and 19 unit
+> tests covering the extractor + validator + materializer.
+>
+> **The anti-abuse contract is non-negotiable:** the synthesizer agent
+> has NO Write/Edit tool. Its only output is a Proposal Envelope. The
+> CLI materializes proposed files under `.pe/incident-proposals/<slug>/
+> files/` in the OPERATOR'S project — never the engine repo. Human
+> reviews the materialized files and opens a PR manually. No
+> `--auto-apply` mode exists. Ever.
+
+### Added — `agents/incident-synthesizer.md`
+
+- New Opus-tier specialist. Reads ONE incident (retro digest, decisions
+  FAIL row, `.claude/gates/*.json` FAIL envelope, operator note, or
+  commit-history slice) and proposes ONE gate.
+- Classification taxonomy: `sast_rule` (favoured; deterministic and
+  cheap) → `hook` → `test_fixture` → `policy_toml` → `agent_revision`
+  (last resort — persona edits are the least verifiable layer).
+- Tools deliberately restricted to `["Read", "Grep", "Glob", "Bash"]`.
+  NO `Write` or `Edit` — enforced at the Claude Code plugin layer,
+  not just doctrine.
+- Confidence discipline codified: 0.85+ needs a mechanical rule that
+  fires on every recurrence; <0.4 shouldn't emit unless the operator
+  asked for it explicitly.
+- Every proposal MUST cite a corpus fixture (`validation_plan.
+  corpus_fixture` = `{gate, slug, expected_verdict}`) — the fixture
+  is A2's proof that the proposal actually catches the incident class.
+- Total agent count: **20** (was 19). `_gate-contract.md` still isn't
+  counted; the +1 is incident-synthesizer.
+
+### Added — `schemas/proposal-envelope.schema.json`
+
+- Draft-07 JSON schema for the Proposal Envelope, distinct from
+  gate-envelope. Required fields: `schema_version`, `proposal_type`
+  (const `"gate-synthesis"`), `incident_summary`, `incident_source =
+  {kind, ref}`, `failure_class` (short slug regex), `proposed_gate_kind`
+  (5-value enum), `confidence` (0–1), `proposed_files[]` (each with
+  `path` regex rejecting absolute + `..`, `action` ∈ `{create, modify}`,
+  `content`, `rationale`), `validation_plan = {corpus_fixture,
+  regression_check}`.
+- The `proposed_files[].path` regex is the FIRST layer of the
+  anti-escape guarantee. The CLI's `materialize()` re-verifies via
+  `Path.resolve()` + prefix check as defence-in-depth (a corpus fixture
+  in `tests/test_incident_synth.py::test_rejects_escaping_path_defence_in_depth`
+  proves it).
+
+### Added — `scripts/incident_synth.py` + `pe incident` CLI
+
+- `assemble_brief()` — normalizes the incident source into a
+  brief with cited `incident_source.kind` + `ref`. Sources:
+  file path (kind inferred from name — `retro_digest` /
+  `decisions_jsonl` / `gates_json` / else `operator_note`),
+  inline `--note` (kind `operator_note`), or
+  `--decisions-fail` (samples the LATEST worker_quality row from
+  `.pe/decisions.jsonl`).
+- `extract_proposal()` — extracts the LAST fenced `\`\`\`json
+  proposal-envelope` block. Distinct fence from gate-envelope so the
+  two parsers never conflict.
+- `_validate_shallow()` — stdlib-only draft-07-style validation.
+  Catches missing required fields, enum drift, out-of-band confidence,
+  and — critically — absolute or `..`-containing paths in
+  `proposed_files`.
+- `materialize()` — writes `.pe/incident-proposals/<UTC-timestamp>-
+  <failure_class>-<hex>/proposal.json` + `files/<relative-path>` for
+  every proposed file. Defence-in-depth path check ensures nothing
+  escapes the `files/` subtree.
+- **`pe incident propose --incident <file>|--note "<text>"|--decisions-fail
+  [--out-dir <path>] [--model <alias>] [--timeout <s>] [--dry-run]`**
+- **`pe incident list [--out-dir <path>]`** — enumerate past proposals
+  with their `failure_class`, `proposed_gate_kind`, and confidence.
+
+### Added — tests
+
+- **`tests/test_incident_synth.py`** — 19 unit tests:
+    * Envelope extraction (well-formed fence, last-fence-wins,
+      missing fence, malformed JSON)
+    * Shallow schema validation (valid envelope, missing required,
+      wrong enum, out-of-band confidence, absolute path rejection,
+      `..`-in-path rejection, wrong `action` value)
+    * Materialization (files land at correct paths, proposal.json
+      roundtrips, slug lands under `.pe/incident-proposals/`,
+      escaping paths REJECTED even if schema missed them)
+    * Brief assembly (note vs file kind inference, jsonl kind,
+      decisions-fail sampling, decisions-fail with no matches raises)
+- **`tests/test_incident_synth.sh`** — shell wrapper for the standard
+  suite. All 9 test scripts + `pe docs check` green.
+
+### Notes
+
+- The eval corpus (`evals/fixtures/`) is UNCHANGED — the
+  incident-synthesizer is a meta-agent (proposes gates; doesn't
+  emit gate verdicts on code). Its output validates against
+  `proposal-envelope.schema.json`, not `gate-envelope.schema.json`.
+  Live-mode `tests/test_gate_efficacy.sh --live` still runs against
+  the 5 seeded gates only.
+- The synthesizer runs at Opus for the same reason `retrospective-
+  agent` does: this agent's output steers future engine structure, so
+  its reasoning depth bounds the ceiling of the whole self-
+  improvement loop.
+- Cost: Opus. Typical brief ~5–20k tokens; output ~5–15k tokens
+  (envelope + file contents). Expect \$1–\$5 per proposal.
+
+### Migration
+
+- No breaking changes. `pe incident` is a new subcommand; existing
+  workflow untouched.
+- Adopters: `pe upgrade` + `pe install <project>` picks up the new
+  agent + subcommand + schema.
+- `.pe/incident-proposals/` is covered by the existing `.pe/` gitignore
+  rule.
+
+---
+
 ## [0.21.0] — 2026-07-03
 
 > **A4 (partial) — headless agent invocation primitive + live-mode

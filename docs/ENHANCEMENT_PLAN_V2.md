@@ -327,15 +327,25 @@ agent gates actually catch anything.
   precision/recall measurement of real agent verdicts.
 
 ### A3 Incident → gate synthesizer (automate the "quarterly rule") ⭐ the self-improvement loop
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Opus · **[MISSING — manual today]** · **depends: A2**
-- **Files:** `agents/incident-synthesizer.md` (new), reads `.pe/decisions.jsonl` + retro digests +
-  incident notes.
-- **Fix:** a new agent that reads incidents/retros, classifies the failure-class, and PROPOSES the
-  matching gate (TOML rule + hook/test + fixtures) as a PR to IMPROVEMENT_PLAN/hooks — human
-  approves before merge (engine self-modification stays forbidden by design; this proposes, never
-  auto-applies). This closes the loop from §0's meta-principle: incidents become gates
-  automatically instead of waiting for a human to notice the pattern. A2's eval harness validates
-  the proposed gate before it can ship — so a bad auto-gate can't propagate via `pe sync`.
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Opus · **[SHIPPED v0.22.0]** · **depends: A2**
+- **Files (shipped):** `agents/incident-synthesizer.md` (new specialist, tools deliberately
+  restricted to Read/Grep/Glob/Bash — NO Write/Edit so engine self-modification is impossible
+  at the plugin layer), `schemas/proposal-envelope.schema.json` (distinct from gate-envelope;
+  `proposed_files[].path` regex rejects absolute paths + `..`),
+  `scripts/incident_synth.py` (`pe incident propose|list` CLI: brief assembly + envelope
+  extraction on distinct `\`\`\`json proposal-envelope` fence + shallow validation +
+  materialization to `.pe/incident-proposals/<slug>/files/` in the CALLER's project),
+  `scripts/pe` (`cmd_incident` dispatch), `tests/test_incident_synth.py` (19 unit tests
+  covering extraction, validation, materialization defence-in-depth, and brief assembly).
+- **Anti-abuse contract shipped verbatim:** (1) synthesizer has NO Write/Edit tool; (2) CLI
+  writes only to the CALLER's `.pe/incident-proposals/` — never to the engine repo; (3) no
+  `--auto-apply` flag exists. Materializer verifies via `Path.resolve()` prefix check that
+  no proposed path escapes the slug's `files/` subtree; a regression test locks it
+  (`test_rejects_escaping_path_defence_in_depth`).
+- **Validation coupling to A2:** every proposal MUST cite
+  `validation_plan.corpus_fixture = {gate, slug, expected_verdict}` — the fixture is A2's
+  proof that the proposal actually catches the incident class. A proposal without a
+  fixture is rejected at schema validation.
 
 ### A4 Close the execution loop (orchestrator invokes workers)
 - **Severity:** MEDIUM · **Effort:** M-L · **Model:** Opus · **[PARTIAL v0.21.0 — execution primitive shipped; orchestrator auto-escalation wiring deferred]** · **depends: A1**

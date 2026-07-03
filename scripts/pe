@@ -70,6 +70,9 @@ SUBCOMMANDS
                           collect, summary.
     agent run <name>      Invoke an engine agent headlessly via `claude -p`
                           with the agent's persona + a brief on stdin (A4).
+    incident propose      Synthesize a gate proposal from one incident (A3).
+                          Proposes only; never modifies the engine repo.
+    incident list         List materialized proposals in the current project.
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
@@ -1044,6 +1047,62 @@ EOF
     esac
 }
 
+cmd_incident() {
+    # A3: incident → gate synthesizer wrapper. Assembles the incident
+    # brief, invokes agents/incident-synthesizer.md via `pe agent run`,
+    # extracts + validates the Proposal Envelope, and materializes to
+    # .pe/incident-proposals/<slug>/ in the CALLER's project. NEVER
+    # writes to the engine repo. See agents/incident-synthesizer.md for
+    # the anti-abuse contract.
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        propose|list)
+            local py; py="$(pe_python)" || exit 1
+            exec "$py" "$ENGINE_DIR/scripts/incident_synth.py" "$sub" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe incident — incident → gate synthesizer (A3)
+
+SUBCOMMANDS
+    propose --incident <file>       Synthesize a gate proposal from
+    propose --note "<text>"         one incident. Emits a Proposal
+    propose --decisions-fail        Envelope, materializes the
+            [--out-dir <path>]      proposed files to
+            [--model <alias>]       .pe/incident-proposals/<slug>/
+            [--timeout <s>]         in the CALLER's project.
+            [--dry-run]             NEVER writes to the engine repo.
+
+    list    [--out-dir <path>]      List past proposals in the current
+                                    (or given) project.
+
+Anti-abuse contract
+    - The engine's incident-synthesizer agent has NO Write/Edit tool;
+      it can only emit a Proposal Envelope.
+    - This CLI materializes the envelope's proposed files under
+      .pe/incident-proposals/<slug>/files/ (the operator's project),
+      NEVER under the engine repo. The operator reviews and opens a
+      PR against the engine manually.
+    - There is NO --auto-apply mode. Ever. Engine self-modification
+      stays forbidden by design (A3 doctrine).
+
+Exit codes:
+    0 proposal materialized
+    1 agent invocation failed / claude not on PATH (skip)
+    2 invalid args
+    3 proposal envelope missing / invalid
+    4 proposal references paths outside engine repo
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe incident' subcommand: $sub" >&2
+            echo "Run 'pe incident help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -1179,6 +1238,7 @@ case "$cmd" in
     skills-audit) cmd_skills_audit "$@" ;;
     telemetry)  cmd_telemetry "$@" ;;
     agent)      cmd_agent "$@" ;;
+    incident)   cmd_incident "$@" ;;
     gate)       cmd_gate "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;

@@ -1,0 +1,146 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://8colors.dev/schemas/proposal-envelope.schema.json",
+  "title": "ProposalEnvelope",
+  "description": "Output contract for the incident-synthesizer agent (A3). One envelope proposes one gate synthesized from one incident. Materialized to .pe/incident-proposals/<slug>/ for operator review. The engine NEVER auto-applies these — human writes the PR against the engine repo.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "proposal_type",
+    "incident_summary",
+    "incident_source",
+    "failure_class",
+    "proposed_gate_kind",
+    "confidence",
+    "proposed_files",
+    "validation_plan"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "proposal_type": {
+      "type": "string",
+      "const": "gate-synthesis",
+      "description": "Distinguishes from other proposal envelopes (e.g. future doctrine-revision). Always 'gate-synthesis' for A3."
+    },
+    "incident_summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "One-paragraph plain-English description of what went wrong. Cited, not paraphrased — the operator must be able to trace this back to the source."
+    },
+    "incident_source": {
+      "type": "object",
+      "required": ["kind", "ref"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "retro_digest",
+            "decisions_jsonl",
+            "gates_json",
+            "operator_note",
+            "commit_history"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "description": "Path or identifier the operator can dereference (e.g. 'docs/dev-log/weekly/2026-W27.md' or '.pe/decisions.jsonl:sha-abc123')."
+        }
+      }
+    },
+    "failure_class": {
+      "type": "string",
+      "description": "Free-form short slug for the failure pattern (e.g. 'sql-injection', 'unbounded-query', 'missing-tenant-filter', 'ai-aesthetic-drift', 'missing-transaction'). NOT constrained to the gate-envelope failure_class enum — that is per-invocation; this is per-pattern.",
+      "minLength": 3,
+      "maxLength": 60,
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+    },
+    "proposed_gate_kind": {
+      "type": "string",
+      "enum": [
+        "sast_rule",
+        "hook",
+        "test_fixture",
+        "policy_toml",
+        "agent_revision"
+      ],
+      "description": "Which layer of the engine gets the new gate. sast_rule → templates/perf/*.yml or hooks/sast-scan.sh; hook → hooks/*.sh; test_fixture → evals/fixtures/<gate>/<slug>/; policy_toml → policy/*.toml; agent_revision → edit to an existing agents/*.md."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "The synthesizer's own confidence that this proposal, if merged, would catch a recurrence. LOW confidence (<0.5) MUST still be emitted — the operator decides whether to escalate to a manual RFC."
+    },
+    "proposed_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "action", "content", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path RELATIVE TO ENGINE REPO ROOT. Never absolute. Never contains '..'.",
+            "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["create", "modify"]
+          },
+          "content": {
+            "type": "string",
+            "description": "For action=create: the full file contents. For action=modify: the FULL new contents of the file (operator diffs against current)."
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 10,
+            "description": "One-paragraph explanation of why this file is the right layer for this gate. Cited if referring to an existing pattern."
+          }
+        }
+      }
+    },
+    "validation_plan": {
+      "type": "object",
+      "required": ["corpus_fixture", "regression_check"],
+      "additionalProperties": false,
+      "properties": {
+        "corpus_fixture": {
+          "type": "object",
+          "description": "The A2 fixture that must be added alongside the gate so the shape runner proves the gate catches the incident class. Directory prefix (pass-/fail-escalate-/adversarial-) implied by the fixture's expected verdict.",
+          "required": ["gate", "slug", "expected_verdict"],
+          "additionalProperties": false,
+          "properties": {
+            "gate": {
+              "type": "string",
+              "description": "Which gate agent's corpus this fixture joins (e.g. 'security-reviewer')."
+            },
+            "slug": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+              "description": "Directory slug WITHOUT the verdict prefix — the runner assembles it (e.g. 'sql-injection-string-format')."
+            },
+            "expected_verdict": {
+              "type": "string",
+              "enum": ["pass", "fail-escalate", "fail-halt", "warn", "adversarial"]
+            }
+          }
+        },
+        "regression_check": {
+          "type": "string",
+          "minLength": 10,
+          "description": "One-sentence description of how the operator should verify, after merging the proposal, that a recurrence of the original incident would now be caught. Concrete: 'run pe gate parse against evals/fixtures/security-reviewer/fail-escalate-<slug>/expected-envelope.json — exit 1.'"
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional freeform. Caveats, alternative approaches considered, or 'confidence LOW because...'."
+    }
+  }
+}
