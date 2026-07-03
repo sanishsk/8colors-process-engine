@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "security-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.92,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-02T09:00:00Z",
+  "summary": "Parameterized ORM query, no user input concatenation, no secrets. Clean.",
+  "findings": [],
+  "scope": {
+    "branch": "feat/user-lookup",
+    "commit": "e0e0e0e",
+    "files_reviewed": ["modules/users/queries.py"],
+    "lines_reviewed": 9
+  }
+}

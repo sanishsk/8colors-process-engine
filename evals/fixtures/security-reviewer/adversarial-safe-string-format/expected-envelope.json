@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "security-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.88,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-02T09:15:00Z",
+  "summary": "f-string is a log line, not SQL. No injection surface. 1 MEDIUM: email in log may be PII.",
+  "findings": [
+    {
+      "severity": "MEDIUM",
+      "rule": "pii-in-logs",
+      "file": "modules/audit/logging.py",
+      "line": 10,
+      "message": "Log line includes user.email. If logs ship to a third-party aggregator, this is PII disclosure.",
+      "suggestion": "Log user.id only; add email masking helper if email is required downstream."
+    }
+  ],
+  "scope": {
+    "branch": "feat/audit-logs",
+    "commit": "a1b2c3d",
+    "files_reviewed": ["modules/audit/logging.py"],
+    "lines_reviewed": 11
+  }
+}

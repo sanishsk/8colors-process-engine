@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "security-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "task_underspecified",
+  "confidence": 0.99,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-02T09:10:00Z",
+  "summary": "No diff provided; nothing to review. Caller must supply an artifact.",
+  "findings": [],
+  "scope": {
+    "branch": "unknown",
+    "commit": "0000000",
+    "files_reviewed": [],
+    "lines_reviewed": 0
+  }
+}

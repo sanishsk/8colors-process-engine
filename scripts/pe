@@ -65,6 +65,9 @@ SUBCOMMANDS
     skills-audit [--project <path>]
                           Inventory ~/.claude/skills/ + ~/.claude/commands/ sprawl;
                           flag duplicates + classify against engine core-20 (P7.4)
+    telemetry <sub>       Parse Claude Code transcripts → structured usage
+                          records + OTel spans + cost (A1/L1/L4). Subs:
+                          collect, summary.
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
@@ -949,6 +952,51 @@ EOF
     esac
 }
 
+cmd_telemetry() {
+    # A1/L1/L4: parse Claude Code transcripts into structured usage records,
+    # emit OTel-shaped spans, attribute cost per session/model. Feeds the
+    # circuit breaker's budget calibration + the retro agent's cost step.
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        collect|summary)
+            local py; py="$(pe_python)" || exit 1
+            exec "$py" "$ENGINE_DIR/scripts/telemetry.py" "$sub" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe telemetry — Claude Code transcript telemetry (A1/L1/L4)
+
+SUBCOMMANDS
+    collect [--project <path>] [--since <YYYY-MM-DD>]
+        Scan ~/.claude/projects/<slug>/*.jsonl for the target project,
+        extract every assistant turn (input/output/cache token counts +
+        model), dedupe by uuid, and append to:
+          <project>/.pe/telemetry.jsonl   (structured records)
+          <project>/.pe/traces/<session-id>.jsonl  (OTel-shaped spans)
+
+    summary [--project <path>] [--since <YYYY-MM-DD>]
+        Aggregate .pe/telemetry.jsonl per session × model with
+        estimated cost (cents-per-Mtoken table in scripts/telemetry.py).
+
+Design notes
+    - Read-only against transcripts. Writes .pe/ only (gitignored).
+    - Feature-detected: no transcripts → exit 0 (informational).
+    - Circuit breaker (policy/circuit_breaker.toml) currently uses
+      "inf" budgets. Telemetry is the empirical baseline to replace
+      those with real numbers.
+    - Retro agent (docs/dev-log-collect + retrospective-agent) can
+      surface the cost totals in its Step 0.
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe telemetry' subcommand: $sub" >&2
+            echo "Run 'pe telemetry help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -1082,6 +1130,7 @@ case "$cmd" in
     baseline)   cmd_baseline "$@" ;;
     collect)    cmd_collect "$@" ;;
     skills-audit) cmd_skills_audit "$@" ;;
+    telemetry)  cmd_telemetry "$@" ;;
     gate)       cmd_gate "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;

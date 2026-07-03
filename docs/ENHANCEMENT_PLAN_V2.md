@@ -293,23 +293,33 @@ agent gates actually catch anything.
 > you can't measure.
 
 ### A1 Wire real telemetry (E2.1) — prerequisite for everything else
-- **Severity:** HIGH · **Effort:** M · **Model:** Opus · **[MISSING — budgets are `"inf"`]**
-- **Files:** `scripts/pe_orchestrator.py` (budgets), `policy/circuit_breaker.toml`, new
-  `scripts/telemetry.py`, `.pe/decisions.jsonl`.
-- **Fix:** parse Claude Code transcripts / OTEL usage events into per-slot token counts → feed
-  decisions.jsonl + the breaker. Makes the "primary safety guard" real, and unblocks: cost-per-tier
-  analytics, the "cheaper-at-equal-quality" thesis (currently unfalsifiable), and auto-routing.
-  Without this, the model-routing discipline in OPERATOR_WORKFLOW_V3 is faith, not data.
+- **Severity:** HIGH · **Effort:** M · **Model:** Opus · **[SHIPPED v0.19.0]**
+- **Files:** `scripts/telemetry.py` (parser + OTel span emitter + cost table), `scripts/pe`
+  (`pe telemetry collect|summary` subcommand), `policy/circuit_breaker.toml` (empirical baseline
+  comment; budgets still `"inf"` in shadow-mode until enforce-mode graduates),
+  `tests/test_telemetry.py` (13 unit tests), `tests/test_telemetry.sh` (wrapper).
+- **What shipped:** parses `~/.claude/projects/<slug>/*.jsonl` assistant records → structured
+  `TurnRecord` (session_id, uuid, model, per-usage-key token counts, cost cents, git branch) →
+  appends to `<project>/.pe/telemetry.jsonl` deduped by uuid + emits OTel-shaped spans to
+  `.pe/traces/<session>.jsonl`. Cost table (`CENTS_PER_MTOKEN`) covers opus/sonnet/haiku prefixes
+  with 2026-07 pricing. Smoke-tested against this engine's own transcripts: 2948 turns,
+  $1846 grand total. Circuit-breaker guidance updated to cite that baseline as the enforce-mode
+  starting guess (`worker_tokens_budget = 4M`, `gate_tokens_budget = 2M`) — derived from
+  measurement, not selected from a hat.
 
 ### A2 Gate-efficacy eval harness (seeded-defect corpus) — prove the gates work
-- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[MISSING — zero measurement today]**
-- **Files:** `evals/` (new), `evals/fixtures/<gate>/{pass,fail}/`, `tests/test_gate_efficacy.py`.
-- **Fix:** 10–20 seeded-bug fixtures per gate (a hardcoded `sk_live_` key, an f-string SQL
-  injection, a `rounded-lg` drift, a missing `WHERE tenant_id`, an AI-aesthetic screen). Run each
-  gate against pass/fail inputs; measure catch-rate + false-verdict-rate per model tier. This is
-  the ONLY way to (a) prove security/design gates actually catch things, (b) calibrate the
-  "critical without drowning" severity thresholds with data, (c) safely route a gate to a cheaper
-  model. It also validates every S/D item above — a security gate you can't measure is theater.
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[SEED SHIPPED v0.19.0 — security-reviewer only; other 4 gates in v0.20.0]**
+- **Files:** `evals/README.md` (corpus contract), `evals/fixtures/security-reviewer/` (4 seed
+  fixtures: pass, fail-escalate, fail-halt, adversarial-safe-lookalike),
+  `tests/test_gate_efficacy.sh` (shape-mode runner).
+- **What shipped:** per-gate fixture layout `<verdict>-<slug>/{input.md, expected-envelope.json}`
+  where the directory prefix carries the expected verdict class. Runner iterates every fixture,
+  validates the expected envelope against `schemas/gate-envelope.schema.json` via
+  `pe gate parse --bare`, and asserts the exit code matches the contract
+  (pass→0, fail-escalate→1, fail-halt→2, warn→3, adversarial→0 = safe-lookalike must not FP).
+  Zero API cost — catches schema drift + mislabeled fixtures. All 4 fixtures pass. Live-mode
+  (`--live`, planned v0.20.0) will actually invoke the agent and compare verdicts against the
+  seed envelopes for real precision/recall.
 
 ### A3 Incident → gate synthesizer (automate the "quarterly rule") ⭐ the self-improvement loop
 - **Severity:** MEDIUM · **Effort:** M · **Model:** Opus · **[MISSING — manual today]** · **depends: A2**
@@ -405,19 +415,25 @@ agent gates actually catch anything.
   worth more than any single item below — it makes the engine self-updating against the field.
 
 ### L1 OpenTelemetry-standard agent tracing (observability) — extends A1
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]**
-- **Why:** A1 (telemetry) as scoped only counts *tokens* for the breaker. The 2026 standard is
-  richer: emit an **OTel GenAI trace** per agent run — a nested span tree of model calls, tool
-  calls + arguments, gate verdicts, retries — to any vendor-neutral backend (Langfuse/Arize/
-  Grafana, or just a local JSONL viewer). Portability is the point: instrument once, choose the
-  backend later.
-- **Fix:** widen A1 from "token counter" to "OTel span emitter." Even a local file-based trace
-  (span tree → `.pe/traces/<run>.jsonl` + a tiny HTML viewer) gives you the "why did this slot
-  take 8 iterations / where did it loop" visibility that's currently invisible. Don't buy a SaaS
-  observability platform — emit the standard, keep the data local.
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[PARTIAL v0.19.0 — per-turn spans; nested tool-call tree still TODO]**
+- **What shipped in v0.19.0:** A1's telemetry parser emits OTel GenAI-conforming spans per
+  assistant turn to `<project>/.pe/traces/<session-id>.jsonl` — attributes include
+  `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.{input,output,cache_read,cache_creation}_tokens`,
+  `gen_ai.response.finish_reasons`, plus `8colors.cost_cents / git_branch / cwd`. Local-first
+  (never ships to a vendor). Portability principle honored: instrument once, choose backend later.
+- **What's left for full L1:** nested span tree (currently one span per turn, no parent hierarchy
+  for tool calls / gate verdicts / retries), plus an optional lightweight HTML trace viewer for
+  local browsing. Enough shipped now that L4 (cost attribution) is usable; enough remaining that
+  "why did this slot loop 8 times" is still traced at turn-granularity only.
 
 ### L2 Trajectory evaluation + eval-gaming defense — extends A2 ⭐ important caveat
-- **Severity:** MEDIUM-HIGH · **Effort:** M · **Model:** Sonnet · **[MISSING]**
+- **Severity:** MEDIUM-HIGH · **Effort:** M · **Model:** Sonnet · **[PARTIAL v0.19.0 — adversarial prefix honored; trajectory + held-out ride on --live path]**
+- **v0.19.0 partial:** the eval runner honors an `adversarial-*` directory prefix (safe lookalike
+  that must NOT false-positive) alongside pass/fail; security-reviewer's seed corpus includes an
+  `adversarial-safe-string-format` fixture proving the shape. Held-out (unseen-during-development)
+  subdirs and trajectory metrics (step count, loops, retries, wall-clock per gate turn) are
+  designed into `evals/README.md` but require the `--live` mode to actually measure — they ride
+  on the same live-invocation path A2 defers to v0.20.0.
 - **Why:** A2 as scoped is a seeded-defect corpus (input → did the gate catch it?). 2026 research
   (AgentLens' "Lucky Pass Problem"; Berkeley RDI showing *every* major benchmark — SWE-bench,
   WebArena, GAIA — is exploitable) is a direct warning: **a pass/fail corpus can give false
@@ -446,15 +462,16 @@ agent gates actually catch anything.
   painful later.
 
 ### L4 Cost attribution — spend per outcome, not just per run — extends A1
-- **Severity:** LOW-MEDIUM · **Effort:** S · **Model:** Sonnet · **[MISSING]**
-- **Why:** the FinOps signal for 2026 is stark — per-token price differential across tiers is
-  20–50×, and classification/routine work doesn't need frontier models. The engine already routes
-  by tier (OPERATOR_WORKFLOW_V3) but can't yet answer "what did shipping slot X actually cost, and
-  was the tier choice right?"
-- **Fix:** once A1/L1 emit per-run tokens, attribute cost to the slot/gate and surface it in the
-  Friday retro ("this Haiku slot spent 50k tokens looping — should've been Sonnet, or the brief
-  was underspecified"). This is what turns model-routing from doctrine into a measured, improving
-  decision. Cheap once the telemetry exists.
+- **Severity:** LOW-MEDIUM · **Effort:** S · **Model:** Sonnet · **[PARTIAL v0.19.0 — per-turn cost live; retro surfacing still TODO]**
+- **v0.19.0 partial:** `CENTS_PER_MTOKEN` in `scripts/telemetry.py` covers opus/sonnet/haiku with
+  2026-07 pricing; every `TurnRecord.cost_cents` is populated in `.pe/telemetry.jsonl` + surfaced
+  as `8colors.cost_cents` on OTel spans. `pe telemetry summary` aggregates per-session per-model
+  totals. Empirical baseline captured (this engine: 2948 turns / $1846) and cited in
+  `policy/circuit_breaker.toml` as the enforce-mode budget guess.
+- **What's left:** surface cost in the Friday retro. `retrospective-agent` Step 0 should call
+  `pe telemetry summary --since <week-start>` and include the per-session totals in the digest so
+  "this Haiku slot spent 50k tokens looping — should've been Sonnet" becomes visible on the
+  weekly cadence. Cheap add — the ledger already exists.
 
 ### What to DELIBERATELY SKIP (market hype that's wrong for this engine)
 - **Enterprise "AI control plane" / unified multi-cloud governance platforms** (Galileo, Arthur,

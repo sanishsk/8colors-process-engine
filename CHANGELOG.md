@@ -7,6 +7,99 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.19.0] — 2026-07-02
+
+> **A1 + A2 + L1 + L4 — telemetry + gate-efficacy corpus.** The
+> engine can finally measure what it costs and check what its gates
+> catch. Circuit-breaker budgets were "inf" placeholders because
+> agent-emitted `envelope.cost` is self-reported and unreliable; the
+> gates shipped with zero test coverage of their verdict shape.
+> This release closes both gaps at the source of truth: Claude Code's
+> own session transcripts (real usage dicts, real model names), and
+> a seeded fixture corpus with a schema-validating runner.
+
+### Added — A1 telemetry (transcript parser + OTel spans + cost)
+
+- **`scripts/telemetry.py`** — parses `~/.claude/projects/<slug>/*.jsonl`,
+  extracts every assistant turn (input / output / cache-read /
+  cache-creation token counts + model + git branch + cwd), dedupes
+  by `uuid`, writes structured records to `<project>/.pe/telemetry.jsonl`.
+
+- **OTel-shaped spans (L1)** emitted to `<project>/.pe/traces/<session>.jsonl`.
+  Follows OTel GenAI conventions (`gen_ai.system=anthropic`,
+  `gen_ai.request.model`, `gen_ai.usage.*`) plus 8colors-specific
+  attributes (`8colors.cost_cents`, `8colors.git_branch`, `8colors.cwd`).
+  Local-first — no external observability service required; operators
+  who want Langfuse / Arize / Grafana just tail the file.
+
+- **Cost attribution (L4)** — `CENTS_PER_MTOKEN` table with 2026-07
+  Anthropic pricing per model prefix (opus / sonnet / haiku, with
+  cache-read ~10% of input). Unknown model → 0 cost, surfaces the
+  miss instead of silently over-billing.
+
+- **`pe telemetry collect / summary`** subcommands wired into the CLI.
+  Zero API cost — parses local transcripts only. Feature-detected:
+  no transcripts → exit 0.
+
+- **`tests/test_telemetry.py`** — 13 unit tests covering the parser,
+  pricing table invariants (cache_read < input for every model), and
+  OTel span shape. Runs standalone via unittest, zero external deps.
+
+### Added — A2 gate-efficacy corpus (seeded)
+
+- **`evals/README.md`** — corpus contract: per-gate
+  `evals/fixtures/<gate>/<verdict-prefix>-<slug>/{input.md,
+  expected-envelope.json}`. Directory prefix carries the expected
+  verdict class (`pass-`, `fail-escalate-`, `fail-halt-`, `warn-`,
+  `adversarial-`), enforced by the runner.
+
+- **`evals/fixtures/security-reviewer/`** — 4 seed fixtures:
+    * `pass-parameterized-orm` — clean SQLAlchemy `select()`.
+    * `fail-escalate-sql-injection` — f-string SQL, CRITICAL.
+    * `fail-halt-underspecified` — empty diff, `task_underspecified`.
+    * `adversarial-safe-string-format` — log-line f-string that
+      **looks** like SQL injection but isn't — guards against
+      "any f-string with user data is CRITICAL" false-positive.
+
+- **`tests/test_gate_efficacy.sh`** — shape-mode runner. Iterates
+  every fixture, validates the expected envelope against
+  `schemas/gate-envelope.schema.json` via `pe gate parse --bare`, and
+  asserts the exit code class matches the directory prefix. Zero
+  API cost. Live-mode (`--live`, planned v0.20.0) will actually
+  invoke each gate and check whether the emitted verdict matches
+  the expected envelope.
+
+### Changed — circuit breaker guidance
+
+- **`policy/circuit_breaker.toml`** — token budgets still `"inf"`
+  (shadow-mode unchanged), BUT the comment block now cites the
+  empirical baseline: this engine's own 2948 assistant turns
+  ($1846 grand-total, opus-4-8 dominant) yield starting guesses of
+  `worker_tokens_budget = 4_000_000` / `gate_tokens_budget = 2_000_000`
+  for the eventual enforce-mode graduation. Numbers derived from
+  measurement, not selected from a hat.
+
+### Notes
+
+- A2 seed covers **security-reviewer only**. The other four gate
+  agents (code-reviewer, database-reviewer, tdd-guide, design-critic)
+  get their seed fixtures in v0.20.0.
+- Live-mode gate-efficacy (`--live` flag on
+  `tests/test_gate_efficacy.sh`) is scaffolded in the README but not
+  wired yet — requires a per-gate `pe agent run` interface first.
+- L2 (adversarial / held-out split + trajectory metrics) partially
+  landed: `adversarial-*` prefix is honored by the runner; held-out
+  subdirs + step-count / retry metrics ride on the same `--live` path.
+
+### Migration
+
+- No breaking changes. `pe telemetry` is new subcommand; existing
+  workflow untouched.
+- Adopters: `pe upgrade` then `pe install <project>` picks up the
+  new subcommand and eval corpus.
+
+---
+
 ## [0.18.1] — 2026-07-03
 
 > **PF2 — static perf gate.** Custom semgrep rule pack catching the

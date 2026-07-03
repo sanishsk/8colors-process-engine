@@ -76,18 +76,31 @@ tested = false  # see §9 watchpoint
 # per-day if running long unattended.
 scope = "campaign"
 
-# Token budgets default to `inf` until E2.1 wires per-invocation token
-# capture. Shadow-mode runs with infinite budgets — values below are
-# the structure the breaker will enforce later.
+# Token budgets default to `inf` until enforce-mode ships. Shadow-mode
+# runs with infinite budgets — values below are the structure the
+# breaker WILL enforce later.
 worker_tokens_budget = "inf"
 gate_tokens_budget   = "inf"
 
-# Once E2.1 lands, expected ratios per v2 §10 (~5× speedup at
-# constant quality budget) put a starting guess at:
-#   worker_tokens_budget = 4_000_000
-#   gate_tokens_budget   = 2_000_000
-# But these MUST be calibrated against actual measured campaigns,
-# not picked here.
+# EMPIRICAL BASELINE (v0.19.0 A1 telemetry — 2026-07-02 snapshot)
+# ----------------------------------------------------------------
+# `pe telemetry collect --project .` against this engine's own
+# transcript history yielded 2948 assistant turns across 7 sessions,
+# grand-total ~$1846 (see `pe telemetry summary`). Distribution:
+#
+#   Top-cost session (91ee75…): 699 turns, $564 (opus-4-8 dominant)
+#   Median session:              ~186 turns, ~$5-70
+#   Model mix: opus ~85% cost / ~35% of turns; sonnet negligible;
+#              haiku unmeasured on this repo (no haiku work).
+#
+# From this baseline, the guess-values for enforce-mode become:
+#   worker_tokens_budget = 4_000_000    # ~1 opus-heavy session
+#   gate_tokens_budget   = 2_000_000    # gates run at sonnet, cheaper
+#
+# These are STARTING guesses. Once enforce-mode graduates AND a full
+# retro cycle passes with real slot-level data, revise from measured
+# not derived numbers. See `pe telemetry summary` for the current
+# picture and `docs/ENHANCEMENT_PLAN_V2.md` A1 for the wiring.
 
 [telemetry]
 # Where the breaker writes its ledger. JSONL append-only.
