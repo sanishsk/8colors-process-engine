@@ -45,13 +45,19 @@ GATE_FILTER=""
 FIXTURE_FILTER=""
 MODEL_OVERRIDE=""
 TIMEOUT_S=300
+METRICS_PATH=""
+HOLDOUT_ONLY=0
+INCLUDE_HOLDOUT=1
 while [ $# -gt 0 ]; do
     case "$1" in
-        --live)    LIVE=1; shift ;;
-        --gate)    GATE_FILTER="$2"; shift 2 ;;
-        --fixture) FIXTURE_FILTER="$2"; shift 2 ;;
-        --model)   MODEL_OVERRIDE="$2"; shift 2 ;;
-        --timeout) TIMEOUT_S="$2"; shift 2 ;;
+        --live)         LIVE=1; shift ;;
+        --gate)         GATE_FILTER="$2"; shift 2 ;;
+        --fixture)      FIXTURE_FILTER="$2"; shift 2 ;;
+        --model)        MODEL_OVERRIDE="$2"; shift 2 ;;
+        --timeout)      TIMEOUT_S="$2"; shift 2 ;;
+        --metrics)      METRICS_PATH="$2"; shift 2 ;;
+        --holdout-only) HOLDOUT_ONLY=1; shift ;;
+        --no-holdout)   INCLUDE_HOLDOUT=0; shift ;;
         -h|--help)
             sed -n '/^# test_gate_efficacy.sh/,/^set -uo pipefail/p' "$0" | sed 's/^# \?//'
             exit 0 ;;
@@ -59,6 +65,11 @@ while [ $# -gt 0 ]; do
             echo "ERROR: unknown flag: $1" >&2; exit 2 ;;
     esac
 done
+
+# Initialize metrics file if requested (JSONL — one line per fixture).
+if [ -n "$METRICS_PATH" ]; then
+    : > "$METRICS_PATH"
+fi
 
 # ─── shared state ───────────────────────────────────────────────
 pass=0
@@ -110,6 +121,53 @@ else
 fi
 echo ""
 
+# _emit_metric — append one JSONL line to the metrics file. Reads
+# trajectory data from `.pe/runs/<slug>/run.json` (populated by
+# `pe agent run` for --live invocations; empty for shape mode). L2
+# extension: step count / retries / wall-clock / cost per fixture.
+_emit_metric() {
+    local gate="$1" fixture="$2" expected="$3" actual="$4" \
+          corpus_kind="$5" cost_cents="$6" duration_ms="$7" \
+          num_turns="$8" tool_calls="$9"
+    [ -z "$METRICS_PATH" ] && return 0
+    printf '{"gate":"%s","fixture":"%s","corpus":"%s","expected_exit":%s,"actual_exit":%s,"cost_cents":%s,"duration_ms":%s,"num_turns":%s,"tool_calls":%s}\n' \
+        "$gate" "$fixture" "$corpus_kind" \
+        "$expected" "$actual" \
+        "${cost_cents:-null}" "${duration_ms:-null}" \
+        "${num_turns:-null}" "${tool_calls:-null}" \
+        >> "$METRICS_PATH"
+}
+
+# _extract_run_metrics — parse metadata from the most recent
+# .pe/runs/<slug>/run.json. Prints "cost_cents duration_ms num_turns
+# tool_calls" (nulls if any field missing). Silent if no runs dir.
+_extract_run_metrics() {
+    local runs_dir=".pe/runs"
+    [ -d "$runs_dir" ] || { echo "null null null null"; return; }
+    local latest
+    latest=$(ls -t "$runs_dir" 2>/dev/null | head -1)
+    [ -z "$latest" ] && { echo "null null null null"; return; }
+    local run_json="$runs_dir/$latest/run.json"
+    [ -f "$run_json" ] || { echo "null null null null"; return; }
+    python3 - "$run_json" <<'PY'
+import json, sys
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+raw = d.get("raw_json", {}) or {}
+content = ((raw.get("result") or "") if isinstance(raw.get("result"), str) else "")
+# tool_calls best-effort: count from usage.iterations if present.
+usage = raw.get("usage", {}) or {}
+iters = usage.get("iterations") or []
+tool_calls = sum(1 for it in iters if isinstance(it, dict))  # each iteration ~= one API call
+cost = d.get("cost_cents")
+dur = raw.get("duration_ms") or d.get("duration_ms")
+turns = raw.get("num_turns")
+def _fmt(v):
+    return "null" if v is None else str(v)
+print(f"{_fmt(cost)} {_fmt(dur)} {_fmt(turns)} {tool_calls}")
+PY
+}
+
 # ─── main loop ──────────────────────────────────────────────────
 for gate_dir in "$CORPUS"/*/; do
     [ -d "$gate_dir" ] || continue
@@ -119,8 +177,31 @@ for gate_dir in "$CORPUS"/*/; do
     fi
     echo "gate: $gate_name"
 
-    for fixture_dir in "$gate_dir"*/; do
-        [ -d "$fixture_dir" ] || continue
+    # Collect fixture dirs from both the main corpus AND the holdout
+    # subdir (L2 completion). Holdout fixtures live under
+    # <gate>/holdout/<verdict-slug>/ so the runner can measure the
+    # "unseen during development" precision/recall separately.
+    fixture_dirs=()
+    if [ $HOLDOUT_ONLY -eq 0 ]; then
+        for f in "$gate_dir"*/; do
+            [ -d "$f" ] || continue
+            [ "$(basename "$f")" = "holdout" ] && continue
+            fixture_dirs+=("$f:main")
+        done
+    fi
+    if [ $INCLUDE_HOLDOUT -eq 1 ] || [ $HOLDOUT_ONLY -eq 1 ]; then
+        if [ -d "$gate_dir/holdout" ]; then
+            for f in "$gate_dir/holdout"/*/; do
+                [ -d "$f" ] || continue
+                fixture_dirs+=("$f:holdout")
+            done
+        fi
+    fi
+
+    for entry in "${fixture_dirs[@]:-}"; do
+        [ -z "$entry" ] && continue
+        fixture_dir="${entry%:*}"
+        corpus_kind="${entry##*:}"
         fixture_name=$(basename "$fixture_dir")
         if [ -n "$FIXTURE_FILTER" ] && [ "$fixture_name" != "$FIXTURE_FILTER" ]; then
             continue
@@ -159,10 +240,11 @@ for gate_dir in "$CORPUS"/*/; do
             set -e
 
             if [ "$actual" != "$expected" ]; then
-                record_fail "$gate_name/$fixture_name — pe gate parse exit=$actual, expected=$expected"
+                record_fail "$gate_name/$fixture_name [$corpus_kind] — pe gate parse exit=$actual, expected=$expected"
             else
-                record_pass "$gate_name/$fixture_name (exit=$actual)"
+                record_pass "$gate_name/$fixture_name [$corpus_kind] (exit=$actual)"
             fi
+            _emit_metric "$gate_name" "$fixture_name" "$expected" "$actual" "$corpus_kind" null null null null
         else
             # LIVE MODE — actually invoke the gate agent, compare emitted envelope.
             local_out=$(mktemp)
@@ -199,10 +281,15 @@ for gate_dir in "$CORPUS"/*/; do
             set -e
 
             if [ "$emitted_exit" != "$expected" ]; then
-                record_fail "$gate_name/$fixture_name — emitted envelope exit=$emitted_exit, expected=$expected (verdict mismatch)"
+                record_fail "$gate_name/$fixture_name [$corpus_kind] — emitted envelope exit=$emitted_exit, expected=$expected (verdict mismatch)"
             else
-                record_pass "$gate_name/$fixture_name (live emitted=$emitted_exit)"
+                record_pass "$gate_name/$fixture_name [$corpus_kind] (live emitted=$emitted_exit)"
             fi
+            # L2 completion: capture trajectory metrics per fixture.
+            read -r cost_cents duration_ms num_turns tool_calls <<< "$(_extract_run_metrics)"
+            _emit_metric "$gate_name" "$fixture_name" "$expected" "$emitted_exit" \
+                         "$corpus_kind" "$cost_cents" "$duration_ms" \
+                         "$num_turns" "$tool_calls"
             rm -f "$local_out"
         fi
     done

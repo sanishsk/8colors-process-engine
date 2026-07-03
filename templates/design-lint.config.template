@@ -54,3 +54,26 @@ themes:
     forbid_class_fragments: []
     forbid_inline_regex: []
     color_tokens: []
+
+# ─── D4 (v0.25.1) — spacing / radius / shadow token allowlists ──────
+#
+# The engine's design-lint enforces Tailwind-style token values per
+# theme. If a theme populates `spacing_tokens`, any p/px/py/pt/pb/pl/
+# pr/m/mx/my/mt/mb/ml/mr/gap/space-x/space-y class using a value NOT
+# in the allowlist becomes a WARN (FAIL under strict).
+#
+# Same shape for `radius_tokens` (rounded-<value>) and `shadow_tokens`
+# (shadow-<value>). Empty list → check is disabled for that token
+# class.
+#
+# Values are the raw Tailwind suffixes: "4" allows p-4, px-4, etc.
+# Named values like "lg" for rounded-lg / shadow-lg also work as
+# suffixes.
+#
+# Uncomment + tune per theme once your design system freezes.
+#
+# themes:
+#   studio:
+#     spacing_tokens: ["1", "2", "4", "6", "8", "12"]     # forbid p-3/p-5/p-7
+#     radius_tokens:  ["lg", "xl"]                        # forbid rounded-3xl/rounded-full
+#     shadow_tokens:  ["sm", "md"]                        # forbid shadow-2xl

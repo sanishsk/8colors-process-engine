@@ -31,14 +31,28 @@ The dev-log system already collected the raw data (zero token cost). Your one jo
 digest exists for the retro window. Run:
 
 ```bash
-pe collect --window 7   # weekly retro
-pe collect              # daily retro (window=1)
+pe collect --window 7      # weekly retro
+pe collect                 # daily retro (window=1)
+pe telemetry collect       # L4: ingest Claude Code session transcripts
+pe telemetry summary       # per-session cost + token totals for the window
 ```
 
-This is the P7.3 portable git-derived collector — zero Claude tokens,
-runs in seconds, writes `docs/dev-log/daily/<date>.{json,md}`. If it
-fails (not a git repo, no commits in window), fall through to
-**degraded mode** below and note it in the report header.
+`pe collect` is the P7.3 portable git-derived collector — zero Claude
+tokens, runs in seconds, writes `docs/dev-log/daily/<date>.{json,md}`.
+
+`pe telemetry collect|summary` (v0.25.1+ L4 completion) is the cost-
+attribution feed: it parses `~/.claude/projects/<slug>/*.jsonl`
+transcripts into `.pe/telemetry.jsonl` and prints per-session per-model
+totals with dollar cost. **Include the top-3-cost sessions and the
+per-model breakdown in the retro Cost section** — the model-routing
+discipline in OPERATOR_WORKFLOW_V3 becomes measurable at this point,
+not a matter of faith. Cite exact numbers ("session 3a34e043 spent
+$328 across 438 turns, all on opus-4-7 — this should have been sonnet
+for the mechanical fixture generation phase").
+
+If either collector fails (not a git repo, no commits in window, no
+transcripts), fall through to **degraded mode** below and note it in
+the report header.
 
 **Preferred (rich mode) — collector output present:**
 

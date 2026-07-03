@@ -122,3 +122,27 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # S6 completion (v0.25.1) — advisory tenant-isolation audit. Runs
+  # on schedule (weekly Monday) or manual dispatch, not per-commit —
+  # a deep RLS + SECURITY DEFINER walk costs too much to gate every
+  # push. Job is `continue-on-error: true` so the launchd weekly
+  # plist stays the primary run; this catches contributors who
+  # don't have launchd wired.
+  tenant-isolation-audit:
+    if: github.event_name == 'schedule' || github.event.inputs.run_tenant_audit == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tenant-isolation-auditor
+        run: |
+          if command -v claude >/dev/null 2>&1 && [ -n "$ANTHROPIC_API_KEY" ]; then
+            claude -p "/audit-tenants --window 7" \
+              --agent tenant-isolation-auditor \
+              --dangerously-skip-permissions
+          else
+            echo "SKIP: claude CLI or ANTHROPIC_API_KEY not present in CI"
+          fi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

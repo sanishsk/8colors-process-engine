@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# run_tenant_isolation.sh — Monday 09:00 wrapper for the
+# tenant-isolation-auditor agent (S6 completion, v0.25.1).
+#
+# Runs `claude -p ...` in headless mode against {{PROJECT_ROOT}},
+# emitting the audit as a report under docs/security/. Exits 0 on
+# any non-Monday to avoid double-firing under manual launches.
+#
+# Force-run on demand: PE_FORCE=1 run_tenant_isolation.sh
+
+set -uo pipefail
+
+PROJECT_ROOT="{{PROJECT_ROOT}}"
+CLAUDE_BIN="{{CLAUDE_BIN}}"
+LOG_DIR="${HOME}/Library/Logs/{{ORG_TAG}}-tenant-isolation"
+mkdir -p "$LOG_DIR"
+
+# Day gate — only fire on Monday unless PE_FORCE=1
+if [ "${PE_FORCE:-0}" != "1" ] && [ "$(date +%u)" != "1" ]; then
+    echo "$(date -Iseconds) skip: not Monday (PE_FORCE=1 to override)" >> "$LOG_DIR/skip.log"
+    exit 0
+fi
+
+cd "$PROJECT_ROOT" || {
+    echo "$(date -Iseconds) FATAL: cannot cd to $PROJECT_ROOT" >> "$LOG_DIR/launchd.error.log"
+    exit 1
+}
+
+WEEK=$(date +%Y-W%V)
+REPORT="docs/security/tenant-isolation-audit-${WEEK}.md"
+mkdir -p docs/security
+
+# Delegate to Claude Code with the tenant-isolation-auditor agent.
+# The agent's tools include Read/Grep/Glob/Bash so it can walk the
+# codebase and query the schema.
+"$CLAUDE_BIN" -p "/audit-tenants --window 7 --out $REPORT" \
+    --agent tenant-isolation-auditor \
+    --dangerously-skip-permissions \
+    >> "$LOG_DIR/launchd.log" 2>> "$LOG_DIR/launchd.error.log"
+
+echo "$(date -Iseconds) ran tenant-isolation-auditor for $WEEK → $REPORT" >> "$LOG_DIR/launchd.log"

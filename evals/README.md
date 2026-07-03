@@ -74,13 +74,37 @@ A `--live` flag (not yet wired) will:
 Live mode requires `ANTHROPIC_API_KEY` and burns real tokens. Run
 weekly (retro schedule) or before releases, not on every push.
 
-## Trajectory metrics (L2 interleave)
+## Trajectory metrics (L2 completion, v0.25.1)
 
-The `tests/test_gate_efficacy.sh --live` path will also record for
-each turn: step count, tool calls, retries, tokens (via A1
-telemetry hook), wall-clock. Held-out (unseen-during-development)
-fixtures go in `<gate>/holdout/`; adversarial-only in
-`<gate>/adversarial/`.
+`tests/test_gate_efficacy.sh --metrics <path>` writes a JSONL row
+per fixture: `gate`, `fixture`, `corpus` (main / holdout),
+`expected_exit`, `actual_exit`, `cost_cents`, `duration_ms`,
+`num_turns`, `tool_calls`. Shape-mode rows carry the exit-code
+data (nulls for cost / duration / turns); live-mode rows carry all
+five. Feed the file into `pe telemetry summary`-style analysis to
+compute per-gate p50/p95 cost and recall.
+
+## Held-out subcorpus (L2 completion, v0.25.1)
+
+Fixtures under `evals/fixtures/<gate>/holdout/<verdict-slug>/` are
+the **unseen-during-development** measurement path — precision /
+recall computed on inputs the gate author has never trained
+against.
+
+The runner walks these separately (see `--holdout-only` and
+`--no-holdout` flags on `tests/test_gate_efficacy.sh`). Fixture
+authors OTHER than the gate's original author add these over
+time; the whole point is contamination-free measurement, so a
+holdout fixture that lands in the same PR that changes the gate
+is instantly stale.
+
+Currently seeded (proof-of-shape):
+
+- `security-reviewer/holdout/fail-escalate-hardcoded-secret` —
+  Stripe live secret in source with a "TODO later" comment.
+
+Every future gate change should be accompanied by ≥1 new holdout
+fixture from someone other than the change author.
 
 ## Adding a new gate
 

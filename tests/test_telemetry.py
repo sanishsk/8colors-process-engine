@@ -21,6 +21,7 @@ from telemetry import (  # noqa: E402  (path munging above)
     UNKNOWN_MODEL_PRICES,
     _cost_cents,
     _emit_otel_span,
+    _emit_tool_use_child_spans,
     _prices_for,
     parse_assistant_record,
 )
@@ -190,6 +191,70 @@ class OtelSpanShape(unittest.TestCase):
         assert tr is not None
         span = _emit_otel_span(tr)
         self.assertGreater(span["attributes"]["8colors.cost_cents"], 0)
+
+
+class ToolUseChildSpans(unittest.TestCase):
+    """L1 completion (v0.25.1): nested tool-call span tree."""
+
+    def _rec_with_tools(self, tools: list[tuple[str, str]]) -> dict:
+        """tools = [(tool_use_id, tool_name), ...]"""
+        base = _assistant_record()
+        content = [{"type": "text", "text": "response prose"}]
+        for tid, tname in tools:
+            content.append({
+                "type": "tool_use",
+                "id": tid,
+                "name": tname,
+                "input": {},
+            })
+        base["message"]["content"] = content
+        return base
+
+    def test_no_tools_emits_no_children(self):
+        rec = _assistant_record()
+        rec["message"]["content"] = [{"type": "text", "text": "hi"}]
+        parent = parse_assistant_record(rec)
+        assert parent is not None
+        self.assertEqual(_emit_tool_use_child_spans(rec, parent), [])
+
+    def test_missing_content_emits_no_children(self):
+        rec = _assistant_record()
+        parent = parse_assistant_record(rec)
+        assert parent is not None
+        # No content array at all — must not crash.
+        self.assertEqual(_emit_tool_use_child_spans(rec, parent), [])
+
+    def test_one_tool_use_emits_one_child_span(self):
+        rec = self._rec_with_tools([("toolu_abc", "Read")])
+        parent = parse_assistant_record(rec)
+        assert parent is not None
+        children = _emit_tool_use_child_spans(rec, parent)
+        self.assertEqual(len(children), 1)
+        c = children[0]
+        self.assertEqual(c["parent_span_id"], parent.turn_uuid)
+        self.assertEqual(c["trace_id"], parent.session_id)
+        self.assertEqual(c["span_id"], "toolu_abc")
+        self.assertEqual(c["name"], "tool Read")
+        self.assertEqual(c["attributes"]["gen_ai.tool.name"], "Read")
+
+    def test_multiple_tools_emit_multiple_children(self):
+        rec = self._rec_with_tools([
+            ("t1", "Read"), ("t2", "Grep"), ("t3", "Bash"),
+        ])
+        parent = parse_assistant_record(rec)
+        assert parent is not None
+        children = _emit_tool_use_child_spans(rec, parent)
+        self.assertEqual(len(children), 3)
+        names = [c["attributes"]["gen_ai.tool.name"] for c in children]
+        self.assertEqual(names, ["Read", "Grep", "Bash"])
+
+    def test_children_all_share_parent_turn_id(self):
+        rec = self._rec_with_tools([("t1", "Read"), ("t2", "Grep")])
+        parent = parse_assistant_record(rec)
+        assert parent is not None
+        children = _emit_tool_use_child_spans(rec, parent)
+        for c in children:
+            self.assertEqual(c["parent_span_id"], parent.turn_uuid)
 
 
 if __name__ == "__main__":

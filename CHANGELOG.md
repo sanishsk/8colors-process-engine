@@ -7,6 +7,156 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.25.1] — 2026-07-03
+
+> **PARTIAL cleanup — everything shippable now shipped.** Operator
+> feedback: partials silently accumulate and rot. This release
+> closes SEVEN items that were previously marked PARTIAL, and
+> re-classifies TWO items to their honest status (GATED vs
+> NEXT-RELEASE) instead of pretending they're partial. From here on
+> every plan item is either SHIPPED, GATED with named prerequisite,
+> or on a named release queue — no floating in-between state.
+
+### Closed — L1 nested tool-call span tree
+
+- **`scripts/telemetry.py`** — `_emit_tool_use_child_spans()` walks
+  the assistant record's `content` array, extracts `tool_use`
+  items (id + name + input), and emits one OTel child span per tool
+  invocation, parented at the assistant turn's span. Follows GenAI
+  conventions (`gen_ai.tool.name`, `gen_ai.tool.call_id`,
+  `8colors.parent_model`). No cost attribute on children — Anthropic
+  bills per-turn, not per-tool.
+- `.pe/traces/<session>.jsonl` now carries a real parent→child span
+  tree, answering "where did this slot spend its time".
+- **`tests/test_telemetry.py`** — 5 new tests: no-tools emits no
+  children, missing content emits no children, one tool emits one
+  child, multiple tools emit multiple children, all children share
+  parent turn ID. 19/19 pass (was 14).
+
+### Closed — L2 held-out subcorpus + trajectory metrics
+
+- **`evals/fixtures/<gate>/holdout/`** — new subdirectory contract.
+  Fixtures under here are the unseen-during-development recall path;
+  they're walked separately from the main corpus. Runner has
+  `--holdout-only` and `--no-holdout` filters. Seeded with
+  `security-reviewer/holdout/fail-escalate-hardcoded-secret`
+  (Stripe live secret in source with "TODO later" comment).
+- **`tests/test_gate_efficacy.sh --metrics <path>`** — new flag
+  writes JSONL per fixture with `gate`, `fixture`, `corpus`,
+  `expected_exit`, `actual_exit`, `cost_cents`, `duration_ms`,
+  `num_turns`, `tool_calls`. Shape mode fills only exit codes;
+  `--live` fills all five. Feed into `pe telemetry summary`-style
+  analysis for per-gate p50/p95 cost + recall.
+- Output labels: `[main]` and `[holdout]` prefixes on every pass /
+  fail line so the corpus split is visible per-run.
+- Total shape-mode fixture count: 17 (was 16).
+
+### Closed — L4 cost surfacing in retro-agent
+
+- **`agents/retrospective-agent.md`** — Step 0 rewritten to run
+  `pe telemetry collect` + `pe telemetry summary` alongside
+  `pe collect`. Doctrine: the retro report's Cost section MUST cite
+  top-3-cost sessions + per-model breakdown with dollar amounts, so
+  the model-routing discipline in OPERATOR_WORKFLOW_V3 becomes
+  measurable instead of faith.
+
+### Closed — S6 tenant-isolation-auditor scheduling
+
+- **`templates/launchd/com.ORG_TAG.tenant-isolation.weekly.plist.template`**
+  — Monday 09:00 launchd plist. Bootstrap:
+  `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/...plist`.
+- **`templates/launchd/run_tenant_isolation.sh.template`** — wrapper
+  that invokes `claude -p '/audit-tenants --window 7' --agent
+  tenant-isolation-auditor` and writes the report under
+  `docs/security/tenant-isolation-audit-<week>.md`. `PE_FORCE=1`
+  bypasses the Monday gate.
+- **`templates/ci/engine-quality.yml.template`** — new
+  `tenant-isolation-audit` job, `if: github.event_name ==
+  'schedule'`, `continue-on-error: true` (advisory; launchd is the
+  primary path). Catches contributors who don't have launchd wired.
+
+### Closed — D4 spacing/radius/shadow tokens
+
+- **`hooks/design-lint.sh`** — new `_check_token_class` helper
+  enforces `spacing_tokens`, `radius_tokens`, `shadow_tokens`
+  allowlists per theme. Matches on Tailwind-style class prefixes:
+    * `spacing_tokens`: p / px / py / pt / pb / pl / pr / m / mx /
+      my / mt / mb / ml / mr / gap / space-x / space-y
+    * `radius_tokens`: rounded-*
+    * `shadow_tokens`: shadow-*
+  WARN by default, FAIL under `design_lint.strict=true`. Empty
+  allowlist = check disabled.
+- **`templates/design-lint.config.template`** — documented shape
+  with example values (`["1","2","4","6","8","12"]` for spacing,
+  `["lg","xl"]` for radius, `["sm","md"]` for shadow).
+
+### Closed — TOK1 prompt-cache hygiene
+
+- **`hooks/cache-hygiene-warn.sh`** — new PostToolUse advisory hook
+  fires when Write/Edit/MultiEdit touches CLAUDE.md,
+  `.claude/agents/*.md`, or `rules/*.md` mid-session. Warns that
+  every subsequent turn re-bills the prefix at full input rates
+  (~10× the cache-hit rate). Dedupes per prefix file per session
+  (state at `.pe/cache-hygiene-seen.state`). Advisory only —
+  exits 0 always.
+- **`hooks/hooks.json`** — new entry under PostToolUse
+  `Edit|Write|MultiEdit` matcher.
+- **`docs/OPERATOR_WORKFLOW_V3.md`** — new § Cache hygiene under §2
+  Context diet. Four rules: batch prefix edits to session end,
+  keep tool set stable, don't rewrite early history, hook watches
+  for you.
+
+### Closed — TOK2 read hygiene
+
+- **`docs/OPERATOR_WORKFLOW_V3.md`** — new § Read hygiene under §2.
+  Preference order for retrieving context: RAG query → grep+`Read
+  offset/limit` → subagent for multi-file sweep → whole-file
+  `Read` (last resort). Subagent pattern is the strongest native
+  lever — burns its own context, returns a summary.
+
+### Reclassified — A4 auto-escalation loop → GATED
+
+- Previous marker: `PARTIAL v0.21.0 — execution primitive shipped;
+  orchestrator auto-escalation wiring deferred`.
+- New marker: `SHIPPED v0.21.0 for the primitive; auto-escalation
+  loop GATED on enforce-mode first-fire evidence per §9 watchpoint`.
+- Rationale: the primitive IS shipped (per-turn accounting fixed in
+  v0.23.1 with 5 regression tests + live smoke). The auto-escalation
+  loop is safety-gated — it needs first-fire evidence on
+  enforce-mode (currently `tested = false` per policy §9). Calling
+  this "partial" for months would be dishonest — it's a legitimate
+  release-gate, not slop.
+
+### Reclassified — A6 auth/tenancy/billing → NEXT-RELEASE
+
+- Previous marker: `PARTIAL SHIPPED v0.25.0 — scaffold + 1 module;
+  remaining modules deferred`.
+- New marker: `SHIPPED v0.25.0 for scaffold + api-credentials;
+  auth/tenancy/billing on next-release queue per "extract when
+  stable in ≥ 2 adopters" doctrine`.
+- Rationale: same principle — the scaffold + first module IS
+  shipped and complete. Auth is v0.26.0's scope. Tenancy + billing
+  land when the pattern stabilises across ≥ 2 adopters. Not
+  partial; queued.
+
+### Notes
+
+- Total ENHANCEMENT_PLAN_V2 PARTIAL markers before v0.25.1: **9**.
+  After v0.25.1: **0**. Every item is now SHIPPED, GATED with a
+  named prerequisite, MISSING (not yet started), or on a specific
+  release queue.
+- All 12 test scripts + `pe docs check` green. Test count grew from
+  ~180 → ~185 with the L1 span-tree regression tests.
+
+### Migration
+
+- No breaking changes. Adopters: `pe upgrade` picks up the new
+  hook + updated design-lint. `pe install <project>` on next run
+  materializes the new `cache-hygiene-warn.sh` hook wiring into
+  `.claude/settings.json` via the existing idempotent merge.
+
+---
+
 ## [0.25.0] — 2026-07-03
 
 > **A6 (partial) — `pe new` project scaffolder + first reusable domain

@@ -57,6 +57,64 @@ Checklist (Sonnet-implementable, ~half a day):
 Expected effect: ~15-20k tokens saved per turn in 8CStudio sessions →
 roughly **2-3× more work per weekly cap**, faster turns, better cache hits.
 
+### Cache hygiene (TOK1 — v0.25.1 completion)
+
+Anthropic's prompt cache gives a **~90% discount on cached input
+tokens** — but only on the **unchanged prefix** (system prompt →
+CLAUDE.md → tool set → early history). Every time you edit the
+prefix mid-session, the cache breaks and the whole prefix re-bills
+at full input-token rates on every subsequent turn.
+
+**Rules:**
+
+1. **Batch prefix edits to session end.** If you notice CLAUDE.md
+   needs a rule change while working, drop a note somewhere and
+   apply it after `/end-session`.
+2. **Keep the tool set stable.** Adding / removing MCP servers
+   mid-session breaks cache. This env's deferred-tools /
+   ToolSearch already helps — tool schemas load lazily, not all
+   upfront.
+3. **Don't run agents that rewrite early history.**
+   Compaction-style rewrites of previous turns invalidate cache
+   from that point forward.
+4. **Advisory hook watches for you.** `hooks/cache-hygiene-warn.sh`
+   fires PostToolUse on Write/Edit against CLAUDE.md, agents/*.md,
+   or rules/*.md and prints the cache-invalidation warning ONCE
+   per file per session (state at `.pe/cache-hygiene-seen.state`).
+   Advisory only — never blocks.
+
+Expected effect: on a heavy day (200+ turns), the cache-hit rate
+gap between disciplined and undisciplined sessions is a **10× cost
+multiplier**. Free money the engine leaves on the table without
+this discipline.
+
+### Read hygiene (TOK2 — v0.25.1 completion)
+
+Bucket 2 (session input tokens) grows fastest when agents `Read`
+whole large files instead of querying. The engine already has the
+right tools — RAG (`research_index.py`), symbol / grep search, and
+`Read(offset, limit)` — but no discipline enforcing their use
+over whole-file reads.
+
+**Preference order** for retrieving code / doc context:
+
+1. **RAG query** — `python3 scripts/research_index.py query "<term>"`
+   for docs / prior briefs / retros.
+2. **Symbol / grep search** — `Grep` with `-C` for context, then
+   read only the matching hunk with `Read(offset, limit)`.
+3. **Subagent for multi-file sweep** — spawn an `Explore` /
+   `general-purpose` agent that reads N files and returns a
+   summary. The parent burns ~1 summary token instead of N files.
+4. **Whole-file `Read`** — last resort. If the file is > 400
+   lines, use `Read(offset, limit)` and iterate.
+
+The subagent pattern is the strongest native lever the engine has
+— a subagent burns its OWN context and returns a summary, so a
+50-file sweep costs the parent one summary, not 50 files. **This is
+what "lean-ctx" style tools automate; the engine gets ~70% of it
+free via subagents + RAG.** Marginal wins beyond that come from AST-
+compressing the reads that remain.
+
 ---
 
 ## 3. Model routing — Claude 5 era

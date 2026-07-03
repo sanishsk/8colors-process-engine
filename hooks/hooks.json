@@ -35,6 +35,10 @@
         {
           "type": "command",
           "command": "{{ENGINE_DIR}}/hooks/design-lint.sh"
+        },
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/cache-hygiene-warn.sh"
         }
       ]
     }

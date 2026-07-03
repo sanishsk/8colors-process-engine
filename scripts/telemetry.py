@@ -228,9 +228,7 @@ def _load_seen_uuids(telemetry_path: Path) -> set[str]:
 def _emit_otel_span(record: TurnRecord) -> dict[str, Any]:
     """L1: OTel-shaped span for one assistant turn.
 
-    Simplified single-span-per-turn shape (no parent hierarchy yet — a
-    future release can lift `parent_uuid` into a real span tree). Follows
-    OTel GenAI conventions: `gen_ai.system`, `gen_ai.request.model`,
+    Follows OTel GenAI conventions: `gen_ai.system`, `gen_ai.request.model`,
     `gen_ai.usage.input_tokens`, etc.
     """
     return {
@@ -252,6 +250,45 @@ def _emit_otel_span(record: TurnRecord) -> dict[str, Any]:
             "8colors.cwd": record.cwd,
         },
     }
+
+
+def _emit_tool_use_child_spans(rec: dict[str, Any], parent: TurnRecord) -> list[dict[str, Any]]:
+    """L1 completion (v0.25.1): child spans per tool_use, parented at
+    the assistant turn's span.
+
+    Real assistant records carry a `content: [...]` array whose items
+    can be `{type: "text", ...}` or `{type: "tool_use", id, name, input}`.
+    Every tool_use is one child span under the assistant turn — the
+    span tree needed to answer "where did this slot spend its time".
+
+    Tool cost is not per-tool-billable in Anthropic's model (the whole
+    turn is one bill), so children get no cost attribute — only the
+    tool name + tool_use_id for correlation with the follow-up
+    `tool_result` user record.
+    """
+    msg = rec.get("message") or {}
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return []
+    spans: list[dict[str, Any]] = []
+    for item in content:
+        if not isinstance(item, dict) or item.get("type") != "tool_use":
+            continue
+        tool_id = item.get("id") or ""
+        tool_name = item.get("name") or "unknown"
+        spans.append({
+            "trace_id": parent.session_id,
+            "span_id": tool_id,
+            "parent_span_id": parent.turn_uuid,
+            "name": f"tool {tool_name}",
+            "start_time": parent.timestamp,
+            "attributes": {
+                "gen_ai.tool.name": tool_name,
+                "gen_ai.tool.call_id": tool_id,
+                "8colors.parent_model": parent.model,
+            },
+        })
+    return spans
 
 
 def cmd_collect(args: argparse.Namespace) -> int:
@@ -324,6 +361,12 @@ def cmd_collect(args: argparse.Namespace) -> int:
                     added += 1
                     if turn.turn_uuid not in traces_seen:
                         tf.write(json.dumps(_emit_otel_span(turn)) + "\n")
+                        # L1 completion: child spans per tool_use in
+                        # the assistant record's content array.
+                        for child in _emit_tool_use_child_spans(rec, turn):
+                            if child["span_id"] and child["span_id"] not in traces_seen:
+                                tf.write(json.dumps(child) + "\n")
+                                traces_seen.add(child["span_id"])
 
     print(
         f"[telemetry] added {added} record(s); skipped {skipped_dedup} dedup, "

@@ -18,25 +18,34 @@
 |---|---|---|
 | S1 SAST hook | ✅ SHIPPED | v0.17.0 |
 | S2 Python-first security-reviewer | ✅ SHIPPED | v0.17.0 |
+| S6 tenant-isolation-auditor cron | ✅ SHIPPED | v0.25.1 |
 | D1 design-critic agent | ✅ SHIPPED | v0.18.0 |
 | D2 a11y + Lighthouse a11y | ✅ SHIPPED | v0.18.0 |
+| D4 spacing/radius/shadow tokens | ✅ SHIPPED | v0.25.1 |
 | PF3 perf budgets | ✅ SHIPPED | v0.18.0 |
 | PF2 static perf gate | ✅ SHIPPED | v0.18.1 |
 | A1 telemetry parser | ✅ SHIPPED | v0.19.0 |
-| A2 gate-efficacy corpus | ✅ SEEDED across 5 gates | v0.19.0 → v0.20.0 |
-| L1 OTel spans | 🟡 PARTIAL (per-turn; span-tree TODO) | v0.19.0 |
-| L2 trajectory eval | 🟡 PARTIAL (adversarial fixtures; `--live` metrics TODO) | v0.19.0 → v0.21.0 |
-| L4 cost attribution | 🟡 PARTIAL (per-turn cost; retro surfacing TODO) | v0.19.0 |
-| A4 exec primitive | 🟡 PARTIAL (`pe agent run` shipped; auto-escalation loop TODO) | v0.21.0 |
+| A2 gate-efficacy corpus | ✅ SEEDED (5 gates + holdout subcorpus) | v0.19.0 → v0.25.1 |
+| L1 OTel spans + tool-call tree | ✅ SHIPPED | v0.25.1 |
+| L2 trajectory + held-out corpus | ✅ SHIPPED | v0.25.1 |
+| L4 retro cost surfacing | ✅ SHIPPED | v0.25.1 |
+| TOK1 prompt-cache hygiene | ✅ SHIPPED | v0.25.1 |
+| TOK2 read hygiene | ✅ SHIPPED | v0.25.1 |
 | A3 incident synthesizer | ✅ SHIPPED | v0.22.0 |
+| A4 exec primitive | ✅ SHIPPED (primitive); 🔒 GATED (auto-escalation on §9 evidence) | v0.21.0 |
 | A5 Ponytail universal prereq | ✅ SHIPPED | v0.23.0 |
 | L3 memory governance | ✅ SHIPPED | v0.24.0 |
-| A6 domain layer | 🟡 PARTIAL (`pe new` + `api-credentials`; auth/tenancy/billing TODO) | v0.25.0 |
+| A6 scaffold + api-credentials | ✅ SHIPPED (auth queued for v0.26.0) | v0.25.0 |
+
+**PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
+with a named prerequisite, on a specific release queue, or
+explicitly not yet started.
 
 **Not started yet:** S3 (auth/webhook/payment pytest templates), S4
-(LLM-agent threat hardening), A7 (cross-session memory learning),
-A8 (native plugin migration), A9 higher tiers, PF1 (runtime N+1),
-PF4/PF5 (soak + load), PF6 (perf-reviewer agent), D3/D4.
+(LLM-agent threat hardening), S5 (container + secrets-history +
+license), A7 (cross-session memory learning), A8 (native plugin
+migration), A9 higher tiers, PF1 (runtime N+1), PF4/PF5 (soak +
+load), PF6 (perf-reviewer agent), D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 

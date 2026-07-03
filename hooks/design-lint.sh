@@ -192,6 +192,42 @@ for f in files:
                     print(f"[design-lint] WARN {p}:{line} theme={theme_name} color {token} not in allowlist", file=sys.stderr)
                     warn += 1
 
+    # D4 completion (v0.25.1): spacing / radius / shadow token
+    # allowlists. Each is an allowlist of Tailwind-style token values
+    # ("4", "6", "8" for spacing → allows p-4/px-4/py-6/gap-8/etc.);
+    # forbidden token classes are surfaced individually so the
+    # message names the exact offender ("p-7 not in allowlist").
+    def _check_token_class(prefix_re: str, token_key: str, human: str):
+        allow = set(str(t) for t in (spec.get(token_key) or []))
+        if not allow:
+            return 0, 0
+        # e.g. p-3 / px-3 / py-3 / pt-3 / gap-3 / m-3 / etc.
+        f, w = 0, 0
+        for m in re.finditer(prefix_re + r"-(\w+)\b", text):
+            val = m.group(1)
+            if val in allow:
+                continue
+            line = text[:m.start()].count("\n") + 1
+            frag = m.group(0)
+            if strict:
+                print(f"[design-lint] FAIL {p}:{line} theme={theme_name} {human} {frag} not in allowlist", file=sys.stderr)
+                f += 1
+            else:
+                print(f"[design-lint] WARN {p}:{line} theme={theme_name} {human} {frag} not in allowlist", file=sys.stderr)
+                w += 1
+        return f, w
+
+    # spacing: p, px, py, pt, pb, pl, pr, m, mx, my, mt, mb, ml, mr, gap, space-x, space-y
+    df, dw = _check_token_class(r"\b(?:p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap|space-[xy])",
+                                "spacing_tokens", "spacing")
+    fail += df; warn += dw
+    # radius: rounded-<name>
+    df, dw = _check_token_class(r"\brounded", "radius_tokens", "radius")
+    fail += df; warn += dw
+    # shadow: shadow-<name>
+    df, dw = _check_token_class(r"\bshadow", "shadow_tokens", "shadow")
+    fail += df; warn += dw
+
 if fail > 0:
     print(f"\n[design-lint] {fail} FAIL, {warn} WARN — commit blocked.", file=sys.stderr)
     print("Bypass: PE_SKIP_DESIGN_LINT=1 git commit ...", file=sys.stderr)

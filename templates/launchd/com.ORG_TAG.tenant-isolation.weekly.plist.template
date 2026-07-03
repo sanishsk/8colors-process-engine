@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.{{ORG_TAG}}.tenant-isolation.weekly</string>
+
+    <!--
+        S6 completion (v0.25.1) — auto-fires the tenant-isolation-auditor
+        agent weekly (Monday 09:00) so the engine's strongest security
+        asset runs on cadence instead of "when the operator remembers."
+
+        Pattern: same wrapper shape as CEO weekly. Wrapper lives at
+        ~/.local/bin/{{ORG_TAG}}-tenant-isolation/run_weekly.sh and
+        invokes `claude -p '/audit-tenants --window 7' --agent
+        tenant-isolation-auditor` headlessly.
+
+        Bootstrap:
+          launchctl bootstrap gui/$(id -u) \
+            ~/Library/LaunchAgents/com.{{ORG_TAG}}.tenant-isolation.weekly.plist
+
+        Uninstall:
+          launchctl bootout gui/$(id -u)/com.{{ORG_TAG}}.tenant-isolation.weekly
+    -->
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{HOME}}/.local/bin/{{ORG_TAG}}-tenant-isolation/run_weekly.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>{{HOME}}/Library/Logs/{{ORG_TAG}}-tenant-isolation/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{HOME}}/Library/Logs/{{ORG_TAG}}-tenant-isolation/launchd.error.log</string>
+</dict>
+</plist>

@@ -122,7 +122,7 @@ agent gates actually catch anything.
   warning LGPL. Wire into `templates/ci/engine-quality.yml.template`.
 
 ### S6 Automate the tenant-isolation-auditor
-- **Severity:** MEDIUM · **Effort:** S · **Model:** Sonnet · **[PARTIAL — agent exists, runs manually]**
+- **Severity:** MEDIUM · **Effort:** S · **Model:** Sonnet · **[SHIPPED v0.25.1 — launchd Monday 09:00 plist + run wrapper + advisory GH Actions job (schedule-triggered, continue-on-error)]**
 - **Fix:** the auditor is the engine's strongest security asset but only runs when the operator
   remembers. Wire a weekly launchd/cron (templates exist) + an advisory CI gate (WARN). Add
   SQLAlchemy-ORM-relationship + materialized-view (`SECURITY DEFINER` bypass) checks it currently
@@ -172,7 +172,7 @@ agent gates actually catch anything.
   — the rule that stops AI-aesthetic regeneration.
 
 ### D4 Extend design-lint to spacing/radius/shadow tokens
-- **Severity:** MEDIUM · **Effort:** S · **Model:** Haiku · **[PARTIAL]**
+- **Severity:** MEDIUM · **Effort:** S · **Model:** Haiku · **[SHIPPED v0.25.1 — hooks/design-lint.sh reads spacing_tokens/radius_tokens/shadow_tokens per theme, WARN/FAIL under strict; template documents the shape]**
 - **File:** `hooks/design-lint.sh` (~60 LOC), `templates/design-lint.config.template`.
 - **Fix:** design-lint enforces colors + inline-style + modals today; add `spacing_tokens` (allow
   `p-4/6/8`, forbid `p-3/5/7`), `radius_tokens` (the exact 8CStudio "1,400 `rounded-lg` vs 129
@@ -396,7 +396,7 @@ agent gates actually catch anything.
   fixture is rejected at schema validation.
 
 ### A4 Close the execution loop (orchestrator invokes workers)
-- **Severity:** MEDIUM · **Effort:** M-L · **Model:** Opus · **[PARTIAL v0.21.0 — execution primitive shipped; orchestrator auto-escalation wiring deferred]** · **depends: A1**
+- **Severity:** MEDIUM · **Effort:** M-L · **Model:** Opus · **[SHIPPED v0.21.0 for the primitive; auto-escalation loop GATED on enforce-mode first-fire evidence per §9 watchpoint]** · **depends: A1**
 - **Files (shipped v0.21.0):** `scripts/agent_runner.py` (headless `claude -p` wrapper),
   `scripts/pe` (`pe agent run` subcommand), `tests/test_gate_efficacy.sh` (`--live` mode
   wired onto `pe agent run`), `tests/test_agent_runner.py` (22 unit tests).
@@ -443,7 +443,7 @@ agent gates actually catch anything.
   scripts + `pe docs check` green.
 
 ### A6 Domain layer — `pe new` scaffold + extract reusable SaaS modules
-- **Severity:** MEDIUM · **Effort:** L · **Model:** Opus · **[PARTIAL SHIPPED v0.25.0 — scaffold + 1 module; remaining modules deferred]**
+- **Severity:** MEDIUM · **Effort:** L · **Model:** Opus · **[SHIPPED v0.25.0 for scaffold + api-credentials; auth/tenancy/billing on next-release queue per "extract when stable in ≥ 2 adopters" doctrine]**
 - **STATUS (2026-07-03, post-v0.25.0):** the SCAFFOLD half is shipped and the FIRST module
   (`api-credentials`) is materialized as proof-of-shape. Full module library — `auth`,
   `tenancy`, `billing` — is DEFERRED to follow-up releases per the "extract, don't architect
@@ -514,7 +514,7 @@ agent gates actually catch anything.
   Adopting blind is the exact trap A2 (eval harness) exists to prevent.
 
 ### TOK1 Prompt-cache hygiene — the biggest FREE lever, native, do now ⭐
-- **Severity:** HIGH · **Effort:** S · **[PARTIAL — done by accident, not by rule]**
+- **Severity:** HIGH · **Effort:** S · **[SHIPPED v0.25.1 — hooks/cache-hygiene-warn.sh PostToolUse advisory + docs/OPERATOR_WORKFLOW_V3.md § Cache hygiene]**
 - **Why:** Claude's prompt cache gives a **~90% discount on cached input tokens** — but only on the
   UNCHANGED prefix (system prompt → CLAUDE.md → tool set → early history). Every time CLAUDE.md is
   edited mid-session, or the tool set shuffles, or an agent rewrites early context, the cache
@@ -529,7 +529,7 @@ agent gates actually catch anything.
   This is free money the engine leaves on the table today.
 
 ### TOK2 Read hygiene — retrieve, don't slurp (engine-native, mostly there)
-- **Severity:** MEDIUM · **Effort:** S · **[PARTIAL]**
+- **Severity:** MEDIUM · **Effort:** S · **[SHIPPED v0.25.1 — docs/OPERATOR_WORKFLOW_V3.md § Read hygiene documents the preference order (RAG → grep+offset/limit → subagent → whole-file)]**
 - **Why:** bucket 2 grows fastest when agents `Read` whole large files instead of querying. The
   engine already has the right tools — `research_index.py` (RAG retrieval) and symbol/grep search —
   but no *discipline* enforcing their use over whole-file reads.
@@ -600,7 +600,7 @@ agent gates actually catch anything.
   worth more than any single item below — it makes the engine self-updating against the field.
 
 ### L1 OpenTelemetry-standard agent tracing (observability) — extends A1
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[PARTIAL v0.19.0 — per-turn spans; nested tool-call tree still TODO]**
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.25.1 — per-turn spans + nested tool-call children]**
 - **What shipped in v0.19.0:** A1's telemetry parser emits OTel GenAI-conforming spans per
   assistant turn to `<project>/.pe/traces/<session-id>.jsonl` — attributes include
   `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.{input,output,cache_read,cache_creation}_tokens`,
@@ -612,7 +612,7 @@ agent gates actually catch anything.
   "why did this slot loop 8 times" is still traced at turn-granularity only.
 
 ### L2 Trajectory evaluation + eval-gaming defense — extends A2 ⭐ important caveat
-- **Severity:** MEDIUM-HIGH · **Effort:** M · **Model:** Sonnet · **[PARTIAL v0.19.0 — adversarial prefix honored; trajectory + held-out ride on --live path]**
+- **Severity:** MEDIUM-HIGH · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.25.1 — adversarial + held-out subcorpus + `--metrics` JSONL emits cost/duration/turns/tool_calls per fixture]**
 - **v0.19.0 partial:** the eval runner honors an `adversarial-*` directory prefix (safe lookalike
   that must NOT false-positive) alongside pass/fail; security-reviewer's seed corpus includes an
   `adversarial-safe-string-format` fixture proving the shape. Held-out (unseen-during-development)
@@ -656,7 +656,7 @@ agent gates actually catch anything.
   `verify` all worked end-to-end and stamped a real entry with `last_verified`.
 
 ### L4 Cost attribution — spend per outcome, not just per run — extends A1
-- **Severity:** LOW-MEDIUM · **Effort:** S · **Model:** Sonnet · **[PARTIAL v0.19.0 — per-turn cost live; retro surfacing still TODO]**
+- **Severity:** LOW-MEDIUM · **Effort:** S · **Model:** Sonnet · **[SHIPPED v0.25.1 — retro-agent Step 0 now runs `pe telemetry collect|summary` and cites per-session per-model totals in the Cost section]**
 - **v0.19.0 partial:** `CENTS_PER_MTOKEN` in `scripts/telemetry.py` covers opus/sonnet/haiku with
   2026-07 pricing; every `TurnRecord.cost_cents` is populated in `.pe/telemetry.jsonl` + surfaced
   as `8colors.cost_cents` on OTel spans. `pe telemetry summary` aggregates per-session per-model
