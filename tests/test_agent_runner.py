@@ -198,6 +198,79 @@ class ParseResult(unittest.TestCase):
         r = parse_result(json.dumps({"response": "resp-key"}), "", 0, "sonnet")
         self.assertEqual(r.output_text, "resp-key")
 
+    def test_model_extracted_from_modelusage(self):
+        # v0.23.1 regression: real `claude -p --output-format json` output
+        # has NO top-level "model" key; instead `modelUsage` holds the
+        # real model IDs keyed under it. Prior parser fell back to the
+        # requested alias "sonnet", which then missed the price table
+        # and reported cost_cents=0 despite a real $0.14 spend.
+        raw = {
+            "result": "ok",
+            "modelUsage": {
+                "claude-haiku-4-5-20251001": {"outputTokens": 16, "inputTokens": 500},
+                "claude-sonnet-4-6": {"outputTokens": 1721, "inputTokens": 3},
+            },
+            "usage": {"input_tokens": 3, "output_tokens": 1721},
+        }
+        r = parse_result(json.dumps(raw), "", 0, "sonnet")
+        # Primary model = the one with the most output tokens (sonnet).
+        self.assertEqual(r.model_used, "claude-sonnet-4-6")
+
+    def test_prefers_total_cost_usd_over_derived(self):
+        # v0.23.1 regression: `total_cost_usd` is the authoritative cost
+        # from Claude itself. Deriving from the price table is a
+        # best-effort fallback that misses cache-write pricing edge cases
+        # and gets stale as models ship. When both are present, prefer
+        # authoritative.
+        raw = {
+            "result": "ok",
+            "total_cost_usd": 0.13771395,  # 13.77 cents
+            "usage": {
+                "input_tokens": 3,
+                "output_tokens": 1721,
+                "cache_read_input_tokens": 47064,
+                "cache_creation_input_tokens": 25905,
+            },
+            "modelUsage": {
+                "claude-sonnet-4-6": {"outputTokens": 1721, "inputTokens": 3},
+            },
+        }
+        r = parse_result(json.dumps(raw), "", 0, "sonnet")
+        self.assertAlmostEqual(r.cost_cents, 13.771395, places=4)
+
+    def test_falls_back_to_derived_cost_when_total_missing(self):
+        # If total_cost_usd is missing, fall back to the price table.
+        raw = {
+            "result": "ok",
+            "modelUsage": {
+                "claude-sonnet-4-6": {"outputTokens": 1000, "inputTokens": 0},
+            },
+            "usage": {"input_tokens": 1_000_000, "output_tokens": 0},
+        }
+        r = parse_result(json.dumps(raw), "", 0, "sonnet")
+        # 1M input tokens × sonnet price (300 cents/Mtoken) = 300 cents
+        self.assertAlmostEqual(r.cost_cents, 300, delta=0.01)
+
+    def test_primary_model_picks_highest_output_tokens(self):
+        # If modelUsage has multiple models (Claude Code routes short tool
+        # calls to haiku), pick the one with the most output tokens as
+        # primary — that's the model that emitted the final response.
+        raw = {
+            "result": "ok",
+            "modelUsage": {
+                "claude-haiku-4-5": {"outputTokens": 5000},
+                "claude-sonnet-4-6": {"outputTokens": 100},
+            },
+        }
+        r = parse_result(json.dumps(raw), "", 0, "sonnet")
+        self.assertEqual(r.model_used, "claude-haiku-4-5")
+
+    def test_missing_modelusage_falls_back_to_alias(self):
+        # If neither modelUsage nor top-level "model" is present, fall
+        # back to the requested alias — persisted record stays populated.
+        r = parse_result(json.dumps({"result": "ok"}), "", 0, "opus")
+        self.assertEqual(r.model_used, "opus")
+
 
 class RunAgent(unittest.TestCase):
     def test_subprocess_missing_raises_typed_error(self):

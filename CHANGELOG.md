@@ -7,6 +7,68 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.23.1] — 2026-07-03
+
+> **Patch — model/cost accounting in `pe agent run` (found by real
+> live-mode validation).** Before shipping L3, we ran one live
+> gate-efficacy fixture end-to-end (~$0.14) to prove the whole
+> A4 pipe worked against the real Anthropic API. It did — the
+> security-reviewer agent emitted a correct PASS envelope and
+> `pe gate parse` extracted exit 0. But the persisted run record
+> showed `model_used: "sonnet"` (the alias, not the full ID) and
+> `cost_cents: 0.0` (despite Claude billing $0.138). Unit tests
+> couldn't have caught this — I'd guessed the wrong JSON shape.
+> Fixed at the source, added 5 regression tests, verified with a
+> second live invocation.
+
+### Fixed
+
+- **`scripts/agent_runner.py::parse_result`** — real `claude -p
+  --output-format json` has NO top-level `model` key; instead
+  `modelUsage` holds a per-model breakdown with real IDs like
+  `claude-sonnet-4-6` and `claude-haiku-4-5-20251001`. New
+  `_primary_model_from_modelusage()` helper picks the model with
+  the most output tokens (Claude Code routes short tool calls to
+  haiku while the main run stays on sonnet — the response emitter
+  is whichever has the most output). Falls back to legacy `model`
+  key → requested alias.
+- **`scripts/agent_runner.py::parse_result`** — real output includes
+  `total_cost_usd` as the authoritative cost from Claude itself.
+  Now prefers this (× 100 → cents) over the derived price-table
+  cost. Derived path stays as fallback when `total_cost_usd` is
+  absent. The derived path was silently returning zero cents
+  because the model alias `"sonnet"` never matched the
+  `claude-sonnet-*` prefix in the price table.
+
+### Added — regression tests
+
+- `test_model_extracted_from_modelusage` — real JSON shape (no
+  top-level `model`) → correct model ID extracted from `modelUsage`.
+- `test_prefers_total_cost_usd_over_derived` — when both are present,
+  authoritative cost wins (13.77 cents matches Claude's report).
+- `test_falls_back_to_derived_cost_when_total_missing` — pre-1.x
+  compatibility.
+- `test_primary_model_picks_highest_output_tokens` — mixed haiku +
+  sonnet responses correctly pick the primary emitter.
+- `test_missing_modelusage_falls_back_to_alias` — persisted record
+  stays populated when neither field is present.
+
+31/31 agent_runner tests pass. All 10 test scripts + `pe docs check`
+green. Verified with second live invocation:
+`model=claude-sonnet-4-6 cost_cents=15.04` (was `model=sonnet cost_cents=0.00`).
+
+### Notes
+
+- Total live-mode validation cost so far: ~$0.28 (two invocations
+  of security-reviewer/pass-parameterized-orm at ~$0.14 each).
+- The A1 telemetry parser (`scripts/telemetry.py`) is UNCHANGED —
+  it reads from `~/.claude/projects/<slug>/*.jsonl` which is
+  Claude Code's own transcript log, a stable format. This bug was
+  specific to `-p --output-format json` output, which is a
+  DIFFERENT surface with different keys.
+
+---
+
 ## [0.23.0] — 2026-07-03
 
 > **A5 — Ponytail as universal prerequisite.** The published Ponytail

@@ -235,15 +235,54 @@ class RunResult:
         }
 
 
+def _primary_model_from_modelusage(raw: dict) -> str | None:
+    """Pick the primary model from a `modelUsage` breakdown.
+
+    Real `claude -p --output-format json` output puts a per-model
+    breakdown under `modelUsage` (mixed model IDs like
+    `claude-sonnet-4-6` + `claude-haiku-4-5-*` because Claude Code
+    routes short tool calls to haiku while the main run stays on
+    sonnet). Pick the model with the most output tokens as the
+    "primary" — that's the one that emitted the response.
+
+    Returns None if `modelUsage` is missing or empty.
+    """
+    mu = raw.get("modelUsage")
+    if not isinstance(mu, dict) or not mu:
+        return None
+    best_id, best_out = None, -1
+    for model_id, stats in mu.items():
+        if not isinstance(stats, dict):
+            continue
+        out = stats.get("outputTokens") or 0
+        if out > best_out:
+            best_id, best_out = model_id, out
+    return best_id
+
+
 def parse_result(
     stdout: str, stderr: str, exit_code: int, requested_model: str
 ) -> RunResult:
     """Best-effort extract of RunResult from `claude -p --output-format json`.
 
-    The JSON shape varies across Claude Code releases. Known keys:
-    `result` (assistant text), `session_id`, `usage` (dict), `model`,
-    `duration_ms`. Missing keys default to safe zeros — the raw_json
-    field carries the full blob so schema drift is inspectable in
+    The real shape (verified against Claude Code 1.x, 2026-07):
+      * assistant text under `result`
+      * `session_id`, `duration_ms` at top level
+      * `usage` dict with input_tokens / output_tokens /
+        cache_read_input_tokens / cache_creation_input_tokens
+      * `modelUsage` dict — per-model breakdown (may mix haiku+sonnet
+        when Claude Code routes short tool calls). Keys are real
+        model IDs; each value has `costUSD` for that model.
+      * `total_cost_usd` at top level — the authoritative cost from
+        Claude itself. USE THIS when present instead of deriving from
+        the price table — the derived path misses cache-write pricing
+        edge cases and gets stale as Anthropic ships new models.
+      * NO top-level `model` key (this was the v0.21.0 bug — the
+        parser fell back to the requested alias like "sonnet", which
+        then missed the price table's `claude-sonnet-*` prefix).
+
+    Missing keys default to safe zeros — raw_json carries the full
+    blob so schema drift is inspectable in
     `.pe/runs/<slug>/run.json`.
     """
     raw: dict = {}
@@ -267,7 +306,23 @@ def parse_result(
     if not isinstance(usage, dict):
         usage = {}
 
-    model_used = (raw.get("model") if isinstance(raw, dict) else None) or requested_model
+    # Model resolution: real ID from modelUsage → legacy `model` top-level
+    # → requested alias fallback. First two are authoritative; last
+    # keeps the persisted record populated even against pre-1.x output.
+    model_used = (
+        _primary_model_from_modelusage(raw)
+        or (raw.get("model") if isinstance(raw, dict) else None)
+        or requested_model
+    )
+
+    # Cost: prefer authoritative total_cost_usd (converted to cents)
+    # when Claude reports it; fall back to derived cost otherwise.
+    total_cost_usd = raw.get("total_cost_usd") if isinstance(raw, dict) else None
+    if isinstance(total_cost_usd, (int, float)):
+        cost_cents = float(total_cost_usd) * 100.0
+    else:
+        cost_cents = _cost_cents(usage, model_used)
+
     return RunResult(
         exit_code=exit_code,
         output_text=output_text if isinstance(output_text, str) else str(output_text),
@@ -278,7 +333,7 @@ def parse_result(
         output_tokens=int(usage.get("output_tokens") or 0),
         cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
         cache_creation_tokens=int(usage.get("cache_creation_input_tokens") or 0),
-        cost_cents=_cost_cents(usage, model_used),
+        cost_cents=cost_cents,
         duration_ms=int(raw.get("duration_ms")) if isinstance(raw, dict) and raw.get("duration_ms") is not None else None,
         stderr=stderr,
     )
