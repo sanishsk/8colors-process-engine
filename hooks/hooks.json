@@ -9,6 +9,15 @@
           "command": "{{ENGINE_DIR}}/hooks/pre-commit-envelope-check.sh"
         }
       ]
+    },
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/ponytail-preflight.sh"
+        }
+      ]
     }
   ],
   "PostToolUse": [

@@ -372,16 +372,27 @@ agent gates actually catch anything.
   reviewed on enforce-mode.
 
 ### A5 Ponytail as a universal prerequisite (not opt-in on 2 of 10 agents)
-- **Severity:** MEDIUM · **Effort:** S · **Model:** Sonnet · **[PARTIAL]**
-- **Files:** `scripts/install.sh` (default-on), `hooks/hooks.json` (PreToolUse), all 10
-  code-writing agent preambles.
-- **Fix:** the operator's instinct is right — Ponytail should be a prerequisite for ALL code work,
-  not a flag. (a) make it install by default (`--no-ponytail` to opt out); (b) add a PreToolUse
-  hook on Write/Edit that surfaces the decision-ladder ("does this need to exist? stdlib?
-  platform-native? installed dep? one line?"); (c) reference it in the 8 code agents that don't yet
-  (architect, planner, brief-writer, build-error-resolver already partial → all). Published evals:
-  ~54% LOC reduction, 100% safety held. This is the cheapest "less code, fewer vulns, fewer bugs"
-  lever available — fewer lines is less attack surface, which ties back to S.
+- **Severity:** MEDIUM · **Effort:** S · **Model:** Sonnet · **[SHIPPED v0.23.0]**
+- **Files (shipped):** `scripts/install.sh` (`WITH_PONYTAIL=1` default; `--no-ponytail` opt-out;
+  `--with-ponytail` retained as no-op for back-compat), `hooks/ponytail-preflight.sh` (new,
+  advisory PreToolUse hook; exits 0 always so it can never block a Write),
+  `hooks/hooks.json` (new PreToolUse entry for `Edit|Write|MultiEdit`), five agent files
+  (`agents/architect.md`, `agents/data-model-auditor.md`, `agents/e2e-runner.md`,
+  `agents/project-kickstarter.md`, `agents/project-onboarder.md`) — each got a "Ponytail
+  decision ladder (A5 universal prerequisite)" preamble section right after their opening
+  paragraph. `agents/build-error-resolver.md` and `agents/tdd-guide.md` already had it.
+- **Coverage:** **7 of 7 code-writing agents** now reference the ladder. Non-code-writing
+  agents (gates, planners, meta-agents, incident-synthesizer) deliberately excluded — applying
+  the ladder to a gate muddles its role.
+- **Hook design (deliberately advisory):** small writes get a one-line reminder; ≥50-line
+  writes get the verbose "any new dep requires an explicit `Ponytail: allow <reason>`" block.
+  Back-to-back small writes within a 10-minute TTL dedupe (state in
+  `.pe/ponytail-preflight-seen.state`). Large writes ALWAYS surface. Malformed JSON, missing
+  python3, or empty stdin all silently exit 0 — the hook can never turn into a Write
+  rejection the operator can't diagnose.
+- **Tests:** `tests/test_ponytail_preflight.sh` — 7/7 pass (small, large, non-writing tool
+  suppressed, empty stdin, dedup, malformed JSON, always-exit-0 invariant). All 10 test
+  scripts + `pe docs check` green.
 
 ### A6 Domain layer — `pe new` scaffold + extract reusable SaaS modules
 - **Severity:** MEDIUM · **Effort:** L · **Model:** Opus · **[MISSING — NOT built; still the biggest structural gap]** · **do after 8CStudio Delivery settles**

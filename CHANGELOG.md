@@ -7,6 +7,104 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.23.0] — 2026-07-03
+
+> **A5 — Ponytail as universal prerequisite.** The published Ponytail
+> evals report ~54% LOC reduction with 100% safety-held; that makes
+> the decision-ladder cheaper than any other quality lever in the
+> engine. This release closes the "PARTIAL" state by making it a
+> default-on install, wiring an advisory PreToolUse hook that surfaces
+> the ladder before every Write/Edit/MultiEdit, and adding the
+> Ponytail preamble to the five code-writing agents that didn't have
+> it yet.
+
+### Changed — install default flipped
+
+- **`scripts/install.sh`** — `WITH_PONYTAIL` defaults to `1`. A new
+  `--no-ponytail` flag opts out (idempotent — safe to re-run). The
+  original `--with-ponytail` flag is retained as a no-op for
+  backward compatibility with older wrapper scripts.
+- Usage line + help now list `--no-ponytail` and drop `--with-ponytail`
+  from the primary shape.
+
+### Added — PreToolUse advisory hook
+
+- **`hooks/ponytail-preflight.sh`** — fires on Write / Edit /
+  MultiEdit before disk. Reads the tool-event JSON from stdin,
+  extracts the pending content (Write `content`, Edit `new_string`,
+  or MultiEdit `edits[].new_string` summed), and emits the ladder:
+    * Small pending content (< 50 lines): one-line reminder.
+    * Large pending content (≥ 50 lines): verbose block with the
+      full ladder + "any new dep requires an explicit `Ponytail:
+      allow <reason>` in your envelope" reminder.
+- Dedup: back-to-back small writes within a 10-minute TTL surface
+  the reminder only once (state in
+  `.pe/ponytail-preflight-seen.state`). Large writes ALWAYS surface —
+  they're the highest-value reminder moment.
+- **Advisory, never blocking.** Exits 0 on every path including
+  malformed JSON, missing python3, or stdin probes. Bash tool
+  (non-writing) suppressed silently.
+- **`hooks/hooks.json`** — new PreToolUse entry for
+  `Edit|Write|MultiEdit` pointing at the new hook, alongside the
+  existing `Bash → pre-commit-envelope-check.sh` entry.
+
+### Added — Ponytail preamble in code-writing agents
+
+- Added to **5 agents** that were missing the reference:
+    * `architect.md` — "architecture proposals compound: a service
+      you introduce today becomes what every future feature bolts
+      onto"
+    * `data-model-auditor.md` — "extracted constant → config file →
+      table; don't propose CRUD when a module constant is enough"
+    * `e2e-runner.md` — "40 test files each importing their own
+      login_helper is worse than 40 tests inlining three page.fill
+      calls"
+    * `project-kickstarter.md` — "kickstart is the highest-leverage
+      moment for bloat"
+    * `project-onboarder.md` — "don't replace working ad-hoc
+      solutions with the 'correct' framework unless the operator
+      asked"
+- Already had it: `build-error-resolver.md`, `tdd-guide.md`.
+- **7 of 7 code-writing agents** now reference the ladder in their
+  preamble.
+
+### Added — tests
+
+- **`tests/test_ponytail_preflight.sh`** — 7 smoke tests:
+    * small Write → short reminder
+    * large Write (≥50 lines) → verbose block
+    * non-writing tool (Bash) → suppressed
+    * empty stdin → silent (probe safety)
+    * dedup on back-to-back small writes within TTL
+    * malformed JSON → silent exit 0 (never leaks stderr)
+    * hook always returns exit 0 (never blocks a Write)
+- All 10 test scripts + `pe docs check` green.
+
+### Notes
+
+- The hook is DELIBERATELY advisory. Blocking Write/Edit on a "walk
+  the ladder" gate would create a UX cliff the operator can't
+  diagnose from inside Claude Code. The ladder is a discipline, not
+  a checklist gate — surfacing it at the moment of use is what makes
+  it stick.
+- Non-code-writing agents (brief-writer, planner, doc-updater,
+  memory-consolidator, retrospective-agent, ceo, researcher,
+  incident-synthesizer + all gate agents) were deliberately left
+  alone. Applying the ladder to a gate agent muddles its role.
+- The hook's dedup state lives in `.pe/ponytail-preflight-seen.state`
+  which is covered by the existing `.pe/` gitignore rule.
+
+### Migration
+
+- No breaking changes. Existing installs pick up the default-on
+  Ponytail install on next `pe upgrade` + `pe install`; operators
+  who want to disable can pass `--no-ponytail`.
+- Existing `.claude/settings.json` merges pick up the new PreToolUse
+  hook via `pe install` (same idempotent merge that shipped in
+  v0.10.0).
+
+---
+
 ## [0.22.0] — 2026-07-03
 
 > **A3 — incident → gate synthesizer (the self-improvement loop).**

@@ -35,11 +35,16 @@ ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # ─── Arg parsing hook flags (P1.4) ────────────────────────────────────────
 # --no-claude-hooks — skip the .claude/settings.json merge
 # --no-git-hooks    — skip .pre-commit-config.yaml + pre-commit install
-# --with-ponytail   — clone the Ponytail decision-ladder skill into
-#                     ~/.claude/skills/ponytail (P6.1)
+# --no-ponytail     — skip Ponytail decision-ladder skill install (A5:
+#                     Ponytail is default-on as of v0.23.0 — the ~54%
+#                     LOC-reduction / 100%-safety-hold evals make it a
+#                     universal prerequisite for code-writing work,
+#                     not a flag. --with-ponytail is retained as a
+#                     no-op for backward compatibility with older
+#                     install scripts).
 NO_CLAUDE_HOOKS=0
 NO_GIT_HOOKS=0
-WITH_PONYTAIL=0
+WITH_PONYTAIL=1
 
 # ─── Arg parsing ───────────────────────────────────────────────────────────
 # Usage: ./install.sh [--subset gate-only|core|full] /path/to/target-project
@@ -51,13 +56,14 @@ while [ $# -gt 0 ]; do
     --subset=*)     SUBSET="${1#--subset=}"; shift ;;
     --no-claude-hooks) NO_CLAUDE_HOOKS=1; shift ;;
     --no-git-hooks)    NO_GIT_HOOKS=1; shift ;;
-    --with-ponytail)   WITH_PONYTAIL=1; shift ;;
+    --no-ponytail)     WITH_PONYTAIL=0; shift ;;
+    --with-ponytail)   WITH_PONYTAIL=1; shift ;;  # back-compat no-op — default is now on
     -h|--help)
-      echo "Usage: ./install.sh [--subset gate-only|core|full] [--no-claude-hooks] [--no-git-hooks] [--with-ponytail] /path/to/target-project"
+      echo "Usage: ./install.sh [--subset gate-only|core|full] [--no-claude-hooks] [--no-git-hooks] [--no-ponytail] /path/to/target-project"
       exit 0 ;;
     --*)
       echo "Unknown flag: $1" >&2
-      echo "Usage: ./install.sh [--subset ...] [--no-claude-hooks] [--no-git-hooks] [--with-ponytail] /path/to/target-project" >&2
+      echo "Usage: ./install.sh [--subset ...] [--no-claude-hooks] [--no-git-hooks] [--no-ponytail] /path/to/target-project" >&2
       exit 2 ;;
     *)
       if [ -z "$TARGET" ]; then TARGET="$1"; else
