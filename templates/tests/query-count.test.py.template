@@ -1,0 +1,119 @@
+# query-count.test — the real N+1 detector (PF1).
+#
+# WHY THIS EXISTS: N+1 is the #1 silent SaaS performance killer — a page
+# that fires 1 query in dev (10 rows) fires 1+N in prod (10k rows) and
+# falls over. A black-box latency probe (the ai-testing-agent's
+# `generate_n_plus_one_journeys`) can only *guess* from response times;
+# it misses N+1 that's still fast on small dev data. The only reliable
+# detector is IN-PROCESS query counting — you count the SQL the ORM
+# actually emits and assert it does NOT grow with row count. That's what
+# this template does, and why it lives in the adopter's own test suite
+# (the engine gate can't reach inside your DB session from outside).
+#
+# THE CONTRACT: a list/detail endpoint must issue a CONSTANT number of
+# queries regardless of how many rows it returns. If query count scales
+# with N, you have an N+1 — fix with eager loading (SQLAlchemy
+# `selectinload`/`joinedload`, Django `select_related`/`prefetch_related`).
+#
+# Adopter customization:
+#   - Wire `db_session()` / `_query_counter()` to your stack (SQLAlchemy
+#     and Django variants are both provided below — keep one, delete the
+#     other).
+#   - Wire `_seed_rows(n)` and `_call_list_endpoint()` to your app.
+#   - Set MAX_QUERIES to your real ceiling (a constant, NOT a function
+#     of N). Start strict; raise it only with a comment explaining why.
+#   - Delete cases that don't apply — but delete them, don't silent-pass.
+
+import pytest
+
+
+# ─── Adopter wires these ─────────────────────────────────────────────
+MAX_QUERIES = 10  # constant ceiling for the list endpoint; tune to reality
+
+
+def _seed_rows(n: int) -> None:
+    """Create `n` rows of the entity your list endpoint returns,
+    each with the related data that tends to trigger N+1."""
+    raise NotImplementedError("wire to your factory / DB helper")
+
+
+def _call_list_endpoint():
+    """Hit the list endpoint (test client) and return the response.
+    Must actually touch the related data (serialize it) so lazy loads fire."""
+    raise NotImplementedError("wire to your app's test client")
+
+
+# ─── Query counter — SQLAlchemy variant (keep this OR the Django one) ──
+from contextlib import contextmanager
+
+
+@contextmanager
+def count_queries():
+    """Yield a mutable counter; counts every SQL statement executed on
+    the bound engine for the duration of the block.
+
+    SQLAlchemy: wire `_get_engine()` to your app's engine/bind.
+    """
+    from sqlalchemy import event
+
+    engine = _get_engine()
+    counter = {"n": 0}
+
+    def _before(conn, cursor, statement, params, context, executemany):
+        counter["n"] += 1
+
+    event.listen(engine, "before_cursor_execute", _before)
+    try:
+        yield counter
+    finally:
+        event.remove(engine, "before_cursor_execute", _before)
+
+
+def _get_engine():
+    raise NotImplementedError("return your SQLAlchemy engine / bind")
+
+
+# ─── Django variant (delete the SQLAlchemy block above if you use this) ─
+# from django.test.utils import CaptureQueriesContext
+# from django.db import connection
+#
+# @contextmanager
+# def count_queries():
+#     with CaptureQueriesContext(connection) as ctx:
+#         yield {"_ctx": ctx}
+#     # after the block, len(ctx.captured_queries) is the count
+
+
+# ─── The tests ───────────────────────────────────────────────────────
+def test_list_endpoint_query_count_is_bounded():
+    """The list endpoint must stay under MAX_QUERIES with a realistic row count."""
+    _seed_rows(25)
+    with count_queries() as c:
+        resp = _call_list_endpoint()
+    assert getattr(resp, "status_code", 200) < 400
+    n = c["n"] if "n" in c else len(c["_ctx"].captured_queries)
+    assert n <= MAX_QUERIES, (
+        f"N+1 suspected: {n} queries for 25 rows (ceiling {MAX_QUERIES}). "
+        f"Add eager loading (selectinload/joinedload or select_related/prefetch_related)."
+    )
+
+
+def test_list_endpoint_query_count_does_not_scale_with_rows():
+    """The strongest N+1 signal: query count must NOT grow with N.
+    Count at 5 rows and at 50 rows — the delta should be ~0, not ~45."""
+    _seed_rows(5)
+    with count_queries() as c1:
+        _call_list_endpoint()
+    n_small = c1["n"] if "n" in c1 else len(c1["_ctx"].captured_queries)
+
+    _seed_rows(45)  # now 50 total
+    with count_queries() as c2:
+        _call_list_endpoint()
+    n_large = c2["n"] if "n" in c2 else len(c2["_ctx"].captured_queries)
+
+    # A constant-query endpoint has n_large ≈ n_small. An N+1 endpoint
+    # has n_large ≈ n_small + (rows added). Allow a small constant slack.
+    assert (n_large - n_small) <= 2, (
+        f"N+1 confirmed: queries grew {n_small}→{n_large} when rows grew 5→50. "
+        f"Query count scales with row count — classic N+1."
+    )

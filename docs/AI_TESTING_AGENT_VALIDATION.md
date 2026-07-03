@@ -21,6 +21,18 @@
 
 ---
 
+> **DOGFOOD 2026-07-03 — engine SAST gate run against this repo (proves the gate on a 2nd
+> codebase + gave the agent a real fix-list).** `semgrep p/security-audit + p/owasp-top-ten` (the
+> engine's S1 gate) found **13 findings** the agent's OWN "security testing" never caught on itself:
+> 8× `avoid-sqlalchemy-text` (raw `text()` — review each for binding), 1× XXE (`cicd.py` — FALSE
+> POSITIVE, it generates not parses XML → allowlisted with reason), 1× unescaped-HTML XSS
+> (`html_reporter.py` — REAL, **fixed** with `autoescape=True`), 3× MD5 (2 in `visual/` are
+> legit perceptual-hashing FPs to allowlist; 1 in `licensing/` — being neutralized anyway). **Fixed
+> the 2 clear items; all 679 tests still pass.** Remaining agent fix-list (small): triage the 8
+> `avoid-sqlalchemy-text` sites (bind params or allowlist), allowlist the 2 visual-hash MD5s. Also
+> found: `reporting/` + `cicd.py` have NO direct tests (coverage gap). This dogfood IS the A2
+> eval-proof-in-miniature: the engine gate works on a codebase it wasn't built for.
+
 ## 1. Verdict in one paragraph
 
 **It's real, functional, well-structured engineering — and it over-claims.** 38k LOC across cleanly

@@ -195,11 +195,20 @@ agent gates actually catch anything.
 > hand-tunes performance.
 
 ### PF1 Runtime N+1 + query-count regression gate ⭐ biggest real-world perf win
-> **COVERAGE (see `TESTING_TOPOLOGY.md`):** runtime-shaped → BUILD IN THE AGENT
-> (A9.4: a query-count hook + `nplusone` on the chaos runner), engine calls it.
-> Neither side has it today — this is the #1 perf gap. Do NOT build a parallel
-> engine-side fixture; delegate the runtime counting to the agent.
-- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[PARTIAL — static-only today]**
+> **COVERAGE — CORRECTED 2026-07-03 (was wrong):** the earlier note said "delegate
+> query-counting to the agent." Recon proved that's architecturally impossible — a
+> BLACK-BOX agent cannot count the SQL a request emits; it only has a *latency
+> proxy* (list-vs-detail ×5), which the agent ALREADY ships
+> (`generators/performance_tests.py::generate_n_plus_one_journeys`). Real
+> query-count N+1 detection is INHERENTLY in-process, so it lives as an ENGINE
+> pytest template the adopter runs in its own suite. Correct split:
+> **engine = the real detector (in-process query count); agent = complementary
+> black-box latency smoke.** Neither replaces the other.
+- **STATUS: ✅ template SHIPPED 2026-07-03** — `templates/tests/query-count.test.py.template`
+  (SQLAlchemy `before_cursor_execute` counter + Django `CaptureQueriesContext` variant;
+  two tests: bounded-ceiling + does-not-scale-with-N). Remaining: an optional `hooks/perf-gate.sh`
+  wrapper + a database-reviewer rubric line pointing at it.
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[template done; hook/rubric open]**
 - **Files:** `templates/tests/query-count.test.py.template` (new), `hooks/perf-gate.sh` (new),
   `agents/database-reviewer.md`.
 - **Why:** N+1 is the #1 silent performance killer in SaaS — fine with 10 rows in dev, dies with
