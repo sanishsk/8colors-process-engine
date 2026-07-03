@@ -2,7 +2,7 @@
 # Regenerated at release time via `pe verify --update`.
 # Format: <sha256> <relative path>
 
-42659901f3c792eb230cf32b2c844ae738cd6d53dd84c1b7eb434e969b472ec2  VERSION
+8c4f709e958791f38fd4d06c953c9182f61a05abbc45508e281b907f08b52210  VERSION
 cc420ce9e7b2baddff4005de38583c7e01e4fb240a6f659acdeae66f867d7a5e  agents/_gate-contract.md
 7791ab1ee6d1299679e538a565af704bad90b18a1f288ed46cd03d0125093df7  agents/architect.md
 375249c1d5b4a936dd75f77bff498beaee94778c462a16ba7c620086ceb29d5f  agents/brief-writer.md
@@ -59,7 +59,7 @@ a28adb31c9403106c4675d8e56ca6ed5c653ef105907628df69c4e301d7ccc9b  hooks/stacking
 8da590608fac03acd98f3483838f61ae104e4a347389593c0ac59bf6e8ad2aae  hooks/stop-uncommitted-reminder.sh
 e7c4de433ce0525dbf28334ba5180ab3f554ac5c7e80e1c8853ce5c190304f9a  hooks/test-run.sh
 27c00433563e8d4c184b43330e9ce929033b3fef88adac8f828a4bdfaee3d520  hooks/transcript-guard.sh
-b85a8ee5017a61f070e2e845691737b9086ead2c3fa7ceeb739ec968b57c7c0b  plugin.json
+1ddf999fe083c90c7fd85a5f60da6b091e10e1dcfb87bacd830ce9ff98686d55  plugin.json
 df3c1c665905d5a1b3f07d76dd593dea742099b0607aa63a7edb813680d38bf6  scripts/pe
 fe9d9b4504a54c7cdc684ea7afbf907e6294431bc93242b65b847a4d129d3f8b  scripts/pe_gate.py
 ba5f4d9b61afe411a3a67f93010a6e0d44e388a81287511e6025584d823ba039  scripts/pe_memory.py

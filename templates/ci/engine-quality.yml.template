@@ -23,6 +23,16 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches: [main, master]
+  schedule:
+    # S5 weekly deep scans: gitleaks full-history + trivy re-scan.
+    # Monday 08:00 UTC. Adjust if this clashes with your team's cadence.
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      run_tenant_audit:
+        description: 'Run tenant-isolation-auditor'
+        required: false
+        default: 'false'
 
 jobs:
   detect-stack:
@@ -112,16 +122,265 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./... || true
 
+  # S5 (v0.31.0) — per-commit secrets scan. gitleaks-action's default
+  # mode covers the pushed diff / PR commits. Full-history walk lives
+  # in the scheduled `secrets-scan-history` job below because scanning
+  # every commit on every push is too slow to gate merges on.
   secrets-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: gitleaks
+      - name: gitleaks (incremental)
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # S5 layer a — weekly full-history secrets audit. Advisory
+  # (continue-on-error) because a single legacy leak already in the
+  # past shouldn't block today's PRs; the intent is to notice it and
+  # rotate. Runs on schedule OR manual dispatch. Skipped on push /
+  # PR events so it doesn't triple the per-PR CI cost.
+  secrets-scan-history:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o /tmp/gitleaks.tgz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tgz -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: gitleaks detect --source git (full history)
+        run: gitleaks detect --source . --no-git=false --redact --report-format json --report-path gitleaks-history.json
+      - name: Upload report on findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-history-report
+          path: gitleaks-history.json
+          if-no-files-found: ignore
+
+  # S5 layer b — container security. Feature-detected on Dockerfile
+  # presence via hashFiles(). hadolint = lint, trivy = CVE scan. Both
+  # advisory (continue-on-error) — the intent is visibility, not
+  # blocking every push on transient CVE catalog changes.
+  container-security:
+    if: hashFiles('Dockerfile') != ''
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: hadolint (Dockerfile lint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+      # Trivy runs in filesystem mode to catch OS + language deps
+      # without building the image (image-build in CI is slow and
+      # often needs registry creds).
+      - name: trivy fs (vulnerability scan)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: '.'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '0'
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+      - name: Upload trivy SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs-report
+          path: trivy-fs.sarif
+          if-no-files-found: ignore
+
+  # S5 layer c — license audit. Feature-detected per-stack. AGPL /
+  # GPL-3.0 are HIGH for a resold SaaS (viral copyleft on distribution);
+  # LGPL is WARN (dynamic-link boundary compatible with most commercial
+  # models, but flag for legal review). Configurable via env vars:
+  #   ENGINE_LICENSE_FAIL_ON  (default: "AGPL-3.0;AGPL-3.0-only;GPL-3.0;GPL-3.0-only")
+  #   ENGINE_LICENSE_WARN_ON  (default: "LGPL-3.0;LGPL-3.0-only;LGPL-2.1")
+  license-audit:
+    needs: detect-stack
+    if: needs.detect-stack.outputs.stack != 'unknown'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      ENGINE_LICENSE_FAIL_ON: 'AGPL-3.0;AGPL-3.0-only;GPL-3.0;GPL-3.0-only'
+      ENGINE_LICENSE_WARN_ON: 'LGPL-3.0;LGPL-3.0-only;LGPL-2.1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python — pip-licenses
+        if: needs.detect-stack.outputs.stack == 'python'
+        run: |
+          python -m pip install --upgrade pip pip-licenses
+          if [ -f pyproject.toml ]; then pip install -e . || true; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          pip-licenses --format=json > licenses.json
+          python - <<'PY'
+          import json, os, re, sys
+          # pip-licenses can emit any of:
+          #   "GPL-3.0-only"                     (SPDX)
+          #   "GNU General Public License v3"    (classifier full text)
+          #   "GPLv3"                            (classifier short form)
+          #   "GNU General Public License v3 (GPLv3)"  (mixed)
+          # A simple substring check on the SPDX token misses the last three.
+          # We expand each config token to a family + version tuple and match
+          # against BOTH the raw text and a normalized form.
+          FAMILY_ALIASES = {
+              'agpl': ['agpl', 'affero general public license', 'affero'],
+              'gpl':  ['gpl', 'gnu general public license', 'gnu gpl'],
+              'lgpl': ['lgpl', 'lesser general public license', 'gnu lgpl'],
+          }
+          _SEP = re.compile(r'[\s\-._()/]+')
+          def _norm(s: str) -> str:
+              return _SEP.sub('', s.lower())
+          def _parse_token(tok: str):
+              """`GPL-3.0-only` → ('gpl', '3.0'). `LGPL-2.1` → ('lgpl','2.1')."""
+              m = re.match(r'^(agpl|lgpl|gpl)[\s\-]*v?(\d(?:\.\d+)?)', tok, re.I)
+              if not m:
+                  return None
+              return m.group(1).lower(), m.group(2)
+          # Short aliases like "gpl" would false-match inside "lgpl". For
+          # them we require a preceding non-letter. Long aliases like
+          # "gnugeneralpubliclicense" don't collide, and requiring a
+          # preceding non-letter would miss "gnuaffero..." (preceded by
+          # 'u' from "gnu"), so we skip the left-boundary for aliases
+          # longer than 8 chars normalized.
+          def _bounded_match(pattern: str, haystack: str) -> bool:
+              trail = r'(?![a-z])'
+              lead = r'(?<![a-z])' if len(pattern) <= 8 else r''
+              return bool(re.search(lead + re.escape(pattern) + trail, haystack))
+          def _matches(license_str: str, tokens: set) -> bool:
+              lic_norm = _norm(license_str)
+              for tok in tokens:
+                  parsed = _parse_token(tok)
+                  if not parsed:
+                      # Unknown token → normalized word-bounded substring.
+                      if _bounded_match(_norm(tok), lic_norm):
+                          return True
+                      continue
+                  family, version = parsed
+                  aliases = FAMILY_ALIASES.get(family, [family])
+                  # pip-licenses trims `.0` in classifier form: `GPL-3.0-only`
+                  # → `GPLv3`. Try both to catch both shapes.
+                  versions = {version}
+                  if version.endswith('.0'):
+                      versions.add(version[:-2])
+                  else:
+                      versions.add(version + '.0')
+                  for alias in aliases:
+                      alias_norm = _norm(alias)
+                      for v in versions:
+                          v_norm = v.replace('.', '')
+                          # Try both `gpl3` and `gplv3` normalized shapes.
+                          for candidate in (alias_norm + v_norm,
+                                            alias_norm + 'v' + v_norm):
+                              if _bounded_match(candidate, lic_norm):
+                                  return True
+              return False
+
+          fail_on = set(x.strip() for x in os.environ.get('ENGINE_LICENSE_FAIL_ON','').split(';') if x.strip())
+          warn_on = set(x.strip() for x in os.environ.get('ENGINE_LICENSE_WARN_ON','').split(';') if x.strip())
+          data = json.load(open('licenses.json'))
+          fails, warns = [], []
+          for row in data:
+              lic = (row.get('License') or 'UNKNOWN').strip()
+              name = row.get('Name','?')
+              if _matches(lic, fail_on):
+                  fails.append(f"{name}: {lic}")
+              elif _matches(lic, warn_on):
+                  warns.append(f"{name}: {lic}")
+          if fails:
+              print('LICENSE FAIL — copyleft licenses incompatible with resold SaaS:')
+              for f in fails: print(f'  - {f}')
+              sys.exit(1)
+          if warns:
+              print('LICENSE WARN — review with legal:')
+              for w in warns: print(f'  - {w}')
+          print(f"license-audit: scanned {len(data)} packages, {len(fails)} fails, {len(warns)} warns")
+          PY
+      - name: Node — license-checker
+        if: needs.detect-stack.outputs.stack == 'node'
+        run: |
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          npx --yes license-checker --production --json > licenses.json
+          node - <<'JS'
+          const fs = require('fs');
+          const failOn = (process.env.ENGINE_LICENSE_FAIL_ON || '').split(';').map(s=>s.trim()).filter(Boolean);
+          const warnOn = (process.env.ENGINE_LICENSE_WARN_ON || '').split(';').map(s=>s.trim()).filter(Boolean);
+          const data = JSON.parse(fs.readFileSync('licenses.json','utf8'));
+          const FAMILY_ALIASES = {
+            agpl: ['agpl', 'affero general public license', 'affero'],
+            gpl:  ['gpl', 'gnu general public license', 'gnu gpl'],
+            lgpl: ['lgpl', 'lesser general public license', 'gnu lgpl'],
+          };
+          const _norm = s => (s || '').toLowerCase().replace(/[\s\-._()/]+/g, '');
+          const _parse = tok => {
+            const m = /^(agpl|lgpl|gpl)[\s\-]*v?(\d(?:\.\d+)?)/i.exec(tok);
+            return m ? [m[1].toLowerCase(), m[2]] : null;
+          };
+          const _escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const _boundedMatch = (pat, hay) => {
+            const lead = pat.length <= 8 ? '(?<![a-z])' : '';
+            return new RegExp(lead + _escape(pat) + '(?![a-z])').test(hay);
+          };
+          const _matches = (lic, tokens) => {
+            const licNorm = _norm(lic);
+            for (const tok of tokens) {
+              const parsed = _parse(tok);
+              if (!parsed) {
+                if (_boundedMatch(_norm(tok), licNorm)) return true;
+                continue;
+              }
+              const [family, version] = parsed;
+              const aliases = FAMILY_ALIASES[family] || [family];
+              const versions = new Set([version]);
+              if (version.endsWith('.0')) versions.add(version.slice(0, -2));
+              else versions.add(version + '.0');
+              for (const alias of aliases) {
+                const aliasNorm = _norm(alias);
+                for (const v of versions) {
+                  const vNorm = v.replace('.', '');
+                  for (const candidate of [aliasNorm + vNorm, aliasNorm + 'v' + vNorm]) {
+                    if (_boundedMatch(candidate, licNorm)) return true;
+                  }
+                }
+              }
+            }
+            return false;
+          };
+          const fails = [], warns = [];
+          for (const [pkg, info] of Object.entries(data)) {
+            const rawLic = Array.isArray(info.licenses) ? info.licenses.join('/') : (info.licenses || 'UNKNOWN');
+            if (_matches(rawLic, failOn)) fails.push(`${pkg}: ${rawLic}`);
+            else if (_matches(rawLic, warnOn)) warns.push(`${pkg}: ${rawLic}`);
+          }
+          if (fails.length) {
+            console.log('LICENSE FAIL — copyleft licenses incompatible with resold SaaS:');
+            fails.forEach(f => console.log('  - '+f));
+            process.exit(1);
+          }
+          if (warns.length) {
+            console.log('LICENSE WARN — review with legal:');
+            warns.forEach(w => console.log('  - '+w));
+          }
+          console.log(`license-audit: scanned ${Object.keys(data).length} packages, ${fails.length} fails, ${warns.length} warns`);
+          JS
+      - name: Go — advisory only
+        if: needs.detect-stack.outputs.stack == 'go'
+        run: |
+          echo "Go license auditing is advisory — recommend running"
+          echo "  go install github.com/google/go-licenses@latest"
+          echo "  go-licenses check ./..."
+          echo "in a subsequent job wired to your module tree."
 
   # S6 completion (v0.25.1) — advisory tenant-isolation audit. Runs
   # on schedule (weekly Monday) or manual dispatch, not per-commit —

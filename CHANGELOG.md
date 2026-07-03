@@ -7,6 +7,129 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.31.0] — 2026-07-03
+
+> **S5 shipped — container + secrets-history + license CI gates.**
+> Three advisory gates land in `engine-quality.yml.template`:
+> hadolint + trivy on Dockerfile presence, weekly full-git-history
+> gitleaks (schedule-only so PRs don't triple-scan), and per-stack
+> license audit (pip-licenses / license-checker) that FAILS on
+> AGPL / GPL-3.0 and WARNS on LGPL. All new gates are
+> `continue-on-error: true` — the intent is visibility, not
+> blocking every push on transient CVE catalog changes. This
+> closes the last Security row in the plan; S1–S5 all shipped.
+
+### Added — `templates/ci/engine-quality.yml.template`
+
+- **`container-security` job** — feature-detected via
+  `hashFiles('Dockerfile') != ''`. Runs `hadolint/hadolint-action@v3.1.0`
+  (warning-threshold) and `aquasecurity/trivy-action@0.24.0` in
+  `fs` mode (HIGH/CRITICAL only, SARIF output uploaded as artifact).
+  Trivy in fs mode avoids the CI-time image build (which usually
+  needs registry credentials); it still catches OS + language deps.
+- **`secrets-scan-history` job** — schedule + workflow_dispatch
+  only. Downloads gitleaks v8.18.4 tarball, runs
+  `gitleaks detect --source . --no-git=false --redact` over the
+  full git history. Uploads `gitleaks-history.json` on findings so
+  the operator can act without exposing the value in the log.
+- **`license-audit` job** — needs the existing `detect-stack`
+  output. Python: `pip-licenses --format=json` fed into an inline
+  Python evaluator that fails on any package license matching the
+  `ENGINE_LICENSE_FAIL_ON` list (default:
+  `AGPL-3.0;AGPL-3.0-only;GPL-3.0;GPL-3.0-only`) and warns on
+  `ENGINE_LICENSE_WARN_ON` (default: `LGPL-3.0;LGPL-3.0-only;LGPL-2.1`).
+  Node: `npx --yes license-checker --production --json` → same
+  evaluator in JS. Go: advisory-only echo (adopter can wire
+  `go-licenses check ./...` separately).
+- **Schedule trigger** — new `cron: '0 8 * * 1'` (Monday 08:00
+  UTC) so the weekly-only jobs fire without a manual dispatch.
+  workflow_dispatch also added with an optional
+  `run_tenant_audit` input that the existing S6 job already reads.
+- Existing per-commit `secrets-scan` job preserved unchanged —
+  it uses `gitleaks-action@v2` on the pushed diff. The new
+  `secrets-scan-history` complements it by catching legacy leaks
+  that never touched the current diff.
+
+### Added — `tests/test_ci_template_s5.sh` (15 cases)
+
+- Asserts cron + workflow_dispatch triggers present.
+- Asserts `container-security` job present, Dockerfile-guarded,
+  hadolint + trivy actions, continue-on-error.
+- Asserts `license-audit` present with correct fail-on + warn-on
+  defaults, branches on both python (pip-licenses) and node
+  (license-checker).
+- Asserts `secrets-scan-history` present + schedule-only.
+- Asserts gitleaks full-history invocation shape.
+- Asserts per-commit `secrets-scan` preserved (regression guard).
+- Asserts all three new jobs are advisory (continue-on-error).
+
+### Updated
+
+- `plugin.json.description` — mentions S5 CI gates.
+- `README.md` badge → 0.31.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` S5 marker: MISSING → SHIPPED v0.31.0.
+- `MANIFEST.sha256` regenerated (66 entries — surface list didn't
+  grow, but VERSION + plugin.json + engine-quality.yml… wait,
+  templates/ci/ is NOT in the manifest surface. See notes below.).
+
+### Reviewer fixes (applied pre-commit)
+
+- **CRITICAL — license matcher silently passed classifier forms.**
+  First-cut logic used naive substring match on the normalized
+  license string. `pip-licenses` can emit any of `GPL-3.0-only`
+  (SPDX), `GNU General Public License v3` (classifier), `GPLv3`
+  (short), or `GNU General Public License v3 (GPLv3)` (mixed);
+  the naive matcher only caught the first form. **Fix:** parse
+  each fail/warn token into `(family, version)`, expand family
+  to alias list (SPDX + classifier variants), try both `3`/`3.0`
+  version forms, and use word-bounded regex match so `gpl` doesn't
+  false-match inside `lgpl`. Long aliases relax the left-boundary
+  so "GNU Affero…" (preceded by `u` from "gnu") still matches AGPL
+  tokens. Applied identically to Python + Node evaluators.
+- **Regression tests added:** `tests/test_ci_template_s5.sh`
+  extracts the Python evaluator via awk + runs it against a
+  7-package license fixture covering SPDX, classifier, short,
+  mixed, AGPL forms + LGPL WARN + MIT clean. Also confirms
+  LGPL doesn't false-positive on the GPL fail-on list (word
+  boundary regression guard).
+
+### Alignment
+
+- All 16 test scripts + `pe docs check` green at v0.31.0.
+- **All of S1–S5 are now SHIPPED** — the entire Security row of
+  the V2 plan has closed. Twelve V2 items shipped since the fresh
+  360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.
+
+### Notes — deliberately out of scope
+
+- **Templates in the manifest.** `MANIFEST.sha256` currently
+  covers agents / commands / skills / hooks / scripts / plugin.json /
+  VERSION. Templates (CI, tests, domain-modules) are NOT hashed
+  because they're materialized-then-edited by adopters — hashing
+  them would fire divergence on legitimate customization. If a
+  future audit shows adopter templates being poisoned in transit,
+  we can extend the manifest surface then.
+- **Blocking-mode container / license gates.** All three new
+  jobs are `continue-on-error: true`. Trivy's CVE catalog updates
+  daily; a strict block would fail PRs whenever a new CVE lands
+  in a stable dependency. Adopters who WANT blocking can drop
+  the `continue-on-error` line for their tolerance.
+- **SBOM generation + SLSA provenance.** Trivy can emit an SBOM
+  (`--format cyclonedx` / `spdx-json`), but wiring the release
+  attestation flow is a follow-up. For v0.31.0, we ship
+  vulnerability visibility, not attestation.
+
+### Migration
+
+- No breaking changes. Adopters copy the updated template into
+  `.github/workflows/engine-quality.yml`; new jobs are
+  feature-detected (Dockerfile or stack) so a project without a
+  Dockerfile sees no `container-security` job.
+- The weekly schedule adds ONE cron trigger per repo — under
+  GitHub's public-repo compute budget for all realistic team sizes.
+
+---
+
 ## [0.30.0] — 2026-07-03
 
 > **S4 shipped — LLM/agent threat hardening.** Three layers land

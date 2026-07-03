@@ -3,15 +3,16 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.30.0 shipped — S4 LLM/agent threat
-> hardening: transcript-guard PostToolUse hook + pe verify supply-chain
-> checksum. All of S1–S4 now shipped; S5 (container + secrets-history
-> + license) is the only remaining Security row. Eleven V2 items
-> shipped since the fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.)
+> **Last updated:** 2026-07-03 (v0.31.0 shipped — S5 CI security
+> gates: hadolint + trivy on Dockerfile, weekly gitleaks full-history,
+> per-stack license audit (AGPL/GPL-3.0 fail, LGPL warn). **All of
+> S1–S5 now shipped — the entire Security row of the V2 plan has
+> closed.** Twelve V2 items shipped since the fresh 360° re-audit
+> produced `docs/ENHANCEMENT_PLAN_V2.md`.)
 
 ---
 
-## Current state — v0.30.0 (`76291b0` → `<v0.30.0 sha>` this session)
+## Current state — v0.31.0 (`419c2e6` → `<v0.31.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -39,22 +40,23 @@
 | A6 scaffold + api-credentials + auth + tenancy + billing | ✅ SHIPPED (module library COMPLETE) | v0.25.0 → v0.28.0 |
 | S3 auth/payment/webhook pytest templates + test-evidence gate | ✅ SHIPPED | v0.29.0 |
 | S4 transcript-guard + pe verify (LLM/agent threat hardening) | ✅ SHIPPED | v0.30.0 |
+| S5 container + secrets-history + license CI gates | ✅ SHIPPED | v0.31.0 |
 
 **PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
 with a named prerequisite, on a specific release queue, or
 explicitly not yet started.
 
-**Not started yet:** S5 (container + secrets-history + license), A7
-(cross-session memory learning), A8 (native plugin migration), A9
-higher tiers, PF1 (runtime N+1), PF4/PF5 (soak + load), PF6
-(perf-reviewer agent), D3 (visual-regression).
+**Not started yet:** A7 (cross-session memory learning), A8 (native
+plugin migration), A9 higher tiers, PF1 (runtime N+1), PF4/PF5
+(soak + load), PF6 (perf-reviewer agent), D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.30.0.** Run `pe install`
-   in both 8CStudio and Origyn to pick up the S4 transcript-guard
-   hook (new PostToolUse matcher on Bash/Read/WebFetch/WebSearch)
-   and the `pe verify` subcommand.
+1. **Adopters need to re-copy `engine-quality.yml.template` to
+   `.github/workflows/engine-quality.yml` at v0.31.0** to pick up
+   the S5 CI gates (container-security, license-audit,
+   secrets-scan-history). No `pe install` step required — the CI
+   template is a copy-once file, not a symlink target.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -64,9 +66,13 @@ higher tiers, PF1 (runtime N+1), PF4/PF5 (soak + load), PF6
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **S5** — container + secrets-history + license (hadolint,
-     trivy, gitleaks full-history, pip-licenses / license-checker).
-     All advisory, feature-detected. Ships in CI templates.
+   - **A7** — cross-session memory learning (retrieve prior
+     decisions + RAG upgrade to SQLite FTS5 hybrid). Unblocked
+     now that A1 + A2 are done. Natural next after the
+     Security row.
+   - **PF-row** — runtime N+1 (PF1) → soak/load templates
+     (PF4/PF5) → perf-reviewer agent (PF6). Complements the
+     static perf-lint that already ships.
    - **A6 extensions** — module library baseline is COMPLETE
      (scaffold + api-credentials + auth + tenancy + billing all
      shipped). Only extensions remain deferred: email flows

@@ -120,7 +120,7 @@ agent gates actually catch anything.
   today and are the scariest class for a multi-tenant SaaS built BY agents.
 
 ### S5 Container + secrets-history + license, feature-detected
-- **Severity:** MEDIUM · **Effort:** S each · **Model:** Haiku · **[MISSING]**
+- **Severity:** MEDIUM · **Effort:** S each · **Model:** Haiku · **[SHIPPED v0.31.0 — engine-quality.yml.template extended with container-security (hadolint + trivy fs, Dockerfile-guarded, continue-on-error), secrets-scan-history (gitleaks full-git-history, schedule + workflow_dispatch only), license-audit (pip-licenses / license-checker, ENGINE_LICENSE_FAIL_ON default AGPL/GPL-3.0, ENGINE_LICENSE_WARN_ON default LGPL, feature-detected per stack). All three new gates are continue-on-error: true — visibility, not blocking. Test coverage: tests/test_ci_template_s5.sh (15 cases).]**
 - **Fix (all advisory, feature-detected):** `hadolint` on any `Dockerfile` + `trivy image` in CI;
   `gitleaks detect --source git` (full history) as a WEEKLY CI job (not per-commit — too slow);
   license check (`pip-licenses`/`license-checker`) flagging AGPL/GPL3 (HIGH for a resold SaaS),
