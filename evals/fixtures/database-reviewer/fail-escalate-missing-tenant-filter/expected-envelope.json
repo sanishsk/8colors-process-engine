@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "database-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.95,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T11:10:00Z",
+  "summary": "Multi-tenant query without org_id filter — RLS-bypass risk + full-table scan.",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "rule": "missing-tenant-filter",
+      "file": "modules/reports/exports.py",
+      "line": 3,
+      "message": "SELECT on shared-tenant invoices table has no WHERE org_id = ... predicate. If this SQL runs under a role that has BYPASSRLS (superuser, migration runner, some pg_dump paths), it returns every tenant's data. This is the exact silent-leak pattern.",
+      "suggestion": "Add `AND org_id = %s` to the WHERE clause and take org_id as an explicit function argument. Never rely on RLS alone for tenant scoping in application code."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "unbounded-query",
+      "file": "modules/reports/exports.py",
+      "line": 3,
+      "message": "No LIMIT — full-table scan across all tenants. On a 10M-row invoices table this OOMs the worker.",
+      "suggestion": "Paginate via keyset (WHERE (due_date, id) < (:last_due, :last_id) LIMIT 500) or add a bounded LIMIT."
+    }
+  ],
+  "scope": {
+    "branch": "feat/csv-export",
+    "commit": "f6f6f6f",
+    "files_reviewed": ["modules/reports/exports.py"],
+    "lines_reviewed": 4
+  }
+}

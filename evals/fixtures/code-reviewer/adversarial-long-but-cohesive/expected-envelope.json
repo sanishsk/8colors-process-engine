@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.87,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T10:20:00Z",
+  "summary": "Length driven by GAAP line-item count, not multi-responsibility. Single input, single output, covered by fixture test.",
+  "findings": [
+    {
+      "severity": "LOW",
+      "rule": "loop-repetition",
+      "file": "modules/reports/pnl_calculator.py",
+      "line": 15,
+      "message": "Twelve calls to sum(e.amount for e in entries if e.category == \"X\") — each iterates the full ledger. For small periods this is fine; if ledgers grow to 100k+ entries, a single pass with a defaultdict aggregation would be O(n) instead of O(12n).",
+      "suggestion": "If perf becomes a concern, replace with one loop that groups by category into a dict."
+    }
+  ],
+  "scope": {
+    "branch": "feat/pnl-report",
+    "commit": "d4d4d4d",
+    "files_reviewed": ["modules/reports/pnl_calculator.py", "tests/test_pnl.py"],
+    "lines_reviewed": 52
+  }
+}

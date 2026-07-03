@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "database-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.93,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T11:00:00Z",
+  "summary": "CONCURRENTLY + IF NOT EXISTS + partial predicate matching the query. Parameterized query with tenant filter + LIMIT.",
+  "findings": [],
+  "scope": {
+    "branch": "perf/pending-invoices-index",
+    "commit": "e5e5e5e",
+    "files_reviewed": ["migrations/0042_add_invoice_status_index.sql", "modules/dashboards/queries.py"],
+    "lines_reviewed": 14
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.94,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T10:00:00Z",
+  "summary": "Small cohesive extraction with type hints + test coverage via public API. Clean.",
+  "findings": [],
+  "scope": {
+    "branch": "refactor/totals-extract",
+    "commit": "b2b2b2b",
+    "files_reviewed": ["modules/invoices/totals.py", "tests/test_totals.py"],
+    "lines_reviewed": 22
+  }
+}

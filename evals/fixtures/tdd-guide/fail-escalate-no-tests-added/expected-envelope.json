@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "tdd-guide",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.98,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T12:10:00Z",
+  "summary": "New payment-flow module ships with 0% coverage. No red-first, no boundary tests, no failure-path tests.",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "rule": "missing-tests",
+      "file": "modules/refunds/service.py",
+      "line": 2,
+      "message": "issue_partial_refund calls Stripe and writes to two DB rows; ships with no test file. Coverage: 0%.",
+      "suggestion": "Add tests/test_refund_service.py covering: (1) happy path, (2) amount > order.total raises ValueError, (3) stripe.refund raises → local Refund row rolled back."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "no-red-first",
+      "file": "modules/refunds/service.py",
+      "line": 2,
+      "message": "No failing test committed before implementation. TDD requires the test to fail first so it's proven to exercise the code.",
+      "suggestion": "Revert the impl commit, add the test file with expected assertions, verify it FAILS in CI, then re-add the impl."
+    }
+  ],
+  "scope": {
+    "branch": "feat/partial-refunds",
+    "commit": "c9c9c9c",
+    "files_reviewed": ["modules/refunds/service.py"],
+    "lines_reviewed": 9
+  }
+}

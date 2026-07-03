@@ -7,6 +7,95 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.20.0] — 2026-07-03
+
+> **A2 fill-out — gate-efficacy corpus complete across all 5 gate
+> agents.** v0.19.0 seeded security-reviewer only; this release adds
+> 12 more fixtures covering code-reviewer, database-reviewer,
+> tdd-guide, and design-critic. Each gate now has a pass fixture, a
+> fail-escalate fixture, and an adversarial safe-lookalike. As a
+> side effect the corpus caught a real bug: `design-critic` (shipped
+> in v0.18.0) was never added to the `gate_name` enum in
+> `schemas/gate-envelope.schema.json` — a shape-mode failure fixed
+> this release. This is exactly the class of drift the corpus was
+> built to catch.
+
+### Added — 12 new fixtures
+
+**`evals/fixtures/code-reviewer/`**
+
+- `pass-small-cohesive-refactor/` — clean extraction with type hints
+  + test updated via public API.
+- `fail-escalate-god-function/` — 60-line checkout doing 8 things,
+  no transaction, no tests. Multiple HIGH findings expected.
+- `adversarial-long-but-cohesive/` — 50-line P&L aggregator that IS
+  single-responsibility (one input, one output, tested via return
+  struct). Guards against blind "any function >30 lines is a god
+  function."
+
+**`evals/fixtures/database-reviewer/`**
+
+- `pass-parameterized-migration/` — CREATE INDEX CONCURRENTLY +
+  partial predicate matching the query.
+- `fail-escalate-missing-tenant-filter/` — multi-tenant SELECT
+  without `WHERE org_id = ...` — the exact silent-leak pattern
+  tenant-isolation-auditor targets.
+- `adversarial-covered-by-composite-index/` — ORDER BY that LOOKS
+  unindexed but is fully covered by an existing
+  `(org_id, total_billed DESC)` composite. Guards against
+  index-recommendation without schema context.
+
+**`evals/fixtures/tdd-guide/`**
+
+- `pass-red-then-green/` — textbook two-commit sequence, real
+  RED (import error) then GREEN.
+- `fail-escalate-no-tests-added/` — new payment-flow module with
+  0% coverage, no red-first.
+- `adversarial-pure-refactor/` — refactor with no new test needed
+  (public API unchanged, existing tests cover every branch of the
+  extracted helper). Guards against "any commit without a new test
+  file is FAIL."
+
+**`evals/fixtures/design-critic/`**
+
+- `pass-token-conformant/` — slate palette, serif+sans hierarchy,
+  tabular-nums, quiet empty state.
+- `fail-escalate-ai-aesthetic-drift/` — 8 tells on one screen:
+  purple/blue gradient, glassmorphism, chip-pill filters,
+  hover:scale-105, emoji decoration, centered oversized display
+  type, missing tabular-nums, flat hierarchy.
+- `adversarial-minimal-not-unfinished/` — deliberately spare
+  utility page (API-credentials form) that COULD read as
+  "unfinished." Guards against "polish = more UI" bias.
+
+### Fixed
+
+- **`schemas/gate-envelope.schema.json`** — `design-critic` added to
+  the `gate_name` enum. The design-critic agent shipped in v0.18.0
+  emitting `"gate_name": "design-critic"` in every envelope, but the
+  JSON Schema enum still only listed the original 6 gates. Any
+  design-critic envelope validated with `pe gate parse` since v0.18.0
+  would have failed with `not in enum`. Discovered by the v0.20.0
+  corpus expansion — first real bug the eval harness caught.
+
+### Notes
+
+- Corpus totals: **16 fixtures across 5 gates** (4 security-reviewer +
+  3 each for code-reviewer / database-reviewer / tdd-guide /
+  design-critic).
+- Still shape-mode only. Live-mode (`--live`) that actually invokes
+  each agent and scores emitted vs expected envelopes is scoped as
+  part of A4 (orchestrator invokes workers headlessly) — a larger
+  release. This one is corpus + regression coverage.
+
+### Migration
+
+- No breaking changes. `schemas/gate-envelope.schema.json` gained an
+  enum value; older envelopes still validate.
+- `pe upgrade` → `pe install <project>` picks up the new fixtures.
+
+---
+
 ## [0.19.0] — 2026-07-02
 
 > **A1 + A2 + L1 + L4 — telemetry + gate-efficacy corpus.** The

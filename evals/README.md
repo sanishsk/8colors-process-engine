@@ -91,9 +91,20 @@ fixtures go in `<gate>/holdout/`; adversarial-only in
 2. Run `tests/test_gate_efficacy.sh` locally.
 3. Commit both directories.
 
-## Seed gates in this release
+## Seeded gates
 
-- **security-reviewer** — 3 fixtures. Seeds the corpus shape.
+- **security-reviewer** — 4 fixtures (pass, fail-escalate, fail-halt,
+  adversarial). Introduced in v0.19.0.
+- **code-reviewer** — 3 fixtures (pass, fail-escalate, adversarial).
+  Introduced in v0.20.0.
+- **database-reviewer** — 3 fixtures. Introduced in v0.20.0.
+- **tdd-guide** — 3 fixtures. Introduced in v0.20.0.
+- **design-critic** — 3 fixtures. Introduced in v0.20.0.
 
-The other four gate agents (code-reviewer, database-reviewer,
-tdd-guide, design-critic) will get seeded fixtures in v0.20.0.
+Total: 16 fixtures across 5 gates. Every gate has at minimum one
+adversarial safe-lookalike — the corpus is deliberately balanced so
+"catch the failures" and "don't false-positive on the lookalikes"
+carry equal weight.
+
+Additional gates (e2e-runner, merge-gate) get seeded when the
+first live-mode measurement pass is scheduled.

@@ -308,18 +308,23 @@ agent gates actually catch anything.
   measurement, not selected from a hat.
 
 ### A2 Gate-efficacy eval harness (seeded-defect corpus) — prove the gates work
-- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[SEED SHIPPED v0.19.0 — security-reviewer only; other 4 gates in v0.20.0]**
-- **Files:** `evals/README.md` (corpus contract), `evals/fixtures/security-reviewer/` (4 seed
-  fixtures: pass, fail-escalate, fail-halt, adversarial-safe-lookalike),
-  `tests/test_gate_efficacy.sh` (shape-mode runner).
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[SEEDED v0.20.0 — 5 gates × ~3 fixtures each; live-mode still deferred to A4 wiring]**
+- **Files:** `evals/README.md` (corpus contract), `evals/fixtures/<gate>/` for security-reviewer
+  (4 fixtures), code-reviewer / database-reviewer / tdd-guide / design-critic (3 fixtures each),
+  `tests/test_gate_efficacy.sh` (shape-mode runner), `schemas/gate-envelope.schema.json`
+  (design-critic added to gate_name enum — v0.20.0 corpus caught the drift from v0.18.0).
 - **What shipped:** per-gate fixture layout `<verdict>-<slug>/{input.md, expected-envelope.json}`
   where the directory prefix carries the expected verdict class. Runner iterates every fixture,
   validates the expected envelope against `schemas/gate-envelope.schema.json` via
   `pe gate parse --bare`, and asserts the exit code matches the contract
   (pass→0, fail-escalate→1, fail-halt→2, warn→3, adversarial→0 = safe-lookalike must not FP).
-  Zero API cost — catches schema drift + mislabeled fixtures. All 4 fixtures pass. Live-mode
-  (`--live`, planned v0.20.0) will actually invoke the agent and compare verdicts against the
-  seed envelopes for real precision/recall.
+  Zero API cost — catches schema drift + mislabeled fixtures. **16/16 fixtures pass shape check.**
+  First real drift the corpus caught: `design-critic` was missing from the gate_name enum since
+  v0.18.0 — every design-critic envelope was silently invalid until v0.20.0.
+- **What's left (deferred to A4):** live-mode (`--live`) requires a headless `pe agent run`
+  interface — that's A4-scoped (orchestrator invokes workers headlessly via
+  `claude -p "<brief>" --allowedTools ...`). Once A4 lands, the same corpus becomes
+  precision/recall measurement of real agent verdicts.
 
 ### A3 Incident → gate synthesizer (automate the "quarterly rule") ⭐ the self-improvement loop
 - **Severity:** MEDIUM · **Effort:** M · **Model:** Opus · **[MISSING — manual today]** · **depends: A2**

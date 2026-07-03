@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "database-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.90,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T11:20:00Z",
+  "summary": "Query is fully covered by existing composite index idx_projects_org_billing (org_id, total_billed DESC). Tenant filter present, LIMIT present.",
+  "findings": [],
+  "scope": {
+    "branch": "feat/dashboard-summary",
+    "commit": "a7a7a7a",
+    "files_reviewed": ["modules/dashboards/queries.py"],
+    "lines_reviewed": 8
+  }
+}

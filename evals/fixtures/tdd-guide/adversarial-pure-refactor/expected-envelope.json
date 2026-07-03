@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "tdd-guide",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.89,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T12:20:00Z",
+  "summary": "Pure refactor — public API unchanged, all existing tests exercise every branch of the extracted helper via the public function. Coverage 100%.",
+  "findings": [],
+  "scope": {
+    "branch": "refactor/pricing-clamp",
+    "commit": "d0d0d0d",
+    "files_reviewed": ["modules/pricing/calculator.py"],
+    "lines_reviewed": 18
+  }
+}

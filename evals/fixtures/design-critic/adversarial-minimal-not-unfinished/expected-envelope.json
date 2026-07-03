@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "design-critic",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.86,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T13:20:00Z",
+  "summary": "Deliberate utility-page minimalism matching reference lock. Correct hierarchy, tabular-nums on last-4, CSRF present, no AI tells.",
+  "findings": [],
+  "scope": {
+    "branch": "feat/api-credentials-ui",
+    "commit": "a3a3a3a",
+    "files_reviewed": ["templates/settings/api_credentials.html"],
+    "lines_reviewed": 34
+  }
+}

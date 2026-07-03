@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.96,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T10:10:00Z",
+  "summary": "God function (60+ lines, 8 responsibilities), no transaction boundary — payment/stock inconsistency risk. No tests.",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "rule": "missing-transaction",
+      "file": "modules/orders/checkout.py",
+      "line": 30,
+      "message": "Payment charge (step 4) is committed before stock reduction (step 6). If stock reduction fails, the customer is charged but inventory stays intact — the DB is inconsistent.",
+      "suggestion": "Wrap steps 3-8 in a database transaction; either use a saga/outbox for the payment call or reserve stock BEFORE charging."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "function-too-long",
+      "file": "modules/orders/checkout.py",
+      "line": 2,
+      "message": "process_checkout is 60+ lines with 8 distinct responsibilities (validate/coupon/tax/charge/persist/stock/email/clear). Untestable in units.",
+      "suggestion": "Extract validate_cart / apply_coupon / compute_tax / charge_payment / persist_order / reduce_stock / send_confirmation as separate functions."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "missing-tests",
+      "file": "modules/orders/checkout.py",
+      "line": 2,
+      "message": "New checkout flow ships with zero tests. This is the highest-risk path in the system.",
+      "suggestion": "Add unit tests per extracted helper + an integration test covering the happy path + the payment-fails-mid-flight rollback path."
+    }
+  ],
+  "scope": {
+    "branch": "feat/checkout",
+    "commit": "c3c3c3c",
+    "files_reviewed": ["modules/orders/checkout.py"],
+    "lines_reviewed": 61
+  }
+}

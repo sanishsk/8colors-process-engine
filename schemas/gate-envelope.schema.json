@@ -45,6 +45,7 @@
         "tdd-guide",
         "e2e-runner",
         "database-reviewer",
+        "design-critic",
         "merge-gate"
       ]
     },

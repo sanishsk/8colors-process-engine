@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "design-critic",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.92,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T13:00:00Z",
+  "summary": "Conforms to design system: slate palette, serif+sans hierarchy, tabular-nums on money column, single-accent Overdue, quiet empty state.",
+  "findings": [],
+  "scope": {
+    "branch": "feat/invoice-list-page",
+    "commit": "e1e1e1e",
+    "files_reviewed": ["templates/dashboards/invoice_list.html"],
+    "lines_reviewed": 41
+  }
+}

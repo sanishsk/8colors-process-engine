@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "design-critic",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.98,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T13:10:00Z",
+  "summary": "8 AI-aesthetic tells on a new screen: purple/blue gradient, glassmorphism, rounded-3xl chips, hover:scale-105, emoji decoration, oversized centered display type, missing tabular-nums, flat hierarchy.",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "rule": "palette-drift",
+      "file": "templates/dashboards/invoice_list.html",
+      "line": 2,
+      "message": "bg-gradient-to-br from-purple-600 via-blue-500 to-indigo-700 is the canonical 'AI dashboard' background. Reference lock is slate-based.",
+      "suggestion": "Replace with neutral background (bg-white or bg-slate-50) per docs/design/reference/invoice-list.png."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "glassmorphism",
+      "file": "templates/dashboards/invoice_list.html",
+      "line": 3,
+      "message": "backdrop-blur-xl + bg-white/10 + shadow-2xl — glassmorphism is Tell #2 (frosted layers as decoration).",
+      "suggestion": "Solid surface + hairline border (border-slate-200)."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "chip-pills-for-filters",
+      "file": "templates/dashboards/invoice_list.html",
+      "line": 13,
+      "message": "rounded-full status chips for All/Paid/Pending/Overdue is Tell #4 (word-chip UI).",
+      "suggestion": "Text tabs with a bottom-border for active state."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "emoji-decoration",
+      "file": "templates/dashboards/invoice_list.html",
+      "line": 7,
+      "message": "✨ and 💰 as decoration is Tell #7 (decorative emoji signaling AI-generated content).",
+      "suggestion": "Remove; the number itself is the primary information."
+    },
+    {
+      "severity": "MEDIUM",
+      "rule": "missing-tabular-nums",
+      "file": "templates/dashboards/invoice_list.html",
+      "line": 27,
+      "message": "Money column lacks tabular-nums — digits will misalign per-row.",
+      "suggestion": "Add class=\"tabular-nums\" to the amount column."
+    },
+    {
+      "severity": "MEDIUM",
+      "rule": "over-padding",
+      "file": "templates/dashboards/invoice_list.html",
+      "line": 3,
+      "message": "p-10 outer + p-6 inner + gap-3 chips = 3× reference density.",
+      "suggestion": "Halve padding per reference lock."
+    }
+  ],
+  "scope": {
+    "branch": "feat/invoice-list-page",
+    "commit": "f2f2f2f",
+    "files_reviewed": ["templates/dashboards/invoice_list.html"],
+    "lines_reviewed": 37
+  }
+}
