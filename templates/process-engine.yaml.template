@@ -224,6 +224,18 @@ perf_budget:
   # Backend endpoint budgets live in templates/tests/latency-budget.test.py
   # (adopter populates ENDPOINTS with (method, path, budget_ms) tuples).
 
+# ─── Static perf gate (v0.18.1 — PF2) ─────────────────────────────────
+# hooks/sast-scan.sh loads a custom semgrep rule pack (via --config)
+# in addition to the security packs. Rules catch: unbounded queries
+# on list endpoints, missing-index candidates, blocking HTTP/sleep
+# inside request handlers. Rule pack template at
+# docs/templates/perf/semgrep-perf-rules.yml.template — copy to your
+# project root and enable via the value below.
+perf_gate:
+  # Set to the path of the semgrep rule pack once you've copied the
+  # template into place. Leaving blank = disabled (feature-detected).
+  semgrep_rules: ""                # e.g. ".semgrep-perf-rules.yml"
+
 # API breaking-change gate (A9.2). Blocks a commit when a committed OpenAPI/
 # Swagger spec drops or changes an existing endpoint/param/field. Reuses the
 # ai-testing-agent differ via `ai-test api-diff` (optional — advisory skip if

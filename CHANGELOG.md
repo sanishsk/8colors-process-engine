@@ -7,6 +7,96 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.18.1] — 2026-07-03
+
+> **PF2 — static perf gate.** Custom semgrep rule pack catching the
+> "instant on 100 rows, OOM on 1M rows" class (unbounded queries) +
+> missing-index candidates + blocking work in the request path.
+> Small package: rides on top of the S1 SAST hook with a config-
+> driven rule file. Extends `database-reviewer` with the runtime
+> partner (`EXPLAIN ANALYZE`, `auto_explain` guidance).
+
+### Added
+
+- **`templates/perf/semgrep-perf-rules.yml.template`** (PF2) —
+  custom semgrep rules, Python-focused. Rule IDs prefixed `pf2.*`
+  for allowlisting:
+    * `pf2.sqlalchemy.list-query-without-limit` — `.query.all()`
+      / `session.query(...).all()` / `execute(select(...)).scalars().all()`
+      without `.limit()` / `.paginate()` — WARNING.
+    * `pf2.django.list-query-without-limit` — `list(Model.objects.all())`
+      / `Model.objects.all().values()` without slice or filter — WARNING.
+    * `pf2.raw-sql-select-star-no-limit` — raw `SELECT *` on any
+      table without a `LIMIT` or `WHERE` — INFO.
+    * `pf2.sqlalchemy.order-by-without-visible-index` — `.order_by()`
+      on a column with no `db.Index(...)` in the same model file —
+      INFO (advisory; semgrep can't verify indexes exist in
+      migrations, only nearby model definitions).
+    * `pf2.blocking-http-in-view` — `requests.get`/`post` /
+      `urllib.request.urlopen` inside a `@app.route(...)` handler —
+      WARNING (task queue / async framework instead).
+    * `pf2.time-sleep-in-view` — `time.sleep()` inside a route
+      handler — ERROR (pins worker).
+- **`.process-engine.yaml.template`** — new `perf_gate.semgrep_rules`
+  key. Empty by default; adopter sets to `.semgrep-perf-rules.yml`
+  after copying the template into place. Feature-detected (missing
+  path or missing semgrep → advisory skip).
+
+### Changed
+
+- **`hooks/sast-scan.sh`** — reads
+  `perf_gate.semgrep_rules` and adds it as an extra `--config`
+  when set. Uses WARNING severity by default (INFO under
+  `sast_gate.strict=true`), so a fresh install doesn't drown the
+  adopter. Only fires on staged `.py` files.
+- **`agents/database-reviewer.md`** — three additions:
+    * **§Query safety** — "Missing `LIMIT`" upgraded MEDIUM → HIGH
+      with explicit reference to the PF2 rule pack + noqa escape
+      hatch.
+    * **§Index quality** — new "PF2 checks" bullet block: every
+      column referenced by `.filter`/`.order_by`/`.group_by` must
+      be indexed; `EXPLAIN ANALYZE` seq-scan / sort-materialisation
+      interpretation rules.
+    * **New §`EXPLAIN ANALYZE` — when to require it** — attaches
+      to every new query in an endpoint called >10× per session.
+      Documents `auto_explain` + `pg_stat_statements` setup for
+      Postgres in prod; PF6 (performance-reviewer agent, future)
+      will consume these.
+
+### Rationale
+
+Static grep is not perfect — this pack biases toward false negatives
+(prefers to miss a bug than shout at every line). Combined with the
+PF1 runtime query-count template (adopter test suite) + the future
+PF6 performance-reviewer agent, the perf story stops being "there's
+a static line in the checklist" and becomes a three-layer defence:
+
+| Layer | What catches |
+|---|---|
+| **PF2 (this release)** | Static — obvious unbounded queries, blocking-in-view, missing-index candidates |
+| **PF1** (v0.17.2) | Runtime — in-process query count doesn't scale with N |
+| **PF3** (v0.18.0) | Backend p95 latency + Lighthouse frontend budgets |
+| **PF6** (future) | Agent judgment — cache invalidation, algorithmic complexity, EXPLAIN plan interpretation |
+
+### Verification
+
+- 86/86 tests pass.
+- `pe docs check` clean at v0.18.1.
+- 8CStudio + Origyn re-installed; perf rule template lands at
+  `docs/templates/perf/semgrep-perf-rules.yml.template`.
+
+### Session pickup (v0.19.0 next)
+
+- **A1 telemetry** — parse Claude Code transcripts / OTEL usage
+  into `.pe/decisions.jsonl`. Budgets are still `"inf"` so the
+  circuit breaker is decorative; A1 makes it real.
+- **A2 gate-efficacy eval harness** — seeded-defect corpus per
+  gate + held-out/adversarial fixtures per L2 + trajectory
+  metrics. Proves every gate above (security, design, perf)
+  actually works.
+
+---
+
 ## [0.18.0] — 2026-07-03
 
 > **V2 wave 2 — design parity + accessibility + performance budgets.**

@@ -221,8 +221,8 @@ agent gates actually catch anything.
   per-endpoint query count on a hot path is flagged (ratchet). This is the single highest-ROI perf
   item.
 
-### PF2 Unbounded-query + missing-index static gate
-- **Severity:** HIGH · **Effort:** S · **Model:** Sonnet · **[MISSING]**
+### PF2 Unbounded-query + missing-index static gate — ✅ SHIPPED in v0.18.1 (2026-07-03)
+- **Severity:** HIGH · **Effort:** S · **Model:** Sonnet
 - **File:** `agents/database-reviewer.md` + a semgrep rule pack (reuse S1's semgrep).
 - **Fix:** flag `SELECT`/`.query()` without `LIMIT`/pagination on list endpoints (the query that's
   instant on 100 rows and OOMs on 1M), and FK/`WHERE`/`ORDER BY` columns without an index. Pair

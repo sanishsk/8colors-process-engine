@@ -123,7 +123,7 @@ Every new migration:
 | `SELECT *` in application code | MEDIUM | Hidden schema coupling; breaks on column rename |
 | N+1 (`for … in items: db.execute(…)`) | HIGH | Latency + pool exhaustion — but static grep misses indirect N+1 (a template touching `.related` per row, a serializer lazy-loading each item). **The definitive gate is `templates/tests/query-count.test.py.template` (PF1)** — an in-process query counter that FAILs when a list/detail endpoint's query count scales with N. When you flag a suspected N+1, require the adopter to add a query-count assertion for that endpoint before merge. |
 | Long transaction across external API call | HIGH | Pool exhaustion + deadlock class |
-| Missing `LIMIT` on unbounded user-facing query | MEDIUM | Memory-blowup vector on hostile input |
+| Missing `LIMIT` on unbounded user-facing query | HIGH | Memory-blowup vector on hostile input — the "instant on 100 rows, OOM on 1M" class. The static gate `hooks/sast-scan.sh` (with `perf_gate.semgrep_rules` = PF2 pack) flags SQLAlchemy `.query.all()` / Django `.objects.all()` without a slice or `paginate()`; enforce fix or explicit `# noqa: pf2 <reason>` before merge. |
 
 ## Schema quality
 
@@ -142,6 +142,50 @@ Every new migration:
 
 - Every FK indexed (Postgres does not auto-index FKs).
 - Composite indexes lead with the highest-cardinality predicate first
+
+**PF2 checks (v0.18.1):**
+
+- Any column referenced by `.filter(Model.col == …)` /
+  `.order_by(Model.col)` / `.group_by(Model.col)` in application code
+  MUST have an index — either a single-column `db.Index('ix_...', col)`
+  in the model's `__table_args__` OR a composite index that leads with
+  that column. If unclear, run `\d+ <table>` (psql) and confirm.
+- For any new query on a table the reviewer judges "large" (>100k rows
+  expected in prod), require an `EXPLAIN ANALYZE` output attached in
+  the PR description or a session note. Interpretation rules:
+  - **Seq Scan** on a large table with a `Filter` clause → almost
+    always a missing index. FAIL.
+  - **Nested Loop** with a large outer set + repeated inner `Index
+    Scan` → could be OK, but the inner index MUST be present. Verify.
+  - **Sort → Limit** without an index on the sort column → the sort
+    materialises the whole result before limiting. Add a matching
+    index.
+- Generated columns (`GENERATED ALWAYS AS ... STORED`) need indexes
+  too if they're queried. Common miss.
+
+## `EXPLAIN ANALYZE` — when to require it
+
+For any new query in an endpoint that will be called >10× per user
+session (list views, dashboards, search), attach the `EXPLAIN ANALYZE`
+of the exact SQL the ORM will emit (SQLAlchemy: `str(query.
+statement.compile(compile_kwargs={"literal_binds": True}))`). Review
+against the seq-scan / sort-materialisation rules above. This is what
+a runtime `nplusone` fixture (PF1) can't see — the shape of the plan.
+
+For Postgres in production, enable `auto_explain` in `postgresql.conf`
+to capture plans of slow queries automatically:
+
+```
+auto_explain.log_min_duration = 500ms
+auto_explain.log_analyze = true
+auto_explain.log_buffers = true
+```
+
+Combined with `pg_stat_statements`, this gives the operator a
+data-driven view of "what queries actually got slow in prod." The
+PF6 performance-reviewer agent (future) consumes these.
+
+
   — for tenant-scoped tables that's usually the tenant key.
 - Partial indexes for soft-delete columns
   (`CREATE INDEX ... WHERE is_active = TRUE`).

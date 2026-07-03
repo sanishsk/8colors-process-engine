@@ -52,6 +52,7 @@ enabled="true"
 strict="false"
 extra_configs=""
 allowlist=".semgrep-allowlist.txt"
+perf_rules_file=""
 
 if [ -f "$CONFIG" ] && command -v yaml_get >/dev/null 2>&1; then
     v=$(yaml_get sast_gate.enabled "$CONFIG" 2>/dev/null || true)
@@ -62,6 +63,11 @@ if [ -f "$CONFIG" ] && command -v yaml_get >/dev/null 2>&1; then
     [ -n "$v" ] && extra_configs="$v"
     v=$(yaml_get sast_gate.allowlist "$CONFIG" 2>/dev/null || true)
     [ -n "$v" ] && allowlist="$v"
+    # PF2: perf rule pack (custom semgrep rules — unbounded query,
+    # missing index, blocking-in-view). Loaded via --config in addition
+    # to the security packs when set + the file exists.
+    v=$(yaml_get perf_gate.semgrep_rules "$CONFIG" 2>/dev/null || true)
+    [ -n "$v" ] && perf_rules_file="$v"
 fi
 
 if [ "$enabled" != "true" ]; then
@@ -205,6 +211,25 @@ if [ -n "$extra_configs" ] && command -v semgrep >/dev/null 2>&1; then
             fail=1
         fi
     done
+    ran_any=1
+fi
+
+# PF2 perf rule pack (v0.18.1). Custom rules for unbounded queries,
+# missing-index candidates, and blocking-in-view — Python-only for now.
+# Rules default to WARNING severity so a fresh install doesn't drown
+# the adopter; strict=true elevates.
+if [ -n "$perf_rules_file" ] && [ -f "$perf_rules_file" ] && \
+   [ -n "$STAGED_PY" ] && command -v semgrep >/dev/null 2>&1; then
+    log_run "semgrep PF2 perf rules ($perf_rules_file)"
+    perf_severity="WARNING"
+    [ "$strict" = "true" ] && perf_severity="INFO"
+    # shellcheck disable=SC2046,SC2086
+    if ! semgrep --config="$perf_rules_file" \
+                 $(build_semgrep_exclude) \
+                 --error --quiet --severity="$perf_severity" \
+                 $STAGED_PY 2>&1; then
+        fail=1
+    fi
     ran_any=1
 fi
 

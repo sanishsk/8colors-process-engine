@@ -1,0 +1,141 @@
+# semgrep-perf-rules.yml — PF2 static perf gate rules.
+#
+# Custom semgrep rules catching the two "instant-on-100-rows,
+# OOM-on-1M-rows" classes:
+#   1. Unbounded queries (list endpoints without LIMIT / pagination).
+#   2. Missing-index candidates (FK/WHERE/ORDER BY columns that
+#      aren't obviously indexed in a nearby migration).
+#
+# Consumed by `hooks/sast-scan.sh` when
+# `perf_gate.semgrep_rules` in .process-engine.yaml points here.
+# The rules are conservative — bias toward false negatives so the
+# gate stays low-noise. Composed the same way as the security
+# rule packs (p/security-audit) so the operator can allowlist
+# specific rule-ids via .semgrep-allowlist.txt.
+#
+# Install (adopter):
+#   cp docs/templates/perf/semgrep-perf-rules.yml.template .semgrep-perf-rules.yml
+#   # then in .process-engine.yaml:
+#   perf_gate:
+#     enabled: true
+#     semgrep_rules: ".semgrep-perf-rules.yml"
+
+rules:
+  # ─── Unbounded-query rules ─────────────────────────────────────
+  - id: pf2.sqlalchemy.list-query-without-limit
+    message: |
+      SQLAlchemy list-shape query without `.limit()` / `.paginate()`.
+      This works fine in dev (10 rows) and OOMs in prod (10k+ rows).
+      Add `.limit(N)` or use Flask-SQLAlchemy `.paginate()`. If
+      genuinely unbounded (an admin dump), add a comment noting it.
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: $MODEL.query.all()
+          - pattern: $DB.session.query($MODEL).all()
+          - pattern: db.session.execute(select($MODEL)).scalars().all()
+      - pattern-not-inside: |
+          def $F(...):
+              ...
+              $Q.limit(...)
+              ...
+      - pattern-not-inside: |
+          def $F(...):
+              ...
+              $Q.paginate(...)
+              ...
+
+  - id: pf2.django.list-query-without-limit
+    message: |
+      Django QuerySet materialised via `list()` / iteration without
+      `.filter()` narrowing or slice. Materialising a full table
+      is a p95-killer at scale. Add a slice `[:N]`, use `.filter()`
+      to narrow, or paginate via `Paginator`.
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: list($MODEL.objects.all())
+          - pattern: $MODEL.objects.all().values()
+      - pattern-not-inside: |
+          def $F(...):
+              ...
+              $Q[$START:$END]
+              ...
+
+  - id: pf2.raw-sql-select-star-no-limit
+    message: |
+      Raw SELECT * without LIMIT. Fine on small tables but a
+      time-bomb on any user-facing table that grows. Add a LIMIT
+      clause or restrict columns.
+    severity: INFO
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $DB.execute("SELECT * FROM $TABLE")
+          - pattern: |
+              $CUR.execute("SELECT * FROM $TABLE")
+      - pattern-not-regex: 'LIMIT\s+\d+|WHERE\s+'
+
+  # ─── Missing-index candidates ─────────────────────────────────
+  # Semgrep can't verify an index exists in a migration — but it CAN
+  # flag columns that appear in WHERE/ORDER BY without a matching
+  # `db.Index(...)` in the same file. Advisory only.
+  - id: pf2.sqlalchemy.order-by-without-visible-index
+    message: |
+      `.order_by(...)` on a column with no `db.Index(...)` visible in
+      the same model file. Sequential scans on large tables are slow;
+      confirm an index exists via `\\d+ <table>` or add `db.Index(...)`
+      to the model. If the column is already indexed elsewhere,
+      allowlist this rule-id in `.semgrep-allowlist.txt` with a note.
+    severity: INFO
+    languages: [python]
+    patterns:
+      - pattern: $Q.order_by($MODEL.$COL)
+      - pattern-not-inside: |
+          class $M(...):
+              ...
+              __table_args__ = (
+                  ...,
+                  db.Index(..., $COL, ...),
+                  ...,
+              )
+              ...
+
+  # ─── Blocking work in request path ─────────────────────────────
+  # PF6 also covers this in agent review, but semgrep can catch the
+  # most obvious cases: `requests.get()` / `time.sleep()` inside a
+  # Flask/Django view.
+  - id: pf2.blocking-http-in-view
+    message: |
+      Synchronous outbound HTTP inside a request handler. This
+      blocks the worker thread on network latency; use a task queue
+      (Celery/RQ/dramatiq), a background thread, or an async
+      framework. `httpx.AsyncClient` inside an async view is fine;
+      `requests.get` inside a sync view is not.
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: requests.get(...)
+          - pattern: requests.post(...)
+          - pattern: urllib.request.urlopen(...)
+      - pattern-inside: |
+          @$APP.route(...)
+          def $F(...):
+              ...
+
+  - id: pf2.time-sleep-in-view
+    message: |
+      `time.sleep()` in a request handler pins a worker for the
+      duration. If you need a delay, do it in a task queue.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: time.sleep(...)
+      - pattern-inside: |
+          @$APP.route(...)
+          def $F(...):
+              ...
