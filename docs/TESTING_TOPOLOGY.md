@@ -67,18 +67,29 @@ LLM/agent-threat class, which is the scariest for SaaS built *by* agents.
 | Load / stress baseline ("50 VUs, p95<X, 0 err") | — | Locust gen + concurrent-load ✅ | **Agent** (PF5 delegates here) |
 | Resilience (timeout / retry / concurrent / error-rate) | — | `run_resilience_tests` ✅ | **Agent** |
 | Cache-behaviour validation | — | `CacheTestGenerator` ✅ | **Agent** |
-| **N+1 / query-count regression** ⭐ | — | ❌ *(chaos runner is close — A9.4)* | **NEITHER yet** — build in agent |
+| **N+1 / query-count regression** ⭐ | **PF1** in-process query-count pytest template ✅ (`templates/tests/query-count.test.py.template`) | latency proxy ✅ (`generate_n_plus_one_journeys`, list-vs-detail ×5) | **BOTH — complementary** (see note) |
 | Unbounded-query / missing-index (static) | **PF2** semgrep + `database-reviewer` | — | **Engine** |
 | Frontend budgets (LCP/TBT/bundle) — Lighthouse | **PF3 / D2** Lighthouse CI | — | **Engine** |
 | Perf judgment on the diff (blocking work, algo complexity) | **PF6** `performance-reviewer` (judgment) | supplies the runtime evidence | **Engine gate, agent exec** |
 | Memory-leak / soak | **PF4** | ❌ *(chaos runner extensible)* | NEITHER — candidate for agent |
 
 **Verdict on "are the performance checks good enough?"** Latency + load +
-resilience + cache is a decent runtime battery — but the single **highest-ROI
-perf check, N+1 / query-count (PF1), exists on neither side**. That is the #1
-silent SaaS perf killer. It's runtime-shaped, so it belongs in the **agent**
-(A9.4: a query-count hook on the chaos runner). Lighthouse (frontend) is the
-second hole and stays engine-side (shared with D2 a11y).
+resilience + cache is a decent runtime battery, and **N+1 / query-count (PF1)
+is now covered on BOTH sides — correctly split.**
+
+> **CORRECTION (2026-07-03):** an earlier draft of this doc said "build N+1 in
+> the agent (A9.4)." That was wrong. A **black-box** HTTP client physically
+> cannot count the SQL a single request emits — it only has a *latency proxy*
+> (list-vs-detail ×5), which the agent **already ships**
+> (`generate_n_plus_one_journeys`). Real query-count detection is **inherently
+> in-process**, so it lives as an **engine** pytest template the adopter runs
+> in its own suite (`templates/tests/query-count.test.py.template`, SQLAlchemy
+> + Django variants — **SHIPPED**). Correct split: **engine = the real detector
+> (in-process count); agent = complementary black-box latency smoke.** Neither
+> replaces the other; nothing to "build in the agent" here.
+
+Lighthouse (frontend) remains the one genuine perf hole and stays engine-side
+(shared with D2 a11y).
 
 ## What this means for engine load (the "don't rebuild it" list)
 
@@ -87,7 +98,9 @@ These plan items are now **DELEGATED to the agent** — the engine should
 
 - **PF5 (load baseline)** → `run_resilience_tests` / Locust in the agent. Don't build a second k6 harness.
 - **PF6 (performance-reviewer)** → keep the *agent* (judgment) in the engine, but its runtime evidence comes from the agent's resilience/perf tools.
-- **PF1 (N+1)** → build in the **agent** (A9.4), not an engine pytest fixture.
+- **PF1 (N+1)** → **SPLIT, not delegated.** Engine owns the real in-process
+  query-count template (SHIPPED); the agent's latency-proxy smoke already exists.
+  Do not "build it in the agent" — that was a corrected error (see the note above).
 - **S3 (dynamic auth probing)** → the agent's `run_security_scan` covers the *runtime* half; the engine only ships the pytest **templates** + the security-review path-gate.
 - **D3 (visual regression)** → `run_visual_regression` in the agent; engine wires the design-critic to call it.
 
@@ -104,8 +117,11 @@ pact are already integrated):
 1. **OWASP ZAP** (baseline/active scan) → **agent**. Turns the shallow probe
    into real DAST depth. Biggest single security upgrade. Runtime-shaped, so
    it fits the agent as an optional runner behind `run_security_scan`.
-2. **`nplusone`** (Python, SQLAlchemy/Django) → **agent** (A9.4). The PF1
-   N+1 detector; the plan already names it.
+2. **`nplusone`** (Python, SQLAlchemy/Django) → **engine template** (NOT the
+   agent). It's an *in-process* ORM hook, so it belongs in the adopter's own
+   test suite via `templates/tests/query-count.test.py.template` (already
+   shipped with hand-rolled counters). The agent cannot use it — it's out of
+   process.
 3. **Lighthouse CI** → **engine** (PF3 + D2). Frontend perf + a11y budgets;
    nothing else covers the frontend. Shared gate.
 4. **Trivy** (or Grype) → **engine** (S5). Container + broader SCA + IaC +
