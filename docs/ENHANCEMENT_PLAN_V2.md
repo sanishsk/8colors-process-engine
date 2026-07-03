@@ -92,7 +92,7 @@ agent gates actually catch anything.
 > probing is already DELEGATED to the agent (`run_security_scan`). Engine builds
 > ONLY the pytest **templates** (webhook HMAC, payment authority) + the
 > security-review path-gate — do not rebuild a runtime auth prober here.
-- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet (templates), Haiku (fill) · **[MISSING]**
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet (templates), Haiku (fill) · **[SHIPPED v0.29.0 — all 6 pytest templates (session/jwt/oauth/webhook/payment/reset-token) + security-review-trailer test-evidence gate + tests/test_security_review_trailer.sh with 10 cases]**
 - **Files:** `templates/tests/{session,jwt,oauth,webhook,payment,reset-token}-security.test.py.template`
   (only `auth-robustness.test.py.template` + `nav-confusion-budget` exist today).
 - **Fix:** ship pytest templates covering: webhook HMAC signature verification + replay/idempotency,
@@ -100,6 +100,11 @@ agent gates actually catch anything.
   dedup), test/live key separation. security-reviewer then requires code+test evidence for
   commits touching `payment|webhook|billing` paths (extends the existing security-review-trailer
   path-gate). This is what makes "critical about security" real for the Delivery store phase (BACKLOG #234).
+- **Shipped v0.29.0:** all 6 templates are in `templates/tests/`. The trailer hook now BLOCKS commits
+  that touch `payment|billing|webhook` paths unless test files are co-staged in the same commit
+  (or a `Security-tests-skip-reason:` trailer is present). Escape hatches: `Security-skip-reason:`
+  blanket-skips both gates; `ENGINE_SECURITY_TEST_PATHS` overrides the money-path regex.
+  Test coverage: `tests/test_security_review_trailer.sh` (10 cases).
 
 ### S4 LLM/agent-specific threat hardening ⭐ existential for agent-built SaaS
 - **Severity:** HIGH · **Effort:** M · **Model:** Opus (design), Sonnet (impl) · **[MISSING]**

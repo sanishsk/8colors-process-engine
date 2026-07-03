@@ -1,0 +1,136 @@
+# oauth-security.test — OAuth 2.0 / OIDC authorization-code flow
+# failure modes (S3). Adapted from RFC 6749 §10 + OAuth 2.0 Threat
+# Model (RFC 6819) + observed real-world exploits.
+#
+# Threat model: attacker in the middle of a legit user's browser
+# session, or attacker running a fake site. All cases MUST hold.
+#
+# Adopter customization:
+#   - Wire `_authorize_url(...)` to build /authorize URLs.
+#   - Wire `_callback(...)` to hit /oauth/callback with params.
+#   - Wire `_registered_redirect_uris()` to return your allowlist.
+#   - `client` is your test client fixture.
+
+import pytest
+
+
+# ─── Adopter wires these ────────────────────────────────────────────
+def _authorize_url(client_id: str, redirect_uri: str, state: str,
+                   code_challenge: str = None,
+                   code_challenge_method: str = None) -> str:
+    raise NotImplementedError("wire to your /authorize endpoint")
+
+
+def _callback(client, code: str, state: str):
+    raise NotImplementedError("wire to your /oauth/callback route")
+
+
+def _registered_redirect_uris() -> list[str]:
+    """Return the exact allowlist your OAuth server was configured
+    with. Used to prove the server rejects near-matches."""
+    raise NotImplementedError(
+        "wire to your OAuth client registration"
+    )
+
+
+@pytest.fixture
+def client():
+    pytest.skip("adopter must provide a test client fixture")
+
+
+# ─── Cases ──────────────────────────────────────────────────────────
+
+
+def test_state_param_required(client):
+    """RFC 6749 §10.12. A missing state parameter opens CSRF: an
+    attacker triggers /authorize on the user's behalf and steals the
+    resulting code. Reject callbacks without state."""
+    r = _callback(client, code="valid-code", state="")
+    assert r.status_code in (400, 401, 403), (
+        "callback with empty state accepted — CSRF surface open"
+    )
+
+
+def test_state_mismatch_rejected(client):
+    """The state on the callback MUST match the state the client
+    stashed at /authorize time. Skip is a common vulnerability."""
+    # Simulate the client stashing state="abc" at /authorize time.
+    with client.session_transaction() as sess:
+        sess["oauth_state"] = "abc"
+    r = _callback(client, code="valid-code", state="different")
+    assert r.status_code in (400, 401, 403), (
+        "callback with mismatched state accepted — CSRF surface open"
+    )
+
+
+def test_redirect_uri_exact_match_required():
+    """RFC 6749 §3.1.2.4. A registered redirect_uri is the LITERAL
+    string; substring / prefix / wildcard matches are all attacks.
+    An open redirect on callback = stolen auth code = full account
+    takeover.
+
+    Adopter: this test asserts the property of your OAuth SERVER
+    (not client). If you don't run an OAuth server, delete this."""
+    registered = _registered_redirect_uris()
+    if not registered:
+        pytest.skip("no registered redirect URIs to test against")
+
+    victim = registered[0]
+    attacks = [
+        victim + ".attacker.example",      # suffix injection
+        victim.replace("https://", "http://"),  # scheme downgrade
+        victim + "/../attacker",           # path traversal
+        victim + "?evil=1",                # query smuggling
+        victim + "#fragment",              # fragment smuggling
+    ]
+    for bad in attacks:
+        # Server MUST refuse to redirect to `bad` even if it starts
+        # with the registered URI. Wire to your /authorize endpoint's
+        # redirect_uri validation.
+        assert bad not in registered, (
+            f"OPEN REDIRECT surface: '{bad}' too close to registered "
+            f"'{victim}' — validate with EXACT string match, not startswith"
+        )
+
+
+def test_pkce_required_for_public_clients(client):
+    """Public clients (mobile apps, SPAs) MUST use PKCE (RFC 7636).
+    Without PKCE, an attacker who steals the auth code (via redirect
+    URI hijack, browser extension, referer leak) can exchange it.
+    With PKCE, the token exchange also requires the code_verifier
+    which the attacker doesn't have."""
+    # Build /authorize URL WITHOUT code_challenge.
+    url = _authorize_url(
+        client_id="public-mobile-app",
+        redirect_uri="https://app.example.com/cb",
+        state="abc",
+        # deliberately no code_challenge
+    )
+    r = client.get(url)
+    assert r.status_code in (400, 403), (
+        "public client authorized without PKCE — code interception "
+        "attack open"
+    )
+
+
+def test_authorization_code_single_use(client):
+    """RFC 6749 §4.1.2. An auth code MUST be exchangeable exactly
+    once. Second exchange attempt MUST fail (and the RFC recommends
+    invalidating the issued token too — replay indicates theft)."""
+    # First exchange succeeds.
+    r1 = _callback(client, code="one-time-code", state="valid-state")
+    # Second exchange with same code MUST fail.
+    r2 = _callback(client, code="one-time-code", state="valid-state")
+    assert r2.status_code in (400, 401, 403), (
+        "auth code accepted TWICE — code replay attack open"
+    )
+
+
+def test_authorization_code_expires(client):
+    """Auth codes MUST expire quickly (RFC recommends ≤10 minutes,
+    ideally ≤60 seconds). Long-lived codes give attackers a wider
+    window to intercept + exchange."""
+    pytest.skip(
+        "adopter: use freezegun to advance clock past code TTL, "
+        "then attempt exchange — must fail"
+    )

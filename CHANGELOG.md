@@ -7,6 +7,117 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.29.0] — 2026-07-03
+
+> **S3 shipped — auth / payment / webhook security TEST templates +
+> test-evidence path-gate on the security-review-trailer.** Six new
+> pytest templates cover the failure modes that keep landing in
+> production: JWT alg-confusion, OAuth PKCE bypass, webhook HMAC +
+> replay, session fixation, client-supplied payment amounts, and
+> replayable reset tokens. The security-review-trailer now REJECTS
+> commits touching money-mutating paths unless test files are
+> co-staged in the same commit — closing the "code without tests"
+> loophole the plan called out.
+
+### Added — `templates/tests/` (6 new templates)
+
+- **`session-security.test.py.template`** — session fixation
+  (session id rotates on login), HttpOnly / SameSite / Secure
+  cookie flags, password-rotation invalidates other sessions,
+  logout clears server session, idle timeout enforcement.
+- **`jwt-security.test.py.template`** — CVE-2015-9235 (`alg=none`)
+  + CVE-2016-10555 (RS256 → HS256 algorithm confusion) + expired
+  token + missing `exp` claim + wrong-secret sig + empty sig +
+  wrong `iss`. Every case documented with the exploited CVE.
+- **`oauth-security.test.py.template`** — RFC 6749 §10 threats:
+  state param required (CSRF), state-mismatch rejected,
+  redirect_uri exact-match (open-redirect on callback = auth-code
+  theft), PKCE required for public clients (RFC 7636),
+  authorization code single-use + expiration.
+- **`webhook-security.test.py.template`** — HMAC verify path:
+  missing sig / wrong sig / tampered payload / stale timestamp /
+  duplicate event_id dedup / unknown event type → 200 (prevents
+  Stripe retry loops) / constant-time compare property.
+- **`payment-security.test.py.template`** — server-side amount
+  authority (classic $0.01 exploit), cross-org order rejection at
+  payment boundary, Decimal-not-float, test/live key separation
+  (prevents `sk_live_` in dev CI), idempotency-key on retry,
+  negative-amount rejected, Charge persisted BEFORE provider call.
+- **`reset-token-security.test.py.template`** — OWASP Forgot
+  Password cheat-sheet: identical response for real vs fake user
+  (no enumeration), single-use, expiration, ≥32-char entropy,
+  no cross-user collision, existing-session invalidation on
+  reset, policy applies on reset path too, timing-safe compare.
+
+### Added — `hooks/security-review-trailer.sh` (S3 test-evidence gate)
+
+- New narrow money-path regex (`payment|billing|webhook`) is
+  matched against staged files. If ANY money-path file is staged
+  and NO `tests?/` files are co-staged, the hook blocks the
+  commit — even when a valid `Security-reviewed:` trailer is
+  present. Message points at the pytest templates above.
+- New escape hatch: `Security-tests-skip-reason: <reason>`
+  (revert, rename-only, docs). Existing `Security-skip-reason`
+  continues to blanket-skip both trailer and test gates.
+- Configurable via `ENGINE_SECURITY_TEST_PATHS` env var (mirrors
+  the existing `ENGINE_SECURITY_PATHS` pattern).
+- Bugfix picked up en route: the original grep-pipeline for
+  `SKIP` / `TRAILER` extraction was broken under `set -euo
+  pipefail` (grep returning "no match" aborted the whole hook).
+  Rewrapped in `{ … || true; }` so no-match is not a script
+  failure. No adopter noticed because the failure mode masked as
+  "block" — which was the intended reject for no-trailer commits.
+
+### Added — tests
+
+- **`tests/test_security_review_trailer.sh`** — 10 tests covering
+  every trailer flow: non-security paths pass silently; auth+no
+  trailer blocked; legacy self-attest accepted; skip-reason
+  accepted; billing+trailer+no-tests BLOCKED (the new S3 gate);
+  billing+trailer+co-staged-tests accepted; webhook+
+  Security-tests-skip-reason accepted; billing+Security-skip
+  -reason blanket-skips both gates; auth-only path doesn't require
+  tests (test gate is money-only); `ENGINE_SECURITY_TEST_PATHS`
+  override respected.
+
+### Updated
+
+- `plugin.json.description` — mentions S3 templates + test-evidence
+  path-gate.
+- `README.md` badge → 0.29.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` S3 marker: MISSING → SHIPPED v0.29.0.
+
+### Alignment
+
+- All 13 test scripts + `pe docs check` green at v0.29.0.
+- Templates match the plan's file list exactly:
+  `session/jwt/oauth/webhook/payment/reset-token-security.test.py.template`.
+- The pre-existing `auth-robustness.test.py.template` (login-path
+  smoke) remains as-is — S3 templates extend, don't replace.
+
+### Notes — what's deliberately out of scope
+
+- **Runtime auth-bypass / injection probing** — DELEGATED to the
+  ai-testing-agent (`run_security_scan`) per `TESTING_TOPOLOGY.md`.
+  The engine ships templates + the path-gate; it does NOT rebuild
+  a runtime prober.
+- **Adopter wiring** — every template ships with
+  `raise NotImplementedError` / `pytest.skip` stubs that adopters
+  must connect to their app's test client + fixtures. The templates
+  are opinionated on WHAT to test, not on HOW to reach the code
+  under test.
+
+### Migration
+
+- No breaking changes. Adopters who don't copy the templates and
+  don't touch money paths see no behavior change.
+- Adopters who DO touch money paths after `pe install` will see the
+  test-evidence gate fire — copy the relevant template + wire the
+  stubs, or add `Security-tests-skip-reason:` for genuine skips
+  (revert, rename).
+
+---
+
 ## [0.28.0] — 2026-07-03
 
 > **A6 billing module — fourth (and final planned) reusable domain

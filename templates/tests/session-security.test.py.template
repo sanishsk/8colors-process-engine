@@ -1,0 +1,162 @@
+# session-security.test — the failure modes that leak sessions in
+# production (S3). Adapted from OWASP ASVS §3 (Session Management) +
+# 8CStudio audit findings.
+#
+# Threat model: an attacker with network access + a legit user with a
+# stale/pre-auth session cookie. All cases below MUST hold or the
+# session layer is broken by design.
+#
+# Adopter customization:
+#   - Wire `_login(client, email, password)` and `_logout(client)`.
+#   - Wire `_change_password(client, user, new_pw)`.
+#   - `client` is your framework's test client (Flask app.test_client(),
+#     Django Client(), etc.).
+#   - Delete a case only if it truly doesn't apply — never silent-skip.
+
+import pytest
+
+
+# ─── Adopter wires these ────────────────────────────────────────────
+def _login(client, email: str, password: str):
+    """Perform login, return response. Should set the session cookie."""
+    raise NotImplementedError("wire to your login endpoint")
+
+
+def _logout(client):
+    """Perform logout, return response."""
+    raise NotImplementedError("wire to your logout endpoint")
+
+
+def _change_password(client, user, new_password: str):
+    """Perform authenticated password change."""
+    raise NotImplementedError("wire to your password-change endpoint")
+
+
+def _session_cookie_name() -> str:
+    """The session cookie name (Flask default: 'session';
+    Django default: 'sessionid'). Override per project."""
+    return "session"
+
+
+# ─── Fixtures ───────────────────────────────────────────────────────
+@pytest.fixture
+def existing_user():
+    pytest.skip("adopter must provide an existing_user fixture")
+
+
+@pytest.fixture
+def client():
+    pytest.skip("adopter must provide a test client fixture")
+
+
+# ─── Cases ──────────────────────────────────────────────────────────
+
+
+def test_session_id_rotates_on_login(client, existing_user):
+    """Session fixation: the ID before login MUST NOT equal the ID
+    after login. Attacker who plants a known session ID pre-login
+    would inherit an authenticated session otherwise."""
+    client.get("/")  # get a pre-auth session
+    pre = client.get_cookie(_session_cookie_name())
+    pre_value = pre.value if pre else None
+
+    _login(client, existing_user.email, "correct-horse-battery")
+    post = client.get_cookie(_session_cookie_name())
+    post_value = post.value if post else None
+
+    assert post_value is not None, "no session cookie after login"
+    assert post_value != pre_value, (
+        "SESSION FIXATION: session id did not rotate on login"
+    )
+
+
+def test_session_cookie_has_httponly(client, existing_user):
+    _login(client, existing_user.email, "correct-horse-battery")
+    cookie = client.get_cookie(_session_cookie_name())
+    assert cookie is not None
+    # HttpOnly prevents document.cookie access → blocks XSS session theft.
+    assert getattr(cookie, "http_only", False) or "HttpOnly" in str(cookie), (
+        "session cookie missing HttpOnly — XSS can steal the session"
+    )
+
+
+def test_session_cookie_has_samesite(client, existing_user):
+    _login(client, existing_user.email, "correct-horse-battery")
+    cookie = client.get_cookie(_session_cookie_name())
+    assert cookie is not None
+    samesite = str(getattr(cookie, "same_site", "") or "").lower()
+    assert samesite in ("lax", "strict"), (
+        "session cookie missing SameSite=Lax|Strict — CSRF surface"
+    )
+
+
+def test_session_cookie_has_secure_in_prod(client, existing_user, monkeypatch):
+    """In production (FLASK_ENV=production or equivalent), the
+    Secure flag MUST be set — otherwise the cookie ships over
+    plain HTTP on the first request after a downgrade attack."""
+    monkeypatch.setenv("FLASK_ENV", "production")
+    _login(client, existing_user.email, "correct-horse-battery")
+    cookie = client.get_cookie(_session_cookie_name())
+    assert cookie is not None
+    assert getattr(cookie, "secure", False), (
+        "production session cookie missing Secure — HTTP downgrade risk"
+    )
+
+
+def test_password_change_invalidates_other_sessions(existing_user):
+    """When a user changes their password, sessions on OTHER devices
+    MUST be invalidated. If not, a stolen session survives password
+    rotation — the "I got phished" recovery path is broken."""
+    # Two clients simulate two devices.
+    from your_app import create_app  # adopter: import your app factory
+    app = create_app({"TESTING": True})
+
+    device_a = app.test_client()
+    device_b = app.test_client()
+
+    _login(device_a, existing_user.email, "correct-horse-battery")
+    _login(device_b, existing_user.email, "correct-horse-battery")
+
+    # Confirm both are authenticated.
+    r_a = device_a.get("/api/me")
+    r_b = device_b.get("/api/me")
+    assert r_a.status_code == 200 and r_b.status_code == 200
+
+    # Rotate password on device A.
+    _change_password(device_a, existing_user, "new-passphrase-xyz")
+
+    # Device B's session MUST no longer authenticate.
+    r_b_after = device_b.get("/api/me")
+    assert r_b_after.status_code in (401, 403), (
+        "PASSWORD ROTATION did not invalidate other sessions — "
+        f"device B still authenticated (status={r_b_after.status_code})"
+    )
+
+
+def test_logout_clears_server_session(client, existing_user):
+    """After logout, the previously-authenticated cookie value MUST
+    NOT authenticate. Client-side-only logout (`delete cookie`) is
+    insufficient — the server MUST invalidate the session record."""
+    _login(client, existing_user.email, "correct-horse-battery")
+    old_cookie = client.get_cookie(_session_cookie_name())
+
+    _logout(client)
+
+    # Replay the old cookie — server must reject.
+    client.set_cookie(
+        _session_cookie_name(), old_cookie.value, domain="localhost"
+    )
+    r = client.get("/api/me")
+    assert r.status_code in (401, 403), (
+        "LOGOUT did not invalidate server session — replay attack open"
+    )
+
+
+def test_session_timeout_enforced(client, existing_user, monkeypatch):
+    """Idle sessions must expire. Test that a session older than
+    the configured lifetime is rejected. Adopter: configure lifetime
+    to a small value (e.g. 1s) for this test, or mock time."""
+    pytest.skip(
+        "adopter: implement using freezegun or time-machine to "
+        "advance clock past SESSION_LIFETIME then re-request"
+    )

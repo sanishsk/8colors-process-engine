@@ -1,0 +1,210 @@
+# payment-security.test — server-side amount authority + money-math
+# discipline + provider-key separation (S3). Adapted from OWASP
+# ASVS §12 (API), Stripe security guidelines, and observed real
+# payment failures.
+#
+# Threat model: attacker who controls the client (browser, mobile,
+# forged API caller). All cases below MUST hold or the payment
+# path is a free-money vending machine.
+#
+# Adopter customization:
+#   - Wire `_start_checkout(client, order_id, extra=None)` to your
+#     checkout endpoint (must accept only order_id, NEVER an amount).
+#   - Wire `_provider_last_call()` to inspect what your app told
+#     Stripe (assert amount matches the ORDER, not the request).
+#   - Wire `_secret_key_env_name()` — usually 'STRIPE_SECRET_KEY'.
+
+from decimal import Decimal
+import os
+import re
+
+import pytest
+
+
+# ─── Adopter wires these ────────────────────────────────────────────
+def _start_checkout(client, order_id: int, extra: dict = None):
+    """Hit /checkout/<order_id> and return the response."""
+    raise NotImplementedError("wire to your checkout endpoint")
+
+
+def _provider_last_call() -> dict:
+    """Return the LAST payload sent to the provider adapter.
+    Used to prove the server used the ORDER's amount, not any
+    client input. Typically captured by monkey-patching
+    `provider.create_charge` in a test fixture."""
+    raise NotImplementedError("wire to a provider spy")
+
+
+def _secret_key_env_name() -> str:
+    return "STRIPE_SECRET_KEY"
+
+
+@pytest.fixture
+def client():
+    pytest.skip("adopter must provide a test client fixture")
+
+
+@pytest.fixture
+def order_199():
+    """Adopter: return an existing test order with total_cents=199."""
+    pytest.skip("adopter must provide an order fixture at 199 cents")
+
+
+# ─── Cases ──────────────────────────────────────────────────────────
+
+
+def test_client_supplied_amount_is_ignored(client, order_199):
+    """The classic $0.01 charge exploit: attacker POSTs
+    `{"amount_cents": 1}` to override the order's real amount.
+    The server MUST read amount from the DB by order_id, never
+    from the request body / query / form."""
+    _start_checkout(client, order_199.id,
+                    extra={"amount_cents": 1, "amount": 0.01})
+    call = _provider_last_call()
+    assert call["amount_cents"] == 199, (
+        f"CLIENT-SUPPLIED AMOUNT WAS TRUSTED: expected 199 "
+        f"(from order), got {call['amount_cents']} (from request). "
+        "Read amount from ORDER, not from request body."
+    )
+
+
+def test_wrong_org_order_rejected(client, order_199, monkeypatch):
+    """A user in org A MUST NOT be able to check out an order
+    belonging to org B — even if they know the order id. The
+    endpoint MUST verify order.org_id == current_org_id() before
+    charging."""
+    # Adopter: set current org to something different from order's org.
+    monkeypatch.setenv("TEST_CURRENT_ORG_ID", "9999")
+    r = _start_checkout(client, order_199.id)
+    assert r.status_code in (403, 404), (
+        "cross-org checkout succeeded — tenant isolation broken "
+        "at payment boundary"
+    )
+
+
+def test_amount_is_int_cents_not_float():
+    """Money crossing a system boundary MUST be int cents (or
+    Decimal). Float amounts silently drift (0.1 + 0.2 != 0.3).
+    Assert your money helper rejects floats."""
+    try:
+        from modules.billing.money import to_cents, MoneyError
+    except ImportError:
+        pytest.skip("no modules.billing.money to test against")
+
+    with pytest.raises(MoneyError, match="float"):
+        to_cents(1.99)
+
+
+def test_no_float_arithmetic_in_totals():
+    """Grep guard: no `float(` or `0.1` patterns in the money /
+    charge path. This catches drift bugs at review time. Adjust
+    the path list to your project layout."""
+    charge_paths = [
+        "modules/billing/service.py",
+        "modules/billing/money.py",
+        "modules/billing/providers",
+    ]
+    offenders = []
+    for path in charge_paths:
+        if not os.path.exists(path):
+            continue
+        for root, dirs, files in os.walk(path):
+            for f in files:
+                if not f.endswith(".py"):
+                    continue
+                full = os.path.join(root, f)
+                with open(full) as fh:
+                    for i, line in enumerate(fh, 1):
+                        if line.strip().startswith("#"):
+                            continue
+                        if re.search(r"\bfloat\(", line):
+                            offenders.append(f"{full}:{i}: {line.rstrip()}")
+    assert not offenders, (
+        "float() call in money path — drift risk:\n"
+        + "\n".join(offenders)
+    )
+
+
+def test_test_and_live_keys_separated():
+    """Common footgun: `sk_test_...` used in prod, or worse,
+    `sk_live_...` used in dev tests that hit the real API. Assert
+    the current environment's key prefix matches the environment
+    marker."""
+    key = os.environ.get(_secret_key_env_name(), "")
+    if not key:
+        pytest.skip("no provider secret configured for this env")
+
+    if os.environ.get("FLASK_ENV") == "production":
+        assert key.startswith("sk_live_"), (
+            f"PRODUCTION env uses non-live key ({key[:8]}...) — "
+            "test/live mixup risk"
+        )
+    else:
+        assert key.startswith("sk_test_"), (
+            f"NON-PRODUCTION env uses non-test key ({key[:8]}...) — "
+            "risk of hitting live provider in dev/CI"
+        )
+
+
+def test_idempotency_key_on_provider_call(client, order_199):
+    """Retries of /checkout for the same order MUST NOT create two
+    charges at the provider. Either the app sends an
+    Idempotency-Key header (Stripe supports this natively) or the
+    app dedups on its own via order_id."""
+    _start_checkout(client, order_199.id)
+    first_call = _provider_last_call()
+
+    # Simulate a retry (client re-POSTs).
+    _start_checkout(client, order_199.id)
+    second_call = _provider_last_call()
+
+    # Either the second call was suppressed (adapter didn't hit
+    # provider at all) OR the same Idempotency-Key was used.
+    first_key = first_call.get("idempotency_key")
+    second_key = second_call.get("idempotency_key")
+    if second_call is first_call:
+        return  # dedup at app layer — fine
+    assert first_key and first_key == second_key, (
+        "retry of same-order checkout produced a DIFFERENT provider "
+        "call with a DIFFERENT idempotency key — double-charge risk"
+    )
+
+
+def test_negative_amount_rejected(client, monkeypatch):
+    """Order with a negative total (or zero) MUST NOT reach the
+    provider. Catch at the service boundary — a negative charge
+    to a stored card would credit the attacker."""
+    class FakeOrder:
+        id = 9998
+        org_id = 1
+        total_cents = -100
+        currency = "USD"
+        status = "confirmed"
+
+    try:
+        from modules.billing.service import (
+            create_charge_for_order,
+            OrderNotChargeable,
+        )
+    except ImportError:
+        pytest.skip("no billing service to test against")
+
+    # Adopter: monkeypatch the order lookup to return FakeOrder.
+    # Then assert OrderNotChargeable is raised.
+    with pytest.raises((OrderNotChargeable, ValueError)):
+        create_charge_for_order(order_id=9998, org_id=1)
+
+
+def test_charge_persisted_before_provider_call(client, order_199,
+                                                monkeypatch):
+    """The Charge row (status=pending) MUST be written to the DB
+    BEFORE the provider is called. If the provider call succeeds
+    but the response is lost (network flap), the pending row is
+    reconciled by the webhook — no orphan charge."""
+    provider_called = []
+    charge_written_before_provider = [None]
+
+    # Adopter: hook into your provider adapter to record when it's
+    # invoked, and check whether the Charge row was already flushed.
+    pytest.skip("adopter: instrument provider + Charge INSERT to "
+                "assert ordering")

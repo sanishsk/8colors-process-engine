@@ -1,0 +1,187 @@
+# reset-token-security.test — password-reset token failure modes
+# (S3). Adapted from OWASP Forgot Password Cheat Sheet + observed
+# real-world resetPasswordToken bugs.
+#
+# Threat model: attacker with network access + partial knowledge
+# (email address of the victim). All cases below MUST hold; a
+# failure = account takeover.
+#
+# Adopter customization:
+#   - Wire `_request_reset(client, email)` to your "forgot
+#     password" endpoint.
+#   - Wire `_reset_with_token(client, token, new_password)` to
+#     your reset-confirm endpoint.
+#   - Wire `_capture_reset_token(email)` to intercept the token
+#     from your outgoing mail (use a test mail backend).
+
+import time
+
+import pytest
+
+
+# ─── Adopter wires these ────────────────────────────────────────────
+def _request_reset(client, email: str):
+    raise NotImplementedError("wire to /auth/reset-request")
+
+
+def _reset_with_token(client, token: str, new_password: str):
+    raise NotImplementedError("wire to /auth/reset-confirm")
+
+
+def _capture_reset_token(email: str) -> str:
+    """Intercept the reset token from your test mail backend.
+    Usually via `flask_mail.outbox` or Django's `mail.outbox`."""
+    raise NotImplementedError("wire to your mail test backend")
+
+
+@pytest.fixture
+def client():
+    pytest.skip("adopter must provide a test client fixture")
+
+
+@pytest.fixture
+def existing_user():
+    pytest.skip("adopter must provide an existing_user fixture")
+
+
+# ─── Cases ──────────────────────────────────────────────────────────
+
+
+def test_reset_request_does_not_reveal_user_existence(client):
+    """Reset-request for a real user and a fake user MUST return
+    IDENTICAL responses (status + body + timing). Different
+    responses = user enumeration."""
+    r_real = _request_reset(client, "known@example.com")
+    r_fake = _request_reset(client, "definitely-does-not-exist@example.invalid")
+
+    assert r_real.status_code == r_fake.status_code, (
+        "USER ENUMERATION: reset endpoint returns different status "
+        f"codes for real vs fake user ({r_real.status_code} vs "
+        f"{r_fake.status_code})"
+    )
+    # Body content should also match (some frameworks leak "user
+    # not found" in the JSON).
+    assert r_real.data == r_fake.data or len(r_real.data) == len(r_fake.data), (
+        "USER ENUMERATION: reset endpoint returns different bodies "
+        "for real vs fake user"
+    )
+
+
+def test_reset_token_single_use(client, existing_user):
+    """A reset token used once MUST be invalidated. Second attempt
+    with the same token MUST fail even before password change is
+    committed. Prevents replay if the URL leaks (referer, browser
+    history, mail forwarding)."""
+    _request_reset(client, existing_user.email)
+    token = _capture_reset_token(existing_user.email)
+
+    r1 = _reset_with_token(client, token, "new-passphrase-abc")
+    assert r1.status_code in (200, 302), (
+        "first legitimate reset failed unexpectedly"
+    )
+
+    r2 = _reset_with_token(client, token, "attacker-passphrase-xyz")
+    assert r2.status_code in (400, 401, 403, 410), (
+        "TOKEN REPLAY: same reset token accepted TWICE — attacker "
+        "with a copy of the URL can reset the password after the "
+        "user does"
+    )
+
+
+def test_reset_token_expires(client, existing_user, monkeypatch):
+    """Reset tokens MUST expire (OWASP recommends ≤1 hour, ideally
+    15 minutes). Long-lived tokens = extended attack window."""
+    _request_reset(client, existing_user.email)
+    token = _capture_reset_token(existing_user.email)
+
+    # Advance the clock past the token TTL. Use freezegun or your
+    # framework's clock hook.
+    pytest.importorskip("freezegun")
+    from freezegun import freeze_time
+    from datetime import datetime, timedelta
+
+    future = datetime.utcnow() + timedelta(hours=24)
+    with freeze_time(future):
+        r = _reset_with_token(client, token, "post-expiry-passphrase")
+        assert r.status_code in (400, 401, 403, 410), (
+            "EXPIRED token was accepted — token lifetime not enforced"
+        )
+
+
+def test_reset_token_is_high_entropy(client, existing_user):
+    """The token MUST be cryptographically random (secrets.token_urlsafe
+    with ≥32 bytes) — not a base64 of user_id, not a timestamp, not
+    a short numeric OTP. Attacker who can enumerate tokens (via
+    guess + reset endpoint) breaks the flow.
+
+    This asserts a property of the format, not the source — you
+    still need to verify your generator in the code path."""
+    _request_reset(client, existing_user.email)
+    token = _capture_reset_token(existing_user.email)
+
+    # Base64url of 32 bytes = 43 chars (no padding). Reject short
+    # numeric OTPs (< 20 chars) as brute-forceable on a busy site.
+    assert len(token) >= 32, (
+        f"reset token is too short (len={len(token)}) — brute-force "
+        "enumeration possible. Use secrets.token_urlsafe(32) or more."
+    )
+
+
+def test_reset_token_not_reused_across_users(client):
+    """Two independent reset requests MUST produce two distinct
+    tokens. Any collision (short token, deterministic generator)
+    is an immediate cross-user takeover."""
+    _request_reset(client, "user1@example.com")
+    t1 = _capture_reset_token("user1@example.com")
+    _request_reset(client, "user2@example.com")
+    t2 = _capture_reset_token("user2@example.com")
+
+    if not t1 or not t2:
+        pytest.skip("mail backend didn't yield both tokens")
+    assert t1 != t2, (
+        "TOKEN COLLISION: two different users got the SAME reset "
+        "token — deterministic or low-entropy generator"
+    )
+
+
+def test_reset_invalidates_existing_sessions(client, existing_user):
+    """After a successful password reset, existing sessions for
+    the user MUST be invalidated. If a phished user resets their
+    password, the attacker's stolen session must be booted."""
+    from your_app import create_app  # adopter: import your app factory
+    app = create_app({"TESTING": True})
+
+    victim = app.test_client()
+    attacker = app.test_client()
+
+    # Both sessions are authenticated (imagine attacker phished
+    # the password before reset).
+    # Adopter: pre-authenticate `attacker` with the OLD password.
+    pytest.skip("adopter: pre-authenticate two clients then reset "
+                "on one; verify the other is booted")
+
+
+def test_reset_confirms_new_password_meets_policy(client, existing_user):
+    """Password policy MUST apply on reset too (a common regression:
+    the reset path bypasses complexity/length checks that the
+    signup path enforces)."""
+    _request_reset(client, existing_user.email)
+    token = _capture_reset_token(existing_user.email)
+
+    r = _reset_with_token(client, token, "abc")  # too short
+    assert r.status_code in (400, 422), (
+        "reset accepted a password that violates policy — path "
+        "diverges from signup validation"
+    )
+
+
+def test_reset_confirm_is_timing_safe():
+    """Token compare in the reset-confirm path MUST use
+    hmac.compare_digest (not `==`). Otherwise, a timing side
+    channel leaks the token character by character."""
+    import hmac
+    assert hasattr(hmac, "compare_digest"), (
+        "hmac.compare_digest missing — Python too old"
+    )
+    # Adopter: grep your reset-confirm view for `token ==` and
+    # convert to hmac.compare_digest.

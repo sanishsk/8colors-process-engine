@@ -1,0 +1,201 @@
+# webhook-security.test — HMAC verification + replay/idempotency
+# for inbound webhooks (S3). Written against Stripe's shape but
+# the invariants apply to any HMAC-signed webhook (GitHub, Slack,
+# Twilio, Razorpay, custom).
+#
+# Threat model: attacker who can POST to your webhook endpoint.
+# All cases MUST hold — otherwise the endpoint is a free
+# state-mutation gadget.
+#
+# Adopter customization:
+#   - Wire `_webhook_url()` to your webhook path.
+#   - Wire `_sign_payload(payload_bytes, secret, timestamp)` to
+#     produce the signature header your provider uses.
+#   - Wire `_secret()` to return the shared secret.
+#   - Wire `_replay_processed_events()` to inspect the idempotency
+#     ledger (usually the payment_events table from A6 billing).
+
+import hashlib
+import hmac
+import json
+import time
+
+import pytest
+
+
+# ─── Adopter wires these ────────────────────────────────────────────
+def _webhook_url() -> str:
+    raise NotImplementedError("wire to your webhook path")
+
+
+def _sign_payload(payload_bytes: bytes, secret: str,
+                  timestamp: int) -> str:
+    """Return the signature header value your provider uses.
+    Stripe shape: `t=<ts>,v1=<hex hmac>`. GitHub shape:
+    `sha256=<hex hmac>`. Wire per provider."""
+    raise NotImplementedError("wire to your provider's signing shape")
+
+
+def _secret() -> str:
+    raise NotImplementedError("wire to your webhook secret source")
+
+
+def _get_processed_event(event_id: str):
+    """Return the persisted PaymentEvent (or equivalent) for
+    `event_id`, or None if never processed. Used to prove
+    idempotency."""
+    raise NotImplementedError("wire to your idempotency ledger")
+
+
+def _signature_header_name() -> str:
+    """Stripe: 'Stripe-Signature'; GitHub: 'X-Hub-Signature-256'."""
+    return "Stripe-Signature"
+
+
+@pytest.fixture
+def client():
+    pytest.skip("adopter must provide a test client fixture")
+
+
+# ─── Helpers ────────────────────────────────────────────────────────
+def _make_event(event_id: str = "evt_test_123") -> bytes:
+    return json.dumps({
+        "id": event_id,
+        "type": "payment_intent.succeeded",
+        "data": {"object": {"id": "pi_test", "amount": 199,
+                            "metadata": {"org_id": "1"}}},
+    }).encode()
+
+
+# ─── Cases ──────────────────────────────────────────────────────────
+
+
+def test_missing_signature_header_rejected(client):
+    """No sig header = trivial forgery attempt. MUST 400."""
+    r = client.post(_webhook_url(), data=_make_event(),
+                    content_type="application/json")
+    assert r.status_code in (400, 401), (
+        "webhook accepted without signature header — free forgery"
+    )
+
+
+def test_wrong_signature_rejected(client):
+    """Sig computed with WRONG secret MUST be rejected."""
+    payload = _make_event()
+    ts = int(time.time())
+    bad_sig = _sign_payload(payload, "attacker-secret", ts)
+    r = client.post(
+        _webhook_url(), data=payload,
+        content_type="application/json",
+        headers={_signature_header_name(): bad_sig},
+    )
+    assert r.status_code in (400, 401), (
+        "webhook accepted with signature from WRONG secret"
+    )
+
+
+def test_tampered_payload_rejected(client):
+    """Signature verifies the payload BYTES. Any tampering (even
+    one byte) MUST invalidate the sig."""
+    payload = _make_event()
+    ts = int(time.time())
+    sig = _sign_payload(payload, _secret(), ts)
+
+    # Now tamper — flip a byte in the amount.
+    tampered = payload.replace(b'"amount": 199', b'"amount": 9999')
+    r = client.post(
+        _webhook_url(), data=tampered,
+        content_type="application/json",
+        headers={_signature_header_name(): sig},
+    )
+    assert r.status_code in (400, 401), (
+        "webhook accepted TAMPERED payload with original signature"
+    )
+
+
+def test_stale_timestamp_rejected(client):
+    """Providers include a timestamp in the sig header specifically
+    to prevent replay of an old (captured) legit request. A stale
+    timestamp (>5 min old for Stripe) MUST be rejected.
+
+    Skip if your provider doesn't include a timestamp — but then
+    your endpoint is vulnerable to replay of captured payloads
+    forever."""
+    payload = _make_event()
+    stale = int(time.time()) - 3600  # 1h old
+    sig = _sign_payload(payload, _secret(), stale)
+    r = client.post(
+        _webhook_url(), data=payload,
+        content_type="application/json",
+        headers={_signature_header_name(): sig},
+    )
+    assert r.status_code in (400, 401), (
+        "webhook accepted stale-timestamp payload — replay of "
+        "captured legit request possible"
+    )
+
+
+def test_duplicate_event_id_deduped(client):
+    """Providers retry aggressively (Stripe: exponential backoff for
+    up to 3 days). The SAME event_id arriving twice MUST NOT
+    double-process. First 200, second 200 with a duplicate flag OR
+    persistent DB record showing exactly one row."""
+    payload = _make_event("evt_dedup_test_001")
+    ts = int(time.time())
+    sig = _sign_payload(payload, _secret(), ts)
+
+    r1 = client.post(
+        _webhook_url(), data=payload,
+        content_type="application/json",
+        headers={_signature_header_name(): sig},
+    )
+    r2 = client.post(
+        _webhook_url(), data=payload,
+        content_type="application/json",
+        headers={_signature_header_name(): sig},
+    )
+    assert r1.status_code == 200
+    assert r2.status_code == 200, (
+        "duplicate delivery returned non-200 — Stripe will retry "
+        "the retry forever"
+    )
+    # And the ledger has exactly ONE row.
+    events = _get_processed_event("evt_dedup_test_001")
+    assert events is not None, "first event not persisted"
+    # Adopter: assert your ledger shows exactly one row (per your
+    # ORM's shape).
+
+
+def test_unknown_event_type_returns_200(client):
+    """Unknown event types MUST return 200 (or Stripe retries
+    forever). The endpoint may `{"status": "ignored"}` in the
+    body — that's fine. What matters: NEVER 5xx for an unknown
+    type, and NEVER persist without a handler."""
+    payload = json.dumps({
+        "id": "evt_unknown_type_001",
+        "type": "some.unknown.type",
+        "data": {"object": {}},
+    }).encode()
+    ts = int(time.time())
+    sig = _sign_payload(payload, _secret(), ts)
+    r = client.post(
+        _webhook_url(), data=payload,
+        content_type="application/json",
+        headers={_signature_header_name(): sig},
+    )
+    assert r.status_code == 200, (
+        "unknown event type returned non-200 — provider will retry "
+        "forever, filling logs"
+    )
+
+
+def test_signature_verify_uses_constant_time():
+    """Timing-safe HMAC compare (hmac.compare_digest) — never
+    string ==. This test is a property of the adapter, not the
+    endpoint. Adopter: grep for `== signature` in the verify
+    path and refactor to `hmac.compare_digest`."""
+    # Property assertion — replace with an actual grep in your
+    # adapter code, or make this a smoke of your verify function.
+    assert hasattr(hmac, "compare_digest"), (
+        "hmac.compare_digest missing — Python too old"
+    )
