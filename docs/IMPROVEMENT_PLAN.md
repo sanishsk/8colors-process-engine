@@ -1,5 +1,10 @@
 # Engine Improvement Plan — full audit results (2026-07-02)
 
+> **⚠️ STATUS 2026-07-03: P0/P1/P2/P5/P6/P7 SHIPPED (engine now v0.16.0).** Forward-looking work
+> (security depth, design-check parity, P3 autonomy/domain layer) moved to a fresh 360° re-audit:
+> **`docs/ENHANCEMENT_PLAN_V2.md`** — start there for what's next. This doc is the record of the
+> original audit + the now-shipped gate/hygiene layer.
+
 > Produced by a 4-track deep audit of engine v0.9.0: (1) shell layer,
 > (2) Python core, (3) agentic layer, (4) architecture/strategy.
 > Several bugs below were **empirically confirmed by repro on this
