@@ -3,6 +3,12 @@
 > Reusable Managed-Secrets pattern for Python/Flask projects. Extracted
 > from the operator's global doctrine (`~/.claude/rules/common/
 > api-credentials.md`) — this is the CODE side of the same pattern.
+>
+> **v0.26.0 update:** the `auth` module now ships too, so
+> `admin_credentials.py`'s `owner_required` + `require_password_reauth`
+> decorators resolve to REAL implementations. If you install both
+> modules (`pe module add auth` + `pe module add api-credentials`),
+> the credential admin is fully gated with no placeholder fallback.
 
 ## Purpose
 
@@ -45,6 +51,11 @@ file that already exists.
 - `cryptography>=41` — Fernet symmetric encryption
 - `Flask-WTF>=1.2` — CSRF protection
 - `Flask-Login>=0.6` — session + owner_required decorator
+- **Optional (recommended): install the `auth` module first** —
+  `pe module add auth` before `pe module add api-credentials`.
+  Ships the real `owner_required` + `require_password_reauth`
+  decorators. Without `auth`, the credential admin's endpoints
+  abort 403 by default (safe-by-default placeholder).
 
 Add to `pyproject.toml`:
 

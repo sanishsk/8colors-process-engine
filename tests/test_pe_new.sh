@@ -163,7 +163,42 @@ else
     record_fail "unknown module did not return exit 3 (got $rc)"
 fi
 
-# ─── 8. pycache in template does not break scaffold ─────────────────────
+# ─── 8. auth module materializes cleanly + co-installs with api-credentials ─
+scenario_auth="$WORK/auth"
+mkdir -p "$scenario_auth"
+cd "$scenario_auth"
+"$PE" new "Auth Target" --stack python-flask --no-install > /dev/null 2>&1
+cd auth-target
+if "$PE" module add auth > /dev/null 2>&1; then
+    for expected in README.md decorators.py password_service.py \
+                    models/user.py \
+                    blueprints/auth.py \
+                    templates_auth/login.html \
+                    templates_auth/reauth.html \
+                    migrations/migrate_auth.py \
+                    scripts/create_owner.py \
+                    tests/test_auth.py; do
+        if [ -f "modules/auth/$expected" ]; then
+            record_pass "auth module materialized $expected"
+        else
+            record_fail "auth module MISSING $expected"
+        fi
+    done
+else
+    record_fail "pe module add auth exited non-zero"
+fi
+# Combined install (auth + api-credentials) — should not conflict.
+if "$PE" module add api-credentials > /dev/null 2>&1; then
+    if [ -d "modules/auth" ] && [ -d "modules/api_credentials" ]; then
+        record_pass "auth + api-credentials co-materialize"
+    else
+        record_fail "combined module install left one dir missing"
+    fi
+else
+    record_fail "combined pe module add api-credentials failed"
+fi
+
+# ─── 9. pycache in template does not break scaffold ─────────────────────
 # Regression: v0.25.0 reviewer caught a stray __pycache__/ in a
 # template that would crash `pe module add` with UnicodeDecodeError.
 # The walker now prunes __pycache__ before descent — verify a rogue

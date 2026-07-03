@@ -35,7 +35,7 @@
 | A4 exec primitive | ✅ SHIPPED (primitive); 🔒 GATED (auto-escalation on §9 evidence) | v0.21.0 |
 | A5 Ponytail universal prereq | ✅ SHIPPED | v0.23.0 |
 | L3 memory governance | ✅ SHIPPED | v0.24.0 |
-| A6 scaffold + api-credentials | ✅ SHIPPED (auth queued for v0.26.0) | v0.25.0 |
+| A6 scaffold + api-credentials + auth | ✅ SHIPPED (tenancy + billing queued) | v0.25.0 → v0.26.0 |
 
 **PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
 with a named prerequisite, on a specific release queue, or

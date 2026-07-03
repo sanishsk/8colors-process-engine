@@ -43,22 +43,38 @@ directory listing.
 
 | Module | What it ships | Deps to add |
 |---|---|---|
-| `api-credentials` | Encrypted API-key admin (Fernet + write-only admin UI + audit log). Models, service, blueprint, templates, migration, tests. | `cryptography`, `Flask-WTF`, `Flask-Login` |
+| `auth` (v0.26.0) | Session-based auth. User model + Role enum (owner/admin/member), bcrypt hashing (12 rounds, 2026 OWASP min), `@login_required` / `@owner_required` / `@admin_required` / `@require_password_reauth` decorators, /login /logout /reauth routes, 15-min step-up window, IP-scoped rate limit (5/15min), CSRF-protected forms, `create_owner` bootstrap script, 15+ coverage-floor tests. | `Flask-Login`, `Flask-WTF`, `bcrypt` |
+| `api-credentials` (v0.25.0) | Encrypted API-key admin (Fernet + write-only admin UI + audit log). Placeholder decorators resolve to real `auth` module decorators when both installed. | `cryptography`, `Flask-WTF`, `Flask-Login` |
 
 Modules land as a directory under `templates/domain-modules/<name>/`.
 Each carries a `README.md` explaining: what it does, deps to add,
 env vars to set, blueprint registration, migration application,
 project-specific docs to add to `CLAUDE.md`.
 
-## Roadmap (next modules — deferred to a follow-up)
+## Recommended install pairing
 
-- `auth` — session + JWT + OAuth + password reset. Ships models,
-  decorators (`@owner_required`, `@require_password_reauth`), routes,
-  templates. THIS closes the last dependency in `api-credentials`
-  (which currently placeholder-decorates its blueprint).
-- `tenancy` — multi-tenant `org_id` scoping + RLS setup.
-- `billing` — Stripe integration with webhook HMAC verification +
-  idempotency-key handling.
+`auth` + `api-credentials` compose to the fully-gated credential
+admin (this is what unblocks A6's placeholder pattern from v0.25.0):
+
+```bash
+cd ~/code/my-project
+pe module add auth              # first — provides the decorators
+pe module add api-credentials   # imports from modules.auth.decorators
+```
+
+Without `auth`, `api-credentials` still installs but every admin
+endpoint aborts 403 by default (safe-by-default placeholder).
+
+## Roadmap (next modules — deferred to follow-up releases)
+
+- `tenancy` — multi-tenant `org_id` scoping + RLS setup. Ships when
+  the pattern stabilises across ≥ 2 adopters.
+- `billing` — Stripe / Razorpay integration with webhook HMAC
+  verification + idempotency-key handling. Same criterion.
+- `password-reset` — email-token flow (deferred from v0.26.0 auth
+  scope; needs email transport wired first).
+- OAuth / JWT surfaces — separate blueprint additions per project
+  need; not batched into `auth`.
 
 Each ships when it's genuinely reusable across ≥ 2 projects, not
 speculatively. The engine's principle: extract from adopters, don't

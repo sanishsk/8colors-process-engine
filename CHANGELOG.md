@@ -7,6 +7,140 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.26.0] — 2026-07-03
+
+> **A6 auth module — closes the placeholder decorators in
+> `api-credentials`.** The second reusable domain module ships:
+> session-based auth with bcrypt-12 password hashing, role-based
+> decorators (owner / admin / member), a 15-minute step-up re-auth
+> window, IP-scoped rate limiting, CSRF-protected forms, and a
+> `create_owner` bootstrap script. When installed alongside
+> `api-credentials` (v0.25.0), the credential admin's placeholder
+> decorators resolve to the real thing — the credential admin is
+> now fully gated with zero placeholder fallback.
+
+### Added — `templates/domain-modules/auth/` (10 files)
+
+- **`README.md`** — post-materialization steps: deps to add, session
+  config in `create_app`, migration, `create_owner` bootstrap,
+  composition with `api-credentials`.
+
+- **`models/user.py`** — User (Flask-Login `UserMixin`) with:
+    * `email` (unique index), `password_hash` (bcrypt), `role`
+      (typed `Role` enum — never magic strings)
+    * `password_verified_at` (drives the step-up window)
+    * `is_disabled` (soft-lock without deleting)
+    * `display_name`, `created_at`, `updated_at`
+  Plus `FailedLogin` table (append-only) with an index on
+  `(ip_address, created_at)` for the rate limiter.
+
+- **`password_service.py`** — bcrypt hash + verify + strength check
+  + IP-scoped rate limit:
+    * `hash_password()` uses `BCRYPT_ROUNDS = 12` (2026 OWASP min)
+    * `verify_password()` returns False on None/malformed hash —
+      the None-check regression that unit tests lock in
+    * `check_strength()` raises `PasswordTooWeak` on <12 chars, no
+      letter, or no digit. Length-first per modern guidance
+    * `failed_login_count()` / `is_rate_limited()` /
+      `record_failed_login()` — 5 fails / 15-minute window / IP
+    * NEVER stores plaintext; NEVER logs plaintext
+
+- **`decorators.py`** — the primitives every gated endpoint uses:
+    * `login_required` (re-exported from Flask-Login for
+      one-import convenience)
+    * `owner_required` — role gate, 403 for non-owner
+    * `admin_required` — role gate for owner OR admin
+    * `require_password_reauth` — 15-min step-up window. Reads
+      `current_user.password_verified_at`, redirects to /reauth
+      when None or stale. Normalizes naive datetimes to UTC.
+
+- **`blueprints/auth.py`** — /login, /logout, /reauth routes:
+    * POST /login — CSRF-protected, IP rate-limited, dummy-hash
+      compare on missing user (no timing leak of email existence),
+      stamps `password_verified_at` on success, records
+      `FailedLogin` row on failure
+    * GET /logout — ends session
+    * POST /reauth — step-up. Re-confirms current_user's password
+      without new session. Same rate-limit protection.
+
+- **`templates_auth/{login,reauth}.html`** — Flask + Tailwind, slate
+  palette, tabular-nums friendly. Reuse the `base.html` layout the
+  scaffolded project provides.
+
+- **`migrations/migrate_auth.py`** — CREATE TABLE users +
+  failed_logins with the index. Idempotent (IF NOT EXISTS).
+
+- **`scripts/create_owner.py`** — interactive bootstrap for the
+  first owner. Refuses to run if an owner already exists
+  (subsequent owners must be promoted by an existing owner via the
+  admin UI, which is per-project scope).
+
+- **`tests/test_auth.py`** — 15 coverage-floor tests:
+    * Password hash roundtrip + wrong password fails + empty
+      rejected + None returns False + malformed returns False
+    * Strength check: short / no digit / no letter / ok
+    * Role enum: owner / admin_or_owner / str-serialization
+    * Step-up window: no stamp triggers reauth / recent allows
+      through / old triggers reauth / naive datetime normalized
+    * Rate limit: below threshold / at threshold
+
+### Changed — `api-credentials`
+
+- **`README.md`** updated: recommends installing `auth` first
+  (`pe module add auth` → `pe module add api-credentials`) so the
+  credential admin's decorators resolve to real implementations.
+  Without `auth` the placeholder still aborts 403 (safe-by-default).
+- No code changes to `credential_service.py` or
+  `admin_credentials.py` — the placeholder import path was already
+  correct in v0.25.0; auth just fills in the target.
+
+### Added — tests
+
+- **`tests/test_pe_new.sh`** grew from 28 → 39 tests. New coverage:
+  auth module materializes all 10 files, combined install
+  (`auth + api-credentials`) leaves both directories intact and
+  non-conflicting.
+
+### Updated
+
+- `docs/SCAFFOLD.md` — auth module row added, "Recommended install
+  pairing" section documents the composition, roadmap updated
+  (tenancy + billing still queued, `password-reset` explicitly
+  deferred from auth's scope).
+- `plugin.json.description` — mentions the auth module.
+- `README.md` badge → 0.26.0.
+
+### Alignment
+
+- All 12 test scripts + `pe docs check` green after the release.
+- Adopters (8CStudio + Origyn) re-installed at v0.26.0.
+- ENHANCEMENT_PLAN_V2 A6 marker updated to reflect: scaffold +
+  api-credentials + auth SHIPPED; tenancy + billing on queue per
+  "extract when stable in ≥ 2 adopters" doctrine.
+
+### Notes — what's still deferred inside auth's scope
+
+- **OAuth / SSO** — separate blueprint per provider (Google,
+  GitHub, Microsoft) added per project need. Not batched into the
+  core auth module.
+- **JWT bearer surfaces** — session-cookie only in this release.
+  Add a separate blueprint if an API surface needs bearer tokens.
+- **Password reset flow** — email-token flow (token generation is
+  ready in `password_service.py`-adjacent code; delivery layer is
+  not shipped since it depends on the project's email transport
+  choice: SendGrid / SES / Mailgun / etc.).
+- **2FA / WebAuthn** — future addition; the step-up window covers
+  the highest-value case (credential admin access) already.
+
+### Migration
+
+- No breaking changes. `pe module add auth` is a new drop-in
+  materialization. Existing projects unaffected.
+- Adopters: `pe upgrade` picks up the new module. `pe module add
+  auth` in the target project when ready to use it.
+
+---
+
 ## [0.25.1] — 2026-07-03
 
 > **PARTIAL cleanup — everything shippable now shipped.** Operator

@@ -1,0 +1,47 @@
+"""Migration: add users + failed_logins tables.
+
+Idempotent — safe to re-run. Rename to your project's migration
+numbering convention (e.g. `migrate_041_auth.py`).
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import text
+
+
+def upgrade(session) -> None:
+    session.execute(text("""
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            role VARCHAR(16) NOT NULL DEFAULT 'member',
+            display_name VARCHAR(128),
+            is_disabled VARCHAR(1) NOT NULL DEFAULT '0',
+            password_verified_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """))
+    session.execute(text("CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);"))
+
+    session.execute(text("""
+        CREATE TABLE IF NOT EXISTS failed_logins (
+            id BIGSERIAL PRIMARY KEY,
+            email_attempted VARCHAR(255),
+            ip_address VARCHAR(64) NOT NULL,
+            user_agent VARCHAR(512),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """))
+    session.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_failed_logins_ip_ts "
+        "ON failed_logins (ip_address, created_at);"
+    ))
+    session.commit()
+
+
+def downgrade(session) -> None:
+    session.execute(text("DROP TABLE IF EXISTS failed_logins;"))
+    session.execute(text("DROP TABLE IF EXISTS users;"))
+    session.commit()
