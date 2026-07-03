@@ -121,7 +121,7 @@ Every new migration:
 | Dropping `WHERE tenant_id = ?` "because RLS handles it" | CRITICAL | Code may run outside request context |
 | New tenant-scoped query without cross-tenant isolation test | HIGH | No proof isolation holds |
 | `SELECT *` in application code | MEDIUM | Hidden schema coupling; breaks on column rename |
-| N+1 (`for … in items: db.execute(…)`) | HIGH | Latency + pool exhaustion |
+| N+1 (`for … in items: db.execute(…)`) | HIGH | Latency + pool exhaustion — but static grep misses indirect N+1 (a template touching `.related` per row, a serializer lazy-loading each item). **The definitive gate is `templates/tests/query-count.test.py.template` (PF1)** — an in-process query counter that FAILs when a list/detail endpoint's query count scales with N. When you flag a suspected N+1, require the adopter to add a query-count assertion for that endpoint before merge. |
 | Long transaction across external API call | HIGH | Pool exhaustion + deadlock class |
 | Missing `LIMIT` on unbounded user-facing query | MEDIUM | Memory-blowup vector on hostile input |
 

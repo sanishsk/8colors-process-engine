@@ -7,6 +7,72 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.17.2] — 2026-07-03
+
+> Sync patch — closes three floaters from the parallel-session PF1 +
+> A9.2 work + fixes the stale README badge from v0.17.1. No new
+> functional gate; wires the PF1 template into `database-reviewer`
+> so the two halves reference each other correctly.
+
+### Added
+
+- **`templates/tests/query-count.test.py.template`** (PF1) — in-process
+  N+1 detector. Two variants ship in the same template: SQLAlchemy
+  (`before_cursor_execute` counter) + Django (`CaptureQueriesContext`).
+  Two invariants per endpoint: (1) `assert_max_queries(N)` bounded
+  ceiling, (2) query count MUST NOT scale with row count (the actual
+  N+1 assertion). Adopter wires the fixture into their session and
+  picks the framework variant.
+- **`agents/database-reviewer.md`** — Query safety §N+1 row extended
+  to reference the PF1 template as the definitive runtime gate.
+  Static grep misses indirect N+1 (template touching `.related` per
+  row, serializer lazy-loading per item); the reviewer now requires
+  a query-count assertion on any endpoint flagged for suspected N+1
+  before merge.
+
+### Changed
+
+- **`docs/ENHANCEMENT_PLAN_V2.md` PF1 section** — coverage note
+  corrected. The earlier "delegate to the agent" note was
+  architecturally wrong: a **black-box** agent can only sample
+  latency (list-vs-detail ×5), which the agent already ships in
+  `generators/performance_tests.py::generate_n_plus_one_journeys`.
+  Real query-count N+1 detection is **inherently in-process**, so it
+  lives as an engine pytest template the adopter runs in its own
+  suite. Correct split: **engine = the real detector (in-process
+  query count); agent = complementary black-box latency smoke.**
+  Neither replaces the other. PF1 STATUS marked template-shipped;
+  optional `hooks/perf-gate.sh` wrapper stays open.
+- **`docs/AI_TESTING_AGENT_VALIDATION.md`** — DOGFOOD 2026-07-03
+  banner added. The engine's S1 SAST gate (semgrep
+  `p/security-audit + p/owasp-top-ten`) was run against the
+  ai-testing-agent codebase and found **13 findings** the agent's
+  own security testing missed on itself: 8× `avoid-sqlalchemy-text`
+  (raw `text()` — triage each for binding), 1× XXE (FP —
+  allowlisted), 1× unescaped-HTML XSS (**real; fixed** with
+  `autoescape=True`), 3× MD5 (2 legit perceptual-hash FPs to
+  allowlist; 1 in the deprecated licensing subsystem). All 679
+  tests still pass after the two fixes. **This is A2 eval-proof-
+  in-miniature: the engine gate works on a codebase it wasn't
+  built for.**
+- **`README.md`** badge synced 0.17.0 → 0.17.2 (v0.17.1 shipped
+  from a parallel session without the badge update).
+
+### Verification
+
+- 86/86 tests pass (9 sync + 10 install-reconcile + 12 hooks +
+  33 orchestrator + 22 P2.11 unittest).
+- `pe docs check` clean at v0.17.2.
+
+### Wave pickup
+
+Next real wave (**v0.18.0**) — D1 design-critic agent + verified
+envelope + D2 axe-core Playwright + Lighthouse CI + PF3 Lighthouse
+perf budgets + backend p95 latency. Shares Lighthouse wiring
+between D2 and PF3 (one setup, two verticals).
+
+---
+
 ## [0.17.1] — 2026-07-03
 
 > Security wave, part 2 — **A9.2 API breaking-change gate**. Reuses the
