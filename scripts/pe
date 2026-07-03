@@ -73,6 +73,8 @@ SUBCOMMANDS
     incident propose      Synthesize a gate proposal from one incident (A3).
                           Proposes only; never modifies the engine repo.
     incident list         List materialized proposals in the current project.
+    memory <sub>          L3 auto-memory governance: ls / show / rm / verify /
+                          stale. Inspect + prune ~/.claude/projects/<slug>/memory/.
     gate parse <file>     Extract + validate gate-envelope JSON (E1)
     shadow decide ...     Phase 3 routing decision (enforce gated by --enforce; graduated 2026-06-28)
     shadow reconcile ...  Join shadow decisions for a slot to actual outcome
@@ -1103,6 +1105,60 @@ EOF
     esac
 }
 
+cmd_memory() {
+    # L3: auto-memory governance. Inspects + prunes
+    # ~/.claude/projects/<slug>/memory/. Never writes new entries —
+    # that stays with Claude Code's auto-memory system per the
+    # operator's global memory rules. See docs/MEMORY_GOVERNANCE.md.
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        ls|show|rm|verify|stale)
+            local py; py="$(pe_python)" || exit 1
+            exec "$py" "$ENGINE_DIR/scripts/pe_memory.py" "$sub" "$@"
+            ;;
+        ""|help|-h|--help)
+            cat <<EOF
+pe memory — auto-memory governance (L3)
+
+SUBCOMMANDS
+    ls    [--project <path>] [--type <t>] [--stale]
+              List entries with age + staleness flag.
+    show  <name> [--project <path>]
+              Display frontmatter + body of one entry.
+    rm    <name> [--project <path>] [--yes]
+              Delete an entry AND remove its line from MEMORY.md
+              index (prompts unless --yes).
+    verify <name> [--project <path>]
+              Stamp metadata.last_verified = today (resets staleness
+              clock without editing body — for entries the operator
+              has re-checked and re-endorsed).
+    stale [--project <path>] [--older-than-days N]
+              List entries past their freshness window. Print
+              "verify or delete" recommendation for each.
+
+STALENESS RULE
+    An entry is stale iff:
+        now - max(mtime, last_verified) > (freshness_days or DEFAULT)
+
+    Defaults per type (when metadata.freshness_days absent):
+      user       90d    identities change slowly
+      feedback   60d    preferences drift
+      project    14d    state changes fast
+      reference  180d   pointers rarely rot
+      (unknown)  30d
+
+See docs/MEMORY_GOVERNANCE.md for the doctrine.
+EOF
+            ;;
+        *)
+            echo "ERROR: unknown 'pe memory' subcommand: $sub" >&2
+            echo "Run 'pe memory help' for usage." >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_gate() {
     local sub="${1:-}"
     shift || true
@@ -1239,6 +1295,7 @@ case "$cmd" in
     telemetry)  cmd_telemetry "$@" ;;
     agent)      cmd_agent "$@" ;;
     incident)   cmd_incident "$@" ;;
+    memory)     cmd_memory "$@" ;;
     gate)       cmd_gate "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;

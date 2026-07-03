@@ -179,6 +179,54 @@ agent gates actually catch anything.
   `rounded-xl`" drift), `shadow_tokens`. Optional `stylelint + stylelint-config-tailwindcss` for
   class-order + custom-CSS-that-should-be-a-token. Graceful skip if adopter hasn't populated lists.
 
+> **D1–D4 above are the design FLOOR (prevent bad + enforce consistency + a11y). D5–D8 below are the
+> CEILING (reach for award-grade). Full research + tooling + method: `docs/DESIGN_EXCELLENCE.md`.
+> Key model: engine deterministically owns ~70% (usability/perf/consistency/a11y); the 20%
+> creativity is scored + referenced + human-bought, never fully automated. Bar is
+> SURFACE-DIFFERENTIATED: client-facing (galleries/tenant sites) target Awwwards ≥8.0; internal app
+> targets Linear/Stripe "quiet excellence" ≥7.0 — NOT flash.**
+
+### D5 Upgrade design-critic from floor to ceiling ⭐ highest-leverage design item
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet (vision) · **[MISSING — critic ships as floor-only]**
+- **File:** `agents/design-critic.md` (extend the shipped rubric), `docs/DESIGN_EXCELLENCE.md` §5.
+- **Fix:** keep the 9-tell floor; ADD (a) Awwwards-dimension scoring (Design 40 / Usability 30 /
+  Creativity 20 / Content 10), surface-differentiated target (client ≥8.0, internal ≥7.0);
+  (b) scoring against an *aspirational* reference (D7), not just the drift reference; (c) a concrete
+  "top-3 changes to gain the next point" output. FAIL client surfaces below bar. Turns the critic
+  from "not-bad?" into "how far from great, and why."
+
+### D6 Motion-craft + CWV-under-motion gate
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]**
+- **File:** `agents/design-critic.md` (motion dimension) + Lighthouse budget config (D2/PF3 reuse).
+- **Fix:** when a diff adds animation (GSAP/Motion/CSS transitions), require `prefers-reduced-motion`
+  honored, NO Core-Web-Vitals regression (Lighthouse budget holds *with* motion), and motion-has-
+  purpose (critic judgment — communicates state/space, not decoration). Blocks effect-stacking (the
+  #1 amateur tell). Tooling: **GSAP** for Jinja/Alpine surfaces, **Motion** only if React,
+  **Lenis** for smooth-scroll.
+
+### D7 Aspirational reference library + Style Dictionary token pipeline
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet + operator taste · **[MISSING]**
+- **Files:** `docs/design/aspirational/<archetype>.png` (marketing/gallery/dashboard/form), adopt
+  **Style Dictionary** for the token source.
+- **Fix:** curate 1 award-grade reference per surface archetype (source: Awwwards/Godly/Land-book/
+  Mobbin per DESIGN_EXCELLENCE §4) — this is what D5 scores against. Adopt Style Dictionary so tokens
+  v2 become a single source (CSS-vars/Tailwind/per-tenant theme) that outlives Tailwind. Feeds
+  8CStudio's tokens v2 as the first consumer.
+
+### D8 Signature-system requirement
+- **Severity:** MEDIUM · **Effort:** S · **Model:** Sonnet · **[MISSING]**
+- **File:** `agents/design-critic.md` (upgrade tell #9 from soft to hard on flagship screens),
+  product design docs.
+- **Fix:** every product must have ≥1 signature element + a distinctive type system (for 8CStudio:
+  the film-slate/timecode/slugline motifs already proposed). The critic FAILs "no signature" on
+  flagship/marketing screens (not every screen). Turns the deepest AI-tell ("nothing ties this to
+  the product") into a product requirement.
+
+> **Future-proofing ritual (mirrors L0):** a **quarterly design-scan** — CEO/retro agent reviews
+> recent Awwwards/CSSDA winners + new motion/perf/token tools, refreshes `docs/design/aspirational/`,
+> files new capability as D-items. This is the "always best in market" mechanism — design trends
+> churn; the ritual keeps the ceiling current without a rebuild. Start NOW (ritual, not a build).
+
 ---
 
 ## PF — PERFORMANCE: make "fast" a gate, not a hope (added 2026-07-03 per operator)
@@ -435,6 +483,97 @@ agent gates actually catch anything.
 
 ---
 
+## TOK — TOKEN ECONOMY: spend less per session (added 2026-07-03 per operator, re: lean-ctx)
+
+> **The key insight the operator needs:** token spend is THREE distinct buckets, each needs a
+> different tool, and `lean-ctx` only attacks one of them. Chasing a single silver-bullet tool
+> misses two-thirds of the cost. The buckets:
+> 1. **Always-loaded context** (system prompt + CLAUDE.md + tool schemas) — re-billed EVERY turn.
+> 2. **Read/tool-output tokens** (file reads, bash/grep output) — grows with how the agent explores.
+> 3. **Output tokens** (what the model writes) — **3–10× more expensive per token than input.**
+>
+> `lean-ctx` (local Rust MCP binary: tree-sitter AST reads, shell-output compression, cached
+> re-reads ~13 tok, claims 60–90% on reads/shell) attacks **bucket 2 only**. `Headroom` is a
+> compression *proxy* between agent and LLM (60–95%, can wrap lean-ctx). `Caveman` is a terse-output
+> skill (bucket 3, ~65%). The engine already handles most of bucket 1. **Order of attack below is by
+> ROI-and-safety, not by hype — and NOTHING gets adopted before TOK0 (measurement), because a lossy
+> compressor you can't measure can silently drop gate catch-rate.**
+
+### TOK0 Measure before optimizing (hard prerequisite) — depends on A1/L1
+- **Severity:** HIGH (gating) · **Effort:** — (it IS A1/L1) · **[BLOCKED: budgets still `"inf"`]**
+- **Why:** you cannot prove any compression tool helps — or, worse, catch when it *hurts* a gate's
+  catch-rate — without per-run token telemetry. Budgets are hardcoded `"inf"` today (A1 unbuilt).
+  **Do not adopt lean-ctx/Headroom/any lossy layer before A1+L1 emit per-run token counts.**
+  Adopting blind is the exact trap A2 (eval harness) exists to prevent.
+
+### TOK1 Prompt-cache hygiene — the biggest FREE lever, native, do now ⭐
+- **Severity:** HIGH · **Effort:** S · **[PARTIAL — done by accident, not by rule]**
+- **Why:** Claude's prompt cache gives a **~90% discount on cached input tokens** — but only on the
+  UNCHANGED prefix (system prompt → CLAUDE.md → tool set → early history). Every time CLAUDE.md is
+  edited mid-session, or the tool set shuffles, or an agent rewrites early context, the cache
+  **breaks** and the whole prefix is re-billed at full price. The context diet (P7.1) shrank the
+  prefix; cache hygiene keeps it *stable*.
+- **Files:** `docs/OPERATOR_WORKFLOW_V3.md` (new "Cache hygiene" rule under §2), optional
+  `hooks/cache-hygiene-warn.sh` (PostToolUse on Edit/Write of `CLAUDE.md`/`*.rules.md` mid-session →
+  soft WARN "editing loaded-prefix mid-session breaks the prompt cache; batch to session end").
+- **Fix:** codify as an operator rule + the soft check above: don't mutate CLAUDE.md/rules mid-session
+  (batch doc edits to session end); keep a stable tool set (this env's deferred-tools/ToolSearch
+  already helps — tool schemas load lazily, not all upfront); avoid agents that rewrite early history.
+  This is free money the engine leaves on the table today.
+
+### TOK2 Read hygiene — retrieve, don't slurp (engine-native, mostly there)
+- **Severity:** MEDIUM · **Effort:** S · **[PARTIAL]**
+- **Why:** bucket 2 grows fastest when agents `Read` whole large files instead of querying. The
+  engine already has the right tools — `research_index.py` (RAG retrieval) and symbol/grep search —
+  but no *discipline* enforcing their use over whole-file reads.
+- **Fix:** a soft PostToolUse/preamble nudge: prefer RAG/symbol/grep/`Read` with `offset+limit` over
+  whole-file reads; the subagent pattern (already heavily used) is the strongest native lever — a
+  subagent burns its own context and returns a summary, so a 50-file sweep costs the parent ~1
+  summary, not 50 files. **This is what lean-ctx automates; the engine gets ~70% of it free via
+  subagents + RAG.** Lean-ctx's marginal win is AST-compressing the reads that remain.
+
+### TOK3 Output-token discipline — highest $/token, under-attacked ⭐
+- **Severity:** MEDIUM-HIGH · **Effort:** S · **[MISSING for prose]**
+- **Why:** output tokens cost **3–10× input**. Ponytail (P6.1) already cuts *code* output ~54%, but
+  the engine's agents emit long prose (envelope contracts, multi-page reports). That's the most
+  expensive token class, largely unmanaged.
+- **Files:** a shared `agents/_terse-output.md` snippet (like `_gate-contract.md`) templated into the
+  MECHANICAL agents' frontmatter/preamble: `agents/{doc-updater,build-error-resolver}.md` + the
+  headless-batch preambles. Do NOT add it to `agents/{architect,code-reviewer,security-reviewer,`
+  `design-critic,retrospective-agent,ceo}.md`.
+- **Fix:** a `terse-output` mode (Caveman-style) for the MECHANICAL agents (doc-updater, build-error-
+  resolver, mechanical batches) — structured, minimal prose. **Keep the JUDGMENT agents verbose**
+  (architect, reviewers, retro — their reasoning IS the product). Selective, not blanket. Cheapest
+  high-ROI item here.
+
+### TOK4 lean-ctx / Headroom — pilot as an optional read/shell compressor, gated
+- **Severity:** MEDIUM · **Effort:** M · **[EVALUATE — do not default-adopt]**
+- **Verdict:** legitimate and it fills the real bucket-2 gap TOK2 can't fully close — BUT adopt only
+  after TOK0/1/2/3, and only through a gated pilot, because of three real risks:
+  1. **Lossy on precision-critical reads.** A security/design reviewer needs the EXACT code; an
+     AST-summarized or compressed read can drop the detail the gate depends on → lower catch-rate.
+     Pilot must run against the A2 eval corpus and prove catch-rate is unchanged before adoption.
+  2. **Tool-schema bloat (ironic).** lean-ctx ships "76 MCP tools" — tool schemas are *always-loaded*
+     (bucket 1). A token-reducer that injects 76 schemas could net-*increase* per-turn cost. Only
+     viable if tools load lazily (deferred/ToolSearch, as this env does). Verify before wiring.
+  3. **Supply-chain / injection surface (ties to S4).** A layer that "decides what agents read" is a
+     man-in-the-middle on every read — a powerful prompt-injection and exfiltration point, from a
+     young single-maintainer project. Treat as an untrusted dependency: pin a version, sandbox, and
+     put it behind `pe verify` (S4) before it touches real repos.
+- **Recommendation:** wire it in a throwaway worktree, measure (TOK0) read-token delta AND gate
+  catch-rate (A2) on the same tasks; adopt only if it cuts tokens materially *without* dropping
+  catch-rate and *without* inflating bucket 1. Prefer using it as a targeted read-compressor for
+  the mechanical lanes, NOT globally in front of the gate reviewers.
+
+### What to SKIP
+- **Don't** put a lossy compression proxy globally in front of the gate reviewers — precision beats
+  brevity where catch-rate is the product.
+- **Don't** adopt any 76-tool MCP server that loads schemas eagerly — measure bucket-1 impact first.
+- **Don't** optimize tokens before A1 telemetry exists — you'd be flying blind on both savings and
+  quality regressions.
+
+---
+
 ## L — LANDSCAPE: 2026 market-informed gaps (things a codebase audit can't surface)
 
 > Sourced from a scan of leading agentic-engineering practice (agent observability playbooks,
@@ -488,17 +627,26 @@ agent gates actually catch anything.
   can't game."
 
 ### L3 Memory governance (inspect / correct / delete / staleness / access) — extends A7 + ties to S4
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]**
-- **Why:** A7 (cross-session memory) is about *learning*; the 2026 memory literature is emphatic
-  that the hard part is **governance**, and that it's "an expensive architectural retrofit" if
-  deferred: inspect/correct/delete tooling, retention + deletion policy, access control, and
-  **staleness handling** (a retrieved fact that's now wrong — the exact hazard behind recalled
-  memories in this very system). Multi-scope tagging (user/agent/session/org) is the pattern.
-- **Fix:** before A7 accumulates memory, define: how memories are viewed and deleted (`pe memory
-  ls/rm`), a TTL / staleness flag per entry (recalled facts get "verify before acting" — which the
-  operator's own memory rules already gesture at), scope tags, and who/what can write. This closes
-  the loop with S4 (poisoned-memory threat): governed memory is auditable memory. Small now,
-  painful later.
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.24.0]**
+- **Files (shipped v0.24.0):** `scripts/pe_memory.py` (stdlib-only parser + 5 subcommand
+  handlers), `scripts/pe` (`cmd_memory` dispatch), `docs/MEMORY_GOVERNANCE.md` (doctrine),
+  `tests/test_pe_memory.py` (25 unit tests: frontmatter parser, entry loader, staleness rule,
+  index I/O, desync detection, stamp_verified round-trip).
+- **What shipped:** `pe memory ls|show|rm|verify|stale` covers the inspect / correct / delete
+  surface. Optional new frontmatter fields — `freshness_days`, `last_verified`, `scope` — are
+  all backward-compatible; existing entries keep working unchanged with per-type default
+  freshness windows (user 90d, feedback 60d, project 14d, reference 180d, unknown 30d).
+  Staleness rule is `now - max(mtime, last_verified) >= freshness` — `pe memory verify` stamps
+  today's date, resetting the clock without editing the body (the *endorse* path).
+  MEMORY.md index kept in sync automatically by `pe memory rm`; drift between on-disk files
+  and index lines surfaces as a warning in `pe memory ls`.
+- **What's deliberately deferred:** access-control enforcement (`scope: agent` is a tag today,
+  not a gate — Claude Code decides who can write; enforcement waits for a write-hook surface).
+  Auto-write side stays with Claude Code + operator's global memory rules — L3 ships the
+  inspection side only. Poisoned-memory scanning (S4 tie-in) rides on the audit surface L3
+  now provides.
+- **Smoke against engine's own memory dir:** ~6 project entries; `ls`, `show`, `stale`,
+  `verify` all worked end-to-end and stamped a real entry with `last_verified`.
 
 ### L4 Cost attribution — spend per outcome, not just per run — extends A1
 - **Severity:** LOW-MEDIUM · **Effort:** S · **Model:** Sonnet · **[PARTIAL v0.19.0 — per-turn cost live; retro surfacing still TODO]**
@@ -635,6 +783,18 @@ agent gates actually catch anything.
     (eval → trajectory + held-out), L4 with A1/L1 (cost attribution). L0 (quarterly landscape
     scan) starts NOW — it's a process ritual, not a build, and it's the durable answer to "how do
     we keep finding enhancements."
+11b. **D5–D8 (design ceiling / award-grade) — after the D1–D4 floor is solid, invest on
+    client-facing surfaces:** D5 (critic floor→ceiling) is the highest-leverage; D7 (aspirational
+    references + Style Dictionary) feeds it; D6 (motion craft) + D8 (signature) on flagship/Delivery
+    surfaces. Full spec: `docs/DESIGN_EXCELLENCE.md`. The quarterly design-scan ritual starts NOW.
+    Sequence relative to product: these serve 8CStudio's Delivery gallery "beats Pixieset" bar
+    (ROADMAP C4) — do D5+D7 before the gallery viewer ships.
+11. **TOK (token economy) — start the FREE items now, gate the rest on A1:** TOK1 (cache hygiene)
+    + TOK3 (terse mechanical output) are zero-risk, do them alongside step 1–2. TOK2 (read hygiene)
+    is mostly-present (subagents/RAG) — codify the nudge opportunistically. **TOK0/TOK4 are BLOCKED
+    on A1 telemetry (step 4)** — do not pilot lean-ctx before then, and only via the gated worktree
+    eval in TOK4. A9 (testing-agent MCP integration) interleaves with D3/S3/PF — do A9 FIRST where
+    it converts a build to a wire.
 
 **Cross-reference:** this plan is sequenced to serve `../../8CStudio/docs/ROADMAP.md` — S1/S2/D2
 harden the gates the Delivery build (Wave 2) runs under; A6 (domain modules) is the "extract what

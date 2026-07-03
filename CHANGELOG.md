@@ -7,6 +7,138 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.24.0] — 2026-07-03
+
+> **L3 — auto-memory governance (inspect / verify / delete /
+> staleness).** The 2026 memory literature is emphatic that the hard
+> part of agent memory isn't *learning* — it's **governance**:
+> inspect / correct / delete tooling, retention + deletion policy,
+> staleness handling. Deferring these is "an expensive architectural
+> retrofit." Every project directory has a companion
+> `~/.claude/projects/<slug>/memory/` where Claude Code writes
+> long-lived facts; before v0.24.0 the engine had zero tooling for
+> auditing or pruning that state. This release ships the missing
+> inspection side.
+>
+> **Deliberately out of scope:** auto-writes stay with Claude Code
+> (governed by the operator's global memory rules), and access
+> control is not enforced yet. Enforcement waits for Claude Code
+> to expose a write hook — the `scope` schema field ships now so
+> future access-control work has a stable data model.
+
+### Added — `pe memory <sub>` CLI
+
+- **`scripts/pe_memory.py`** — new module, stdlib-only. Reads
+  `~/.claude/projects/<slug>/memory/*.md` entries with YAML
+  frontmatter (nested two levels: top-level `name` + `description`,
+  nested `metadata:` dict with `node_type` / `type` /
+  `originSessionId` and new L3 fields).
+
+- **`pe memory ls [--project <path>] [--type <t>] [--stale]`** —
+  list entries with type, age-in-days, staleness flag,
+  description. Warns via stderr when `MEMORY.md` and on-disk files
+  have drifted (files without index lines, or index lines pointing
+  at missing files).
+
+- **`pe memory show <name> [--project <path>]`** — full
+  frontmatter + body dump, with computed `effective_freshness_days`
+  and current staleness state at the top.
+
+- **`pe memory rm <name> [--project <path>] [--yes]`** — deletes
+  the file AND removes its line from `MEMORY.md` index. Prompts
+  interactively unless `--yes`.
+
+- **`pe memory verify <name> [--project <path>]`** — stamps
+  `metadata.last_verified = today` (ISO date) on an entry the
+  operator has re-checked. Resets the staleness clock without
+  editing the body. This is the *endorse* path — cheaper than
+  rewriting, honest about the fact that the fact still applies.
+  Preserves all other metadata + body prose.
+
+- **`pe memory stale [--project <path>] [--older-than-days N]`** —
+  the pruning workflow. Lists entries past their per-type
+  freshness window (or past N days if `--older-than-days` is
+  set). Each row includes the two next actions:
+  `pe memory verify <name>` (still true) or `pe memory rm <name>`
+  (obsolete).
+
+### Added — schema (all optional, backward-compatible)
+
+Existing entries keep working unchanged. Three new optional fields
+under `metadata:`:
+
+- **`freshness_days: <int>`** — TTL override. Defaults per type:
+  `user` = 90d, `feedback` = 60d, `project` = 14d,
+  `reference` = 180d, (unknown) = 30d.
+- **`last_verified: <YYYY-MM-DD>`** — auto-stamped by
+  `pe memory verify`. When present, staleness measured from this
+  date rather than mtime.
+- **`scope: user | agent | session | org`** — advisory tag for
+  multi-scope memory. Not read/write-enforced today; shipping the
+  schema now so future access-control work has a stable data model.
+
+### Staleness rule
+
+An entry is stale iff:
+
+    now - max(mtime, last_verified) >= (freshness_days or default_by_type)
+
+Last-touched-date is the file's mtime OR the `last_verified` stamp,
+whichever is later. Adding prose bumps mtime and counts as
+touching; `pe memory verify` counts as touching without changing
+content.
+
+### Added — `docs/MEMORY_GOVERNANCE.md`
+
+Doctrine doc explaining: why the L3 layer exists, the pruning
+workflow, what the schema does and doesn't do, migration notes for
+existing entries. Reads as an extension to the operator's global
+`~/.claude/CLAUDE.md` memory rules, not a replacement.
+
+### Added — tests
+
+- **`tests/test_pe_memory.py`** — 25 unit tests:
+    * Frontmatter parser: flat fields, nested metadata dict, quoted
+      strings, malformed input raises.
+    * Entry loader: all fields extracted, missing optionals default
+      to `None`, bad `last_verified` date leaves it `None`.
+    * Staleness: per-type defaults (all 4 types + unknown fallback),
+      explicit `freshness_days` overrides default, `last_verified`
+      resets the clock past even a 100-day-old mtime.
+    * List entries: excludes `MEMORY.md` itself, missing dir returns
+      empty list, malformed entries surfaced (not silently dropped).
+    * MEMORY.md index I/O: bullet-line parser, ignores non-matching
+      lines, remove-by-filename, missing-name returns False.
+    * Desync detection: file-not-in-index reported, index-references-
+      missing-file reported, clean state = zero problems.
+    * `stamp_verified` mutation: adds when missing, replaces when
+      present, preserves body, preserves other metadata (scope,
+      freshness_days).
+- **`tests/test_pe_memory.sh`** — shell wrapper for the standard
+  test-suite loop. All 11 test scripts + `pe docs check` green.
+
+### Notes
+
+- Total agent count unchanged: 20.
+- The engine's own memory directory has 6 entries (all `project`
+  type, all created this week). Real-project smoke on the engine
+  directory confirmed `ls / show / stale / verify` work end-to-end
+  and edited a real entry (project-workflow-v3) with a
+  `last_verified` stamp.
+- Test file count: 11 scripts (was 10 — pe_memory added).
+
+### Migration
+
+- No breaking changes. Existing entries — every entry currently in
+  `~/.claude/projects/*/memory/` — have no L3 metadata fields.
+  Loaders return `None` for missing fields; staleness falls back to
+  per-type defaults. Operators who want tighter control can add
+  fields when convenient.
+- Adopters: `pe upgrade` + `pe install <project>` picks up the new
+  subcommand.
+
+---
+
 ## [0.23.1] — 2026-07-03
 
 > **Patch — model/cost accounting in `pe agent run` (found by real
