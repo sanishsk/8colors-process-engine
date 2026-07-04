@@ -36,6 +36,7 @@ if sys.version_info < (3, 11):
 
 import argparse
 import json
+import re
 import subprocess
 import tomllib
 import uuid
@@ -43,6 +44,10 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+# A4 (v0.42.0): validate --agent flag matches a bare identifier before
+# resolving to agents/<name>.md. Mirrors agent_runner._AGENT_NAME_RE.
+_AGENT_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 ENGINE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_ROUTING_POLICY = ENGINE_DIR / "policy" / "failure_class_routing.toml"
@@ -669,7 +674,376 @@ def cmd_decide(args: argparse.Namespace) -> int:
         "enforced": bool(getattr(args, "enforce", False)),
     }
     print(json.dumps(summary, indent=2))
+
+    # A4 auto-escalation loop (v0.42.0). Runs only when both
+    # --enforce and --auto-execute are set. Reads the initial decision
+    # and, if it's an escalation, invokes the same agent at the next
+    # tier with the FAIL envelope as brief, then re-parses + re-routes
+    # until: continue (PASS/WARN) → 0; halt_to_human → 1; breaker trip
+    # → 5; max iterations reached → 6; agent invocation failure → 7.
+    #
+    # See tests/test_a4_loop.py for the decision-tree coverage. This
+    # path is the §9 watchpoint — untested against real Claude
+    # invocations until first-fire evidence lands.
+    if getattr(args, "auto_execute", False):
+        if not getattr(args, "enforce", False):
+            print(
+                "ERROR: --auto-execute requires --enforce (A4 loop is not a shadow op).",
+                file=sys.stderr,
+            )
+            return 2
+        if not getattr(args, "agent", None):
+            print(
+                "ERROR: --auto-execute requires --agent <name> (which agent to invoke on escalation).",
+                file=sys.stderr,
+            )
+            return 2
+        # v0.42.0 reviewer HIGH: validate --agent points at an actual
+        # agents/<name>.md before engaging the loop. Otherwise the first
+        # escalation would spawn `pe agent run <bogus>` which exits
+        # non-zero, and the operator sees a misleading A4_EXIT_AGENT_FAIL
+        # (7) instead of a clear "unknown agent" message.
+        agent_path = ENGINE_DIR / "agents" / f"{args.agent}.md"
+        if not _AGENT_NAME_RE.match(args.agent) or not agent_path.is_file():
+            print(
+                f"ERROR: --auto-execute --agent {args.agent!r} — agent file not found at {agent_path}. "
+                "Pass a bare agent name (e.g. `code-reviewer`) matching agents/<name>.md.",
+                file=sys.stderr,
+            )
+            return 2
+        return _run_a4_loop(
+            args=args,
+            initial_record=record,
+            initial_decision=decision,
+            initial_breaker=breaker_state,
+            decisions_path=decisions_path,
+            cumulative_state_path=cumulative_state_path,
+            routing_policy=routing_policy,
+            breaker_policy=breaker_policy,
+        )
     return 0
+
+
+# ─── A4 auto-escalation loop (v0.42.0) ─────────────────────────────────────
+
+
+# A4 exit codes (added to the existing 0/1/2/4 set from cmd_decide):
+A4_EXIT_CONTINUE = 0   # loop halted on PASS/WARN
+A4_EXIT_HALT_HUMAN = 1  # loop halted on halt_to_human decision
+A4_EXIT_BREAKER = 5     # breaker tripped mid-loop
+A4_EXIT_MAX_ITER = 6    # iteration cap reached without resolution
+A4_EXIT_AGENT_FAIL = 7  # `pe agent run` subprocess non-zero or missing artefact
+
+
+# The invoker is factored out so tests can inject a deterministic
+# escalation trajectory without spawning `claude -p`. Production
+# callers use `_default_invoker`, which shells out to
+# `pe agent run --brief - --out <path>`.
+def _default_invoker(
+    agent_name: str,
+    brief: str,
+    next_tier: str,
+    envelope_out_path: Path,
+    runs_root: Path,
+) -> int:
+    """Invoke `pe agent run` and require it emit an envelope at envelope_out_path."""
+    pe_cli = ENGINE_DIR / "scripts" / "pe"
+    argv = [
+        str(pe_cli),
+        "agent",
+        "run",
+        agent_name,
+        "--brief",
+        "-",
+        "--out",
+        str(envelope_out_path),
+        "--model",
+        next_tier,
+    ]
+    envelope_out_path.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        argv,
+        input=brief,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        print(
+            f"[a4] pe agent run exit {proc.returncode}: {proc.stderr.strip()}",
+            file=sys.stderr,
+        )
+    return proc.returncode
+
+
+# Test-only override. See tests/test_a4_loop.py.
+_INVOKER_OVERRIDE: Any = None
+
+
+def _build_escalation_brief(
+    envelope: dict[str, Any] | None,
+    prior_iteration: int,
+    next_tier: str,
+) -> str:
+    """Compose the escalation brief handed to the next-tier agent.
+
+    Deterministic shape so the receiving agent can parse it if needed.
+    Not a template — the operator can override by wrapping the CLI, but
+    the default is honest about what the loop is doing.
+    """
+    findings = (envelope or {}).get("findings") or []
+    summary_lines = [
+        "# A4 auto-escalation brief",
+        "",
+        f"You are being escalated to tier `{next_tier}` because the "
+        f"previous attempt (iteration {prior_iteration}) FAILed with "
+        "`failure_class = worker_quality` on the gate envelope below.",
+        "",
+        f"Gate: `{(envelope or {}).get('gate_name', 'unknown')}`",
+        f"Verdict: `{(envelope or {}).get('verdict', 'FAIL')}`",
+        f"Findings ({len(findings)}):",
+        "",
+    ]
+    for i, f in enumerate(findings[:20], 1):
+        if isinstance(f, dict):
+            sev = f.get("severity", "?")
+            rule = f.get("rule", "?")
+            msg = str(f.get("message", "")).strip().splitlines()
+            first = msg[0] if msg else ""
+            summary_lines.append(f"{i}. [{sev}] `{rule}` — {first}")
+    if len(findings) > 20:
+        summary_lines.append(f"… +{len(findings) - 20} more findings")
+    summary_lines.extend(
+        [
+            "",
+            "Address the CRITICAL and HIGH findings. Emit a new gate ",
+            "envelope that will be parsed by `pe gate parse`. The A4 ",
+            "loop will re-route on the new envelope.",
+        ]
+    )
+    return "\n".join(summary_lines)
+
+
+def _run_a4_loop(
+    *,
+    args: argparse.Namespace,
+    initial_record: "ShadowDecisionRecord",
+    initial_decision: RouterDecision,
+    initial_breaker: BreakerState,
+    decisions_path: Path,
+    cumulative_state_path: Path,
+    routing_policy: dict[str, Any],
+    breaker_policy: dict[str, Any],
+) -> int:
+    """Iterate: escalate → invoke agent → re-parse → re-route → repeat.
+
+    Iterations are 1-indexed. The loop halts when
+    ``current_iteration >= max_iterations`` BEFORE the next escalation
+    invocation — so ``iteration=1`` + ``max_iterations=2`` allows one
+    escalation (iteration 2 emitted). ``max_iterations=1`` would halt
+    immediately with A4_EXIT_MAX_ITER if the first decision is
+    escalate_one_tier.
+    """
+    max_iterations = int(getattr(args, "max_iterations", 5) or 5)
+    ladder = routing_policy["ladder"]["tiers"]
+
+    print(
+        "[a4] auto-escalation loop ENGAGED — enforced=true, "
+        "agent="
+        f"{args.agent}. §9 watchpoint: tested=false until first-fire "
+        "review lands. Decisions log: "
+        f"{decisions_path}",
+        file=sys.stderr,
+    )
+
+    current_decision = initial_decision
+    current_envelope: dict[str, Any] | None = initial_record.envelope
+    current_tier = args.current_tier
+    current_iteration = args.iteration
+    current_breaker = initial_breaker
+
+    # Emit a per-run trajectory log so operators can inspect what
+    # happened without joining decisions.jsonl by slot_id.
+    trajectory_dir = decisions_path.parent / "a4-runs" / initial_record.decision_id
+    trajectory_dir.mkdir(parents=True, exist_ok=True)
+    trajectory_path = trajectory_dir / "trajectory.jsonl"
+
+    def _append_trajectory(entry: dict[str, Any]) -> None:
+        with trajectory_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+
+    _append_trajectory(
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "kind": "loop_start",
+            "slot_id": args.slot_id,
+            "starting_iteration": current_iteration,
+            "starting_tier": current_tier,
+            "max_iterations": max_iterations,
+            "initial_decision": asdict(current_decision),
+        }
+    )
+
+    invoker = _INVOKER_OVERRIDE or _default_invoker
+    runs_root = decisions_path.parent / "a4-runs"
+
+    while True:
+        # Halt: breaker
+        if current_breaker.breaker_would_trip:
+            print(
+                f"[a4] loop-halt: breaker tripped ({current_breaker.trip_reason})",
+                file=sys.stderr,
+            )
+            _append_trajectory(
+                {"ts": datetime.now(timezone.utc).isoformat(), "kind": "halt", "reason": "breaker", "trip": current_breaker.trip_reason}
+            )
+            return A4_EXIT_BREAKER
+
+        action = current_decision.action
+
+        # Halt: PASS/WARN
+        if action == "continue":
+            print(
+                f"[a4] loop-continue: verdict resolved after iteration {current_iteration}",
+                file=sys.stderr,
+            )
+            _append_trajectory(
+                {"ts": datetime.now(timezone.utc).isoformat(), "kind": "halt", "reason": "continue", "final_iteration": current_iteration}
+            )
+            return A4_EXIT_CONTINUE
+
+        # Halt: halt_to_human
+        if action == "halt_to_human":
+            print(
+                f"[a4] loop-halt: halt_to_human at iteration {current_iteration} (rule={current_decision.rule_matched})",
+                file=sys.stderr,
+            )
+            _append_trajectory(
+                {"ts": datetime.now(timezone.utc).isoformat(), "kind": "halt", "reason": "halt_to_human", "rule": current_decision.rule_matched}
+            )
+            return A4_EXIT_HALT_HUMAN
+
+        # Any other action shouldn't happen, but be explicit.
+        if action != "escalate_one_tier":
+            print(
+                f"[a4] loop-halt: unexpected action {action!r}",
+                file=sys.stderr,
+            )
+            return A4_EXIT_HALT_HUMAN
+
+        # Halt: iteration cap
+        if current_iteration >= max_iterations:
+            print(
+                f"[a4] loop-halt: max_iterations={max_iterations} reached without resolution",
+                file=sys.stderr,
+            )
+            _append_trajectory(
+                {"ts": datetime.now(timezone.utc).isoformat(), "kind": "halt", "reason": "max_iterations", "cap": max_iterations}
+            )
+            return A4_EXIT_MAX_ITER
+
+        # Escalate.
+        next_tier = current_decision.to_tier
+        if not next_tier or next_tier not in ladder:
+            print(
+                f"[a4] loop-halt: escalation to unknown tier {next_tier!r}",
+                file=sys.stderr,
+            )
+            return A4_EXIT_HALT_HUMAN
+
+        brief = _build_escalation_brief(current_envelope, current_iteration, next_tier)
+
+        new_iteration = current_iteration + 1
+        new_envelope_path = runs_root / initial_record.decision_id / f"iter-{new_iteration}-envelope.json"
+
+        _append_trajectory(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "kind": "invoke",
+                "iteration": new_iteration,
+                "from_tier": current_tier,
+                "to_tier": next_tier,
+                "agent": args.agent,
+                "envelope_out": str(new_envelope_path),
+            }
+        )
+
+        try:
+            rc = invoker(
+                args.agent,
+                brief,
+                next_tier,
+                new_envelope_path,
+                runs_root,
+            )
+        except Exception as e:  # noqa: BLE001 — invoker path is best-effort
+            print(f"[a4] loop-halt: agent invocation raised: {e}", file=sys.stderr)
+            _append_trajectory(
+                {"ts": datetime.now(timezone.utc).isoformat(), "kind": "halt", "reason": "invoker_exception", "error": str(e)}
+            )
+            return A4_EXIT_AGENT_FAIL
+
+        if rc != 0 or not new_envelope_path.exists():
+            print(
+                f"[a4] loop-halt: agent invocation failed (rc={rc}, artefact_present={new_envelope_path.exists()})",
+                file=sys.stderr,
+            )
+            _append_trajectory(
+                {"ts": datetime.now(timezone.utc).isoformat(), "kind": "halt", "reason": "invoker_nonzero", "rc": rc, "artefact_present": new_envelope_path.exists()}
+            )
+            return A4_EXIT_AGENT_FAIL
+
+        # Re-parse + re-route on the new envelope.
+        gate_exit, new_envelope, _raw = parse_envelope_via_pe_gate(
+            new_envelope_path, bare=args.bare
+        )
+        current_decision = route(
+            envelope=new_envelope or {},
+            gate_exit_code=gate_exit,
+            current_worker_tier=next_tier,
+            routing_policy=routing_policy,
+        )
+        try:
+            current_breaker = compute_breaker_state(
+                iteration=new_iteration,
+                slot_kind=args.slot_kind,
+                envelope=new_envelope,
+                breaker_policy=breaker_policy,
+                cumulative_state_path=cumulative_state_path,
+            )
+        except PolicyError as e:
+            print(f"[a4] loop-halt: breaker policy error: {e}", file=sys.stderr)
+            return A4_EXIT_HALT_HUMAN
+        update_cumulative_state(current_breaker, cumulative_state_path)
+
+        new_record = ShadowDecisionRecord(
+            decision_id=str(uuid.uuid4()),
+            ts=datetime.now(timezone.utc).isoformat(),
+            slot_id=args.slot_id,
+            slot_kind=args.slot_kind,
+            iteration=new_iteration,
+            gate_name=(new_envelope or {}).get("gate_name", "unknown"),
+            envelope=new_envelope or {},
+            router_decision=asdict(current_decision),
+            breaker_state_at_decision=asdict(current_breaker),
+            enforced=True,
+        )
+        append_decision(new_record, decisions_path)
+
+        _append_trajectory(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "kind": "post_invoke",
+                "iteration": new_iteration,
+                "gate_exit": gate_exit,
+                "decision": asdict(current_decision),
+                "breaker": asdict(current_breaker),
+            }
+        )
+
+        current_envelope = new_envelope
+        current_tier = next_tier
+        current_iteration = new_iteration
 
 
 def cmd_reconcile(args: argparse.Namespace) -> int:
@@ -743,6 +1117,33 @@ def build_parser() -> argparse.ArgumentParser:
             "remains False for backwards-compat + so test fixtures "
             "stay non-enforcing."
         ),
+    )
+    d.add_argument(
+        "--auto-execute",
+        action="store_true",
+        help=(
+            "A4 (v0.42.0): close the execution loop. When the decision "
+            "is escalate_one_tier, invoke `pe agent run <agent> --model "
+            "<next-tier>` with the FAIL envelope as brief, re-parse the "
+            "emitted envelope, and re-route. Bounded by --max-iterations "
+            "and the breaker. Requires --enforce + --agent. §9 watchpoint: "
+            "tested=false against real Claude invocations until first-fire "
+            "review lands."
+        ),
+    )
+    d.add_argument(
+        "--agent",
+        default=None,
+        help=(
+            "A4: agent to invoke on escalation (loaded from agents/<name>.md). "
+            "Required with --auto-execute."
+        ),
+    )
+    d.add_argument(
+        "--max-iterations",
+        type=int,
+        default=5,
+        help="A4: hard cap on escalation iterations (default 5).",
     )
     d.set_defaults(func=cmd_decide)
 

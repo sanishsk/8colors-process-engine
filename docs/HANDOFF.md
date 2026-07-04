@@ -3,20 +3,23 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.41.0 shipped — D8
-> signature-system gate. hooks/signature-lint.sh + design-critic
-> tell #9 upgraded to HARD FAIL on flagship screens when
-> docs/design/SIGNATURE.md declares signature tokens. Opt-in per
-> adopter (no SIGNATURE.md → gate inert). templates/design/
-> SIGNATURE.md.template documents the declaration format;
-> install.sh drops it into docs/templates/design/. hooks count
-> 16 → 17. Twenty-two V2 items shipped, one PARTIAL (A4 loop).
-> D-row progress: D1+D2+D4+D5+D6+D7+D8 shipped — design ceiling
-> wave COMPLETE. D3+A9.3 remain (visual-regression, tool wiring).)
+> **Last updated:** 2026-07-04 (v0.42.0 shipped — A4
+> auto-escalation loop. `pe shadow decide --auto-execute
+> --enforce --agent <name>` closes the loop missing since
+> v0.21.0: on worker_quality FAIL, invokes `pe agent run` at the
+> next tier with a deterministic escalation brief, re-parses the
+> emitted envelope, re-routes, and iterates bounded by
+> --max-iterations + breaker. Trajectory logged to
+> .pe/a4-runs/<decision_id>/. Guardrails: --auto-execute requires
+> both --enforce AND --agent. §9 watchpoint remains open until
+> first-fire enforce-mode review. All V2 PARTIAL items now
+> SHIPPED — twenty-three V2 items shipped, zero PARTIAL. D-row
+> COMPLETE (D1+D2+D4+D5+D6+D7+D8). Only D3+A9.3 remain — both
+> external-service-dependent (Percy/Chromatic).)
 
 ---
 
-## Current state — v0.41.0 (`7911b8f` → `<v0.41.0 sha>` this session)
+## Current state — v0.42.0 (`35a8071` → `<v0.42.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -38,7 +41,7 @@
 | TOK1 prompt-cache hygiene | ✅ SHIPPED | v0.25.1 |
 | TOK2 read hygiene | ✅ SHIPPED | v0.25.1 |
 | A3 incident synthesizer | ✅ SHIPPED | v0.22.0 |
-| A4 exec primitive + auto-escalation loop | ⚠️ PARTIAL — primitive shipped v0.21.0; **auto-escalation loop MISSING** (cmd_decide records shadow decision but invokes nothing) | v0.21.0 (primitive) |
+| A4 exec primitive + auto-escalation loop | ✅ SHIPPED — primitive v0.21.0; auto-escalation loop v0.42.0 (--auto-execute + --agent + --max-iterations, trajectory log, §9 watchpoint on first-fire) | v0.21.0 + v0.42.0 |
 | A5 Ponytail universal prereq | ✅ SHIPPED | v0.23.0 |
 | L3 memory governance | ✅ SHIPPED | v0.24.0 |
 | A6 scaffold + api-credentials + auth + tenancy + billing | ✅ SHIPPED (module library COMPLETE) | v0.25.0 → v0.28.0 |
@@ -55,46 +58,47 @@
 | D6 motion-craft gate (motion-lint + prefers-reduced-motion + effect-stacking + critic rubric) | ✅ SHIPPED | v0.39.0 |
 | D7 curated visual reference library + Style Dictionary token pipeline + /design-scan ritual | ✅ SHIPPED | v0.40.0 |
 | D8 signature-system gate (signature-lint + SIGNATURE.md template + design-critic tell #9 HARD FAIL on flagship) | ✅ SHIPPED | v0.41.0 |
+| A4 auto-escalation loop (--auto-execute + --agent + trajectory log; §9 watchpoint tested=false) | ✅ SHIPPED | v0.42.0 |
 
-**PARTIAL count: 1** — A4's auto-escalation loop.
-Every other V2 item is either SHIPPED, GATED with a named
+**PARTIAL count: 0** — v0.42.0 closed the A4 loop, the last
+PARTIAL. Every V2 item is either SHIPPED, GATED with a named
 prerequisite, on a specific release queue, or explicitly not yet
-started.
+started. The §9 watchpoint on A4 (`tested=false` against real
+Claude invocations until first-fire enforce-mode review) is a
+runtime observation task, not an open PARTIAL.
 
 **Not started yet:** A9 higher tiers, D3 (visual-regression),
 A9.3 (visual-regression tool wiring).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.41.0** —
-   `hooks/signature-lint.sh` lands + wires into
-   `.claude/settings.json` PostToolUse and
-   `.pre-commit-config.yaml` (hooks count 16 → 17).
-   `templates/design/SIGNATURE.md.template` lands in
-   `docs/templates/design/` via install.sh. The gate is
-   **opt-in** — no `docs/design/SIGNATURE.md` in adopter project
-   → gate is inert (no behavior change). Adopters who declare a
-   SIGNATURE.md get the flagship-path enforcement.
-   Bypass: `PE_SKIP_SIGNATURE_LINT=1`.
+1. **Adopters need to be re-installed at v0.42.0** —
+   `scripts/pe_orchestrator.py` gains the A4 loop. New flags on
+   `pe shadow decide`: `--auto-execute`, `--agent`,
+   `--max-iterations`. No behavior change for adopters using
+   shadow mode only (legacy `pe shadow decide` unchanged). To
+   engage the loop, invoke with `--auto-execute --enforce
+   --agent <name>` — the banner + trajectory log make the
+   activation observable. §9 watchpoint remains open on first
+   fire.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
 
-   - **A4 completion** — orchestrator auto-escalation loop.
-     Consumes the `pe agent run` primitive shipped in v0.21.0.
-     Requires `--auto-execute` flag gated by `--enforce` (still
-     `tested = false` per §9 watchpoint). Ship AFTER first-fire
-     evidence on enforce-mode.
+   - **§9 watchpoint follow-through** — A4 loop landed but its
+     first-fire behavior against real Claude is still
+     `tested=false`. Next runtime task: run the loop against a
+     seeded worker_quality FAIL on an actual slot, review the
+     `.pe/decisions.jsonl` rows where `enforced=true AND
+     action == "escalate_one_tier"`, and decide whether to flip
+     the policy `tested=true` flag in
+     `policy/failure_class_routing.toml`.
    - **D3 + A9.3** — visual-regression baselines (D3) and
      wiring the orphaned `run_visual_regression` MCP tool into
      design-critic (A9.3). Requires a Percy/Chromatic account or
      equivalent — pick one, wire the CI job, add the trailer
      gate. This is what's left of the D-row after v0.41.0
      completes the design ceiling wave.
-   - **D3 + A9.3** — visual-regression baselines + wiring the
-     orphaned `run_visual_regression` MCP tool into the critic.
-   - **A4 auto-escalation loop** — the loop itself (status
-     honesty landed v0.36.0; implementation is a future release).
    - **TOK3** — terse-output mode for mechanical agents (real
      token win, deferred).
    - **A9 higher tiers** — extend the shadow-decide primitive

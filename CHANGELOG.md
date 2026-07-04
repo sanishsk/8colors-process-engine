@@ -7,6 +7,161 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.42.0] — 2026-07-04
+
+> **A4 shipped — auto-escalation loop closed.** The last V2
+> PARTIAL is done. `pe shadow decide --auto-execute --enforce
+> --agent <name>` closes the loop missing since v0.21.0: on
+> `worker_quality` FAIL the orchestrator invokes `pe agent run`
+> at the next tier with a deterministic escalation brief,
+> re-parses the emitted envelope, re-routes, appends a new
+> ShadowDecisionRecord with `enforced=true`, and iterates
+> bounded by `--max-iterations` (default 5) + the existing
+> breaker. §9 watchpoint remains open on first-fire enforce-mode
+> review. **Twenty-three V2 items shipped, zero PARTIAL.**
+
+### Added — A4 auto-escalation loop in `pe_orchestrator.py`
+
+- New flags on `pe shadow decide`:
+  `--auto-execute` (engage the loop),
+  `--agent <name>` (which agent to invoke on escalation, loaded
+  from `agents/<name>.md` frontmatter for tools + persona),
+  `--max-iterations <n>` (hard cap, default 5).
+- **Guardrails:** `--auto-execute` REQUIRES both `--enforce`
+  AND `--agent` — either missing → exit 2 with actionable stderr.
+  The loop is not a shadow-mode operation.
+- **Loop shape:** while decision is `escalate_one_tier` and
+  breaker/cap allow → invoke `pe agent run <agent> --brief -
+  --out <envelope-path> --model <next-tier>` with a
+  deterministic escalation brief; re-parse the emitted envelope
+  via `pe gate parse`; re-route; append new
+  ShadowDecisionRecord (with `enforced=true`); iterate.
+- **Exit codes:** 0 continue (PASS/WARN resolved), 1
+  halt_to_human, 5 breaker trip, 6 max iterations without
+  resolution, 7 agent invocation failure (subprocess non-zero
+  or missing artefact).
+- **Injectable invoker** via module-level `_INVOKER_OVERRIDE`
+  so unit tests can script a trajectory without spawning
+  `claude -p`. Production callers use `_default_invoker` which
+  shells out to `pe agent run`.
+- **Deterministic escalation brief** (`_build_escalation_brief`)
+  names the target tier, the gate name, verdict, and top-20
+  findings by severity + rule + first-line message. Caps at 20
+  with a `+N more findings` overflow line. The shape is stable
+  so operators can wrap the CLI to override without breaking
+  the receiving agent's parsing.
+- **Trajectory log** at
+  `.pe/a4-runs/<initial_decision_id>/trajectory.jsonl` with
+  `loop_start`, `invoke`, `post_invoke`, and `halt` records.
+  Each `invoke` names the iteration + from_tier + to_tier +
+  envelope-out path; each `post_invoke` carries the routing
+  decision and breaker state after the re-parse; each `halt`
+  names the reason (continue / halt_to_human / breaker /
+  max_iterations / invoker_nonzero / invoker_exception). This
+  is the post-mortem surface — inspect a trajectory to
+  understand why a specific loop ended.
+- **Activation banner** on every loop engagement:
+  `[a4] auto-escalation loop ENGAGED — enforced=true, agent=<name>.
+  §9 watchpoint: tested=false until first-fire review lands.
+  Decisions log: <path>`. The banner is the operator's cue that
+  the loop fired against real Claude for the first time and the
+  decisions.jsonl rows should be reviewed.
+
+### Added — Test coverage (2 new scripts, 31 total green)
+
+- **`tests/test_a4_loop.py`** (13 unit cases) — deterministic
+  invoker mocks cover: escalate-then-pass (haiku→sonnet),
+  escalate-twice-then-pass (haiku→sonnet→opus), halt-on-
+  task-underspecified (no invocation), max-iterations reached
+  (cap fires), top-tier terminal (start at opus →
+  top_tier_worker_quality halt), agent-invoker-nonzero →
+  A4_EXIT_AGENT_FAIL, requires-enforce flag (exit 2),
+  requires-agent flag (exit 2), trajectory-log-written
+  (loop_start + invoke + halt records present),
+  PASS-initial-returns-0-without-invoking, decisions.jsonl
+  records all three iterations with `enforced=true`,
+  build-escalation-brief names tier + gate + rule, brief caps
+  findings at 20.
+- **`tests/test_a4_cli.sh`** (6 shape cases) —
+  `--auto-execute` / `--agent` / `--max-iterations` present in
+  `--help`; missing-enforce → exit 2 with actionable message;
+  missing-agent → exit 2 with actionable message; legacy
+  shadow-only mode (no `--auto-execute`) unchanged.
+
+### Reviewer fixes (applied pre-commit)
+
+- **HIGH — `--agent` accepted unvalidated agent names.** The
+  reviewer caught: the `--agent <name>` flag flowed directly
+  into the subprocess argv of `pe agent run` without checking
+  the agent file exists in `agents/`. Non-argv shell injection
+  isn't possible (subprocess is argv-list, not shell=True) but
+  a bogus agent name would emit a misleading
+  `A4_EXIT_AGENT_FAIL (7)` instead of the actionable "unknown
+  agent" message. Fix: validate against `_AGENT_NAME_RE`
+  (bare identifier) AND check `agents/<name>.md` is a file at
+  the CLI boundary in `cmd_decide` before engaging the loop.
+  Failure emits an actionable stderr + exit 2. Locked in with
+  `test_rejects_bogus_agent_name` +
+  `test_rejects_path_traversal_agent_name` (test_a4_loop.py
+  cases 15 total).
+- **MEDIUM — iteration cap semantics undocumented.** Added a
+  docstring to `_run_a4_loop` clarifying: "Iterations are
+  1-indexed. Loop halts when `current_iteration >=
+  max_iterations` BEFORE the next escalation invocation — so
+  `iteration=1 + max_iterations=2` allows one escalation."
+
+### Alignment
+
+- All 31 test scripts + `pe docs check` green at v0.42.0
+  (`test_a4_loop.py` grew 13 → 15 cases from the reviewer-fix
+  regression lock).
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps.
+- `docs/ENHANCEMENT_PLAN_V2.md` A4 marker PARTIAL → SHIPPED
+  v0.42.0 with detailed close list.
+- `docs/HANDOFF.md`: v0.42.0 header + A4 row upgraded from
+  PARTIAL to SHIPPED + PARTIAL count 1 → 0 + adopter re-install
+  note updated + resume notes now lead with §9 watchpoint
+  follow-through instead of A4 completion.
+- MANIFEST.sha256 regenerated. `pe docs check` confirms
+  inventory (21 agents / 10 commands).
+- **Twenty-three V2 items shipped, ZERO PARTIAL.** Only pending
+  items are D3 + A9.3 (external-service decision needed:
+  Percy/Chromatic).
+
+### Notes — deliberately out of scope
+
+- **First-fire enforce-mode review.** The `--auto-execute` path
+  is `tested=false` against real Claude invocations. The plan
+  and the graduation signoff both say the flip to `tested=true`
+  in `policy/failure_class_routing.toml` requires M=3 slots of
+  enforce-mode evidence to be reviewed. This release LANDS the
+  runtime; the runtime observation is a follow-on task, not a
+  ship condition.
+- **Cost accounting inside the loop.** Each iteration writes
+  its own ShadowDecisionRecord with the envelope's cost fields,
+  so cumulative token spend across a loop is inspectable via
+  `pe recall` or `.pe/decisions.jsonl` join by slot_id. A
+  purpose-built "loop cost report" is deferred until first-fire
+  evidence indicates the shape matters.
+- **Configurable tier→agent mapping.** Currently the loop
+  invokes the SAME agent at successively higher tiers (haiku →
+  sonnet → opus). A per-tier agent selection (haiku uses
+  `code-reviewer-haiku`, opus uses `code-reviewer-opus`) is
+  YAGNI until an adopter needs it; the routing policy already
+  documents `gate_minimum_tier` for the gate-side split.
+
+### Migration
+
+- No breaking changes. Legacy `pe shadow decide` invocations
+  (no `--auto-execute`) behave exactly as before — same exit
+  codes, same JSONL append semantics, same summary print.
+  Adopters wanting the loop opt in explicitly with
+  `--auto-execute --enforce --agent <name>`. The banner + the
+  trajectory log make first-fire observable without operator
+  vigilance beyond the standard `pe recall` post-slot review.
+
+---
+
 ## [0.41.0] — 2026-07-04
 
 > **D8 shipped — signature-system gate.** The deepest AI-tell is
