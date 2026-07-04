@@ -99,49 +99,34 @@ EOF
     exit 0
 fi
 
-# SHA form: >= 8 hex chars. Look up the record.
-if ! echo "$TRAILER" | grep -qE '^[0-9a-fA-F]{8,64}$'; then
+# v0.36.0: envelope resolution + verdict parsing moved to
+# hooks/_trailer-contract.sh. Code's named record is last-gate.json
+# (session-wide); nothing project-scoped precedes it.
+_HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+. "$_HOOK_DIR/_trailer-contract.sh"
+
+if ! pe_trailer_is_sha "$TRAILER"; then
     echo "✗ code-review-trailer: 'Code-reviewed: $TRAILER' is not an envelope sha" >&2
     echo "  Expected hex sha (8-64 chars). Run 'shasum -a 256 .claude/gates/last-gate.json | cut -c1-12' for one." >&2
     exit 1
 fi
 
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-LAST_GATE="$REPO_ROOT/.claude/gates/last-gate.json"
-RECORD=""
-
-if [ -f "$LAST_GATE" ]; then
-    # Match against the sha of the last-gate.json.
-    LAST_SHA=$(shasum -a 256 "$LAST_GATE" 2>/dev/null | awk '{print $1}')
-    if [ "${LAST_SHA:0:${#TRAILER}}" = "$TRAILER" ]; then
-        RECORD="$LAST_GATE"
-    fi
-fi
-
-# Fallback: named record file.
-if [ -z "$RECORD" ] && [ -f "$REPO_ROOT/.claude/gates/$TRAILER.json" ]; then
-    RECORD="$REPO_ROOT/.claude/gates/$TRAILER.json"
-fi
+RECORD=$(pe_trailer_resolve_record "$TRAILER" ".claude/gates/last-gate.json")
 
 if [ -z "$RECORD" ]; then
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
     cat >&2 <<EOF
 ✗ code-review-trailer: Code-reviewed sha '$TRAILER' does not resolve.
   Looked for:
-    $LAST_GATE (sha256 prefix)
+    $REPO_ROOT/.claude/gates/last-gate.json (sha256 prefix)
     $REPO_ROOT/.claude/gates/$TRAILER.json
   Regenerate the record with 'pe gate parse --record ...' after running the code-reviewer.
 EOF
     exit 1
 fi
 
-VERDICT=$("${PE_PYTHON:-python3}" -c '
-import json, sys
-try:
-    data = json.load(open(sys.argv[1]))
-    print(data.get("verdict",""))
-except Exception:
-    print("PARSE_ERROR")
-' "$RECORD")
+VERDICT=$(pe_trailer_verdict "$RECORD")
 
 case "$VERDICT" in
     PASS|WARN)

@@ -3,15 +3,17 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.35.0 shipped — PF4 soak
-> template + PF5 k6 load template + workflow_dispatch-only CI
-> job. Seventeen V2 items shipped since the fresh 360° re-audit
-> produced `docs/ENHANCEMENT_PLAN_V2.md`. Only PF6 (perf-reviewer
-> agent) remains in the perf row.)
+> **Last updated:** 2026-07-04 (v0.36.0 shipped — quality
+> close-out: sast-scan fail-visibly on no-tool state,
+> `_trailer-contract.sh` shared helper deduplicates envelope
+> logic across four hooks, and A4 status reclassified SHIPPED →
+> PARTIAL for audit honesty. No new features. Seventeen V2
+> items shipped, one PARTIAL (A4 loop). PF6 is the natural next
+> build per operator's updated pickup list.)
 
 ---
 
-## Current state — v0.35.0 (`61d5627` → `<v0.35.0 sha>` this session)
+## Current state — v0.36.0 (`a7c3039` → `<v0.36.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -33,7 +35,7 @@
 | TOK1 prompt-cache hygiene | ✅ SHIPPED | v0.25.1 |
 | TOK2 read hygiene | ✅ SHIPPED | v0.25.1 |
 | A3 incident synthesizer | ✅ SHIPPED | v0.22.0 |
-| A4 exec primitive | ✅ SHIPPED (primitive); 🔒 GATED (auto-escalation on §9 evidence) | v0.21.0 |
+| A4 exec primitive + auto-escalation loop | ⚠️ PARTIAL — primitive shipped v0.21.0; **auto-escalation loop MISSING** (cmd_decide records shadow decision but invokes nothing) | v0.21.0 (primitive) |
 | A5 Ponytail universal prereq | ✅ SHIPPED | v0.23.0 |
 | L3 memory governance | ✅ SHIPPED | v0.24.0 |
 | A6 scaffold + api-credentials + auth + tenancy + billing | ✅ SHIPPED (module library COMPLETE) | v0.25.0 → v0.28.0 |
@@ -46,20 +48,21 @@
 | PF4 soak template (RSS-slope + gc-reclaim + tracemalloc) | ✅ SHIPPED | v0.35.0 |
 | PF5 k6 load template + workflow_dispatch CI job | ✅ SHIPPED | v0.35.0 |
 
-**PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
-with a named prerequisite, on a specific release queue, or
-explicitly not yet started.
+**PARTIAL count: 1** — A4's auto-escalation loop.
+Every other V2 item is either SHIPPED, GATED with a named
+prerequisite, on a specific release queue, or explicitly not yet
+started.
 
 **Not started yet:** A9 higher tiers, PF6 (perf-reviewer agent),
 D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters can pick up PF4/PF5 templates via `pe install` +
-   a `cp` of the specific template.** Templates are opt-in;
-   nothing auto-installs into adopter trees. PF5's k6 CI job is
-   workflow_dispatch-only, so it never fires without an explicit
-   operator click.
+1. **Adopters need to be re-installed at v0.36.0** — sast-scan
+   no-tool state now BLOCKS instead of silently passing. If an
+   adopter had been riding the silent-pass mode, their next commit
+   touching source will surface the BLOCK message; either install
+   a SAST tool or set `PE_SKIP_SAST=1` per the guidance.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -72,7 +75,15 @@ D3 (visual-regression).
    - **PF6** — perf-reviewer agent that consumes the query-count
      + latency + soak + k6 envelopes and returns a scored perf
      verdict. All prerequisite templates now ship (PF1 shipped
-     v0.34.0, PF4/PF5 shipped v0.35.0).
+     v0.34.0, PF4/PF5 shipped v0.35.0). **Cleanest next build —
+     pure agent-body add, no new plumbing.**
+   - **Design ceiling wave** — D5 → D7 → D3 → D6 → D8 → A9.3 per
+     `DESIGN_EXCELLENCE.md`. Award-grade layer, all spec-only
+     today. **Caveat:** needs a real target screen (8CStudio
+     Delivery gallery, backlog #237) to score against, or
+     "award-grade" stays theoretical.
+   - **A4 auto-escalation loop** — the loop itself (status
+     honesty landed v0.36.0; implementation is a future release).
    - **A9 higher tiers** — extend the shadow-decide primitive
      with more test-generation + eval tiers.
    - **D3** — visual-regression (Percy / Chromatic wired into

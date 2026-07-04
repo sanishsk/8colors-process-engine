@@ -107,39 +107,28 @@ if [ "$TRAILER" = "security-reviewer" ]; then
     exit 0
 fi
 
-if ! echo "$TRAILER" | grep -qE '^[0-9a-fA-F]{8,64}$'; then
+# v0.36.0: envelope resolution + verdict parsing moved to
+# hooks/_trailer-contract.sh. Named-record precedence: security.json
+# first (project-scoped), then last-gate.json (session-wide fallback).
+_HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+. "$_HOOK_DIR/_trailer-contract.sh"
+
+if ! pe_trailer_is_sha "$TRAILER"; then
     echo "✗ security-review-trailer: '$TRAILER' is not an envelope sha" >&2
     exit 1
 fi
 
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-RECORD=""
-for candidate in "$REPO_ROOT/.claude/gates/security.json" "$REPO_ROOT/.claude/gates/last-gate.json"; do
-    if [ -f "$candidate" ]; then
-        SHA=$(shasum -a 256 "$candidate" 2>/dev/null | awk '{print $1}')
-        if [ "${SHA:0:${#TRAILER}}" = "$TRAILER" ]; then
-            RECORD="$candidate"
-            break
-        fi
-    fi
-done
-if [ -z "$RECORD" ] && [ -f "$REPO_ROOT/.claude/gates/$TRAILER.json" ]; then
-    RECORD="$REPO_ROOT/.claude/gates/$TRAILER.json"
-fi
+RECORD=$(pe_trailer_resolve_record "$TRAILER" \
+    ".claude/gates/security.json" \
+    ".claude/gates/last-gate.json")
 
 if [ -z "$RECORD" ]; then
     echo "✗ security-review-trailer: sha '$TRAILER' does not resolve to any .claude/gates/*.json" >&2
     exit 1
 fi
 
-VERDICT=$("${PE_PYTHON:-python3}" -c '
-import json, sys
-try:
-    data = json.load(open(sys.argv[1]))
-    print(data.get("verdict",""))
-except Exception:
-    print("PARSE_ERROR")
-' "$RECORD")
+VERDICT=$(pe_trailer_verdict "$RECORD")
 
 case "$VERDICT" in
     PASS|WARN) exit 0 ;;

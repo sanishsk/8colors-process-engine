@@ -7,6 +7,140 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.36.0] — 2026-07-04
+
+> **Quality close-out release — three fixes from the v0.34.0
+> audit. Not new features; correctness + honesty.** sast-scan
+> was silently passing when no SAST tool was installed (false
+> confidence on the #1-priority security gate); the four trailer
+> hooks each carried ~40 lines of duplicated envelope-resolution
+> logic (four homes for the same bug class); A4 was marked
+> SHIPPED in the plan but the auto-escalation loop it depends on
+> was never built (audit-vs-reality gap).
+
+### Fixed — `hooks/sast-scan.sh` — no-tool state now BLOCKS
+
+- Before: staged source files + no `semgrep`/`bandit`/`gosec`/
+  `eslint` installed → one advisory line, exit 0. Adopters could
+  accumulate months of unscanned commits under the illusion of
+  protection.
+- After: introduced `ran_actual_tool` flag; only set inside real
+  `command -v <tool>` branches (not by language detection).
+  When it's still 0 at the end AND staged source exists, the
+  hook prints a loud BLOCK message naming the install commands
+  and the bypass path, then exits 1.
+- Bypass: `PE_SKIP_SAST=1 git commit …` still works — the
+  intent is to make the gate's absence loud, not to lock
+  adopters out.
+
+### Added — `hooks/_trailer-contract.sh` (shared helper)
+
+- Extracted the envelope-resolution + verdict-parsing logic that
+  was copy-pasted across four hooks (`code-review-trailer.sh`,
+  `security-review-trailer.sh`, `design-review-trailer.sh`,
+  `perf-gate.sh`). Ponytail debt: four homes for the same bug
+  class, one home now.
+- Three helpers:
+  - `pe_trailer_is_sha "<val>"` — hex-sha validator.
+  - `pe_trailer_resolve_record "<sha>" <named…>` — iterates
+    named records (project-scoped precedence order — e.g.,
+    `perf.json > last-gate.json`) then falls back to
+    `.claude/gates/<sha>.json`. Never fails; empty stdout
+    means no match.
+  - `pe_trailer_verdict "<record-path>"` — reads top-level
+    `verdict` OR falls back to `envelope.verdict` (design
+    record shape). Uppercases result. Returns `PARSE_ERROR` on
+    unreadable file.
+
+### Refactored — four trailer hooks
+
+- All four now source `_trailer-contract.sh` and delegate the
+  ~30-line envelope block to three helper calls. Removed:
+  - `code-review-trailer.sh`: ~40 duplicated lines
+  - `security-review-trailer.sh`: ~35 duplicated lines
+  - `design-review-trailer.sh`: ~45 duplicated lines
+    (including its own top-level-verdict-else-envelope-verdict
+    check, now centralized in the helper)
+  - `perf-gate.sh`: ~35 duplicated lines
+- Net: ~155 lines of duplication → 1 helper file + 4 x 5-line
+  call sites. Verdict-parsing bugs (like v0.29.0's missing-
+  verdict edge case) now have one fix location.
+
+### Reclassified — A4 SHIPPED → PARTIAL
+
+- `docs/ENHANCEMENT_PLAN_V2.md` A4 marker changed from
+  "SHIPPED v0.21.0 for the primitive; auto-escalation loop
+  GATED on §9 evidence" to "**PARTIAL** — primitive shipped
+  v0.21.0; **auto-escalation loop MISSING** (cmd_decide records
+  shadow decision but invokes nothing)."
+- Reason: the primitive-only claim was being read as
+  "A4 done" by external audits. The loop is what closes A4;
+  the `--auto-execute` gate is downstream. Fixing the marker is
+  the honest-status step; building the loop itself is a
+  separate future release.
+- `docs/HANDOFF.md` row + PARTIAL count updated (was 0, now 1).
+
+### Added — tests
+
+- **`tests/test_trailer_contract.sh`** (17 cases): is_sha
+  accepts hex 8-64 mixed case, rejects non-hex / too-short /
+  empty; resolve returns matching named record, doesn't
+  false-positive on non-matching sha, iterates candidates in
+  order, direct `<sha>.json` fallback works, unknown sha
+  returns empty; verdict reads top-level, uppercases result,
+  falls back to `envelope.verdict` for wrapped shape, handles
+  missing field / corrupt JSON / missing file / empty arg.
+- **`tests/test_sast_scan.sh`** (9 cases): non-source silent
+  pass; Python/Go/JS + no tools all BLOCK; block message
+  advertises `PE_SKIP_SAST=1` bypass + install commands +
+  names staged surface; bypass exits 0 cleanly with stderr
+  notice; `sast_gate.enabled=false` in yaml disables the gate.
+
+### Updated
+
+- `plugin.json.description` unchanged (no new surface — this is
+  correctness work, not features).
+- `README.md` badge → 0.36.0.
+- `.claude-plugin/plugin.json` version → 0.36.0.
+- `docs/HANDOFF.md` — v0.36.0 header, PARTIAL count 0 → 1
+  (A4), resume notes.
+- `MANIFEST.sha256` regenerated (surface grew by three —
+  `_trailer-contract.sh` + two new test scripts don't count for
+  the manifest surface, but `_trailer-contract.sh` does).
+
+### Alignment
+
+- All 23 test scripts + `pe docs check` green at v0.36.0.
+- **Seventeen V2 items shipped, one PARTIAL (A4 loop).** No new
+  plan items opened.
+
+### Notes — deliberately out of scope
+
+- **Auto-escalation loop itself.** The v0.36.0 change is
+  status-honesty, not implementation. Building
+  `cmd_decide`'s stateful escalation loop + `--auto-execute`
+  flag is a future release when §9 first-fire evidence exists
+  to test against.
+- **Migration of the shared helper's contract.** Design's
+  `envelope.verdict` fallback is now in the helper, which means
+  a future trailer hook that only expects top-level `verdict`
+  still gets the fallback for free — that's intentional
+  convergence, not a compatibility risk (no downstream
+  consumer relies on the old strict-top-level behavior).
+
+### Migration
+
+- No breaking changes for adopters. Trailer hooks preserve
+  identical external behavior (all pre-existing tests still
+  pass unchanged). sast-scan changes behavior ONLY in the
+  no-tool state — adopters who have `semgrep`/`bandit`
+  installed see zero difference. Adopters without any SAST tool
+  installed will see the BLOCK on next commit touching source
+  and need to either install a tool or set
+  `PE_SKIP_SAST=1`.
+
+---
+
 ## [0.35.0] — 2026-07-04
 
 > **PF4 + PF5 shipped — soak + load templates land as one release.**

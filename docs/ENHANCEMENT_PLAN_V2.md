@@ -407,7 +407,7 @@ agent gates actually catch anything.
   fixture is rejected at schema validation.
 
 ### A4 Close the execution loop (orchestrator invokes workers)
-- **Severity:** MEDIUM · **Effort:** M-L · **Model:** Opus · **[SHIPPED v0.21.0 for the primitive; auto-escalation loop GATED on enforce-mode first-fire evidence per §9 watchpoint]** · **depends: A1**
+- **Severity:** MEDIUM · **Effort:** M-L · **Model:** Opus · **[PARTIAL — primitive SHIPPED v0.21.0 (`pe agent run` headless wrapper works); auto-escalation loop MISSING (`cmd_decide` records a shadow decision to JSONL and invokes nothing). The loop is what closes A4. Reclassified from SHIPPED to PARTIAL in v0.36.0 quality close-out — "primitive done, orchestrator loop pending" was being read as "A4 done" by audits. The `--auto-execute` gate remains blocked on §9 first-fire evidence from enforce-mode, but the loop itself needs to exist before that evidence can be produced.]** · **depends: A1**
 - **Files (shipped v0.21.0):** `scripts/agent_runner.py` (headless `claude -p` wrapper),
   `scripts/pe` (`pe agent run` subcommand), `tests/test_gate_efficacy.sh` (`--live` mode
   wired onto `pe agent run`), `tests/test_agent_runner.py` (22 unit tests).

@@ -114,58 +114,32 @@ EOF
     exit 0
 fi
 
-# Envelope sha path — must be hex, 8..64 chars
-if ! echo "$TRAILER" | grep -qE '^[a-fA-F0-9]{8,64}$'; then
+# v0.36.0: envelope resolution + verdict parsing moved to
+# hooks/_trailer-contract.sh. Design's named record is
+# last-design-review.json (project-scoped, distinct from
+# last-gate.json which the other three hooks read).
+_HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+. "$_HOOK_DIR/_trailer-contract.sh"
+
+if ! pe_trailer_is_sha "$TRAILER"; then
     echo "✗ design-review-trailer: 'Design-reviewed: $TRAILER' is not an envelope sha" >&2
     echo "  Expected hex sha (8-64 chars). Run 'shasum -a 256 .claude/gates/last-design-review.json | cut -c1-12' for one." >&2
     exit 1
 fi
 
-# Validate against .claude/gates/
-GATES_DIR=".claude/gates"
-LAST_DR="$GATES_DIR/last-design-review.json"
+RECORD=$(pe_trailer_resolve_record "$TRAILER" \
+    ".claude/gates/last-design-review.json")
 
-# Path 1: sha names a file directly
-if [ -f "$GATES_DIR/$TRAILER.json" ]; then
-    exit 0
-fi
-
-# Path 2: sha matches shasum of last-design-review.json (first N chars)
-if [ -f "$LAST_DR" ]; then
-    ACTUAL_SHA=$(shasum -a 256 "$LAST_DR" 2>/dev/null | cut -c1-64)
-    if printf '%s' "$ACTUAL_SHA" | grep -q "^${TRAILER}"; then
-        # Additional check — envelope's verdict is PASS or WARN, not FAIL
-        VERDICT=$(python3 -c "
-import json, sys
-try:
-    d=json.load(open('$LAST_DR'))
-    print((d.get('envelope',{}).get('verdict') or d.get('verdict') or '').upper())
-except Exception:
-    print('')
-" 2>/dev/null || echo "")
-        case "$VERDICT" in
-            PASS|WARN)
-                exit 0
-                ;;
-            FAIL)
-                echo "✗ design-review-trailer: envelope $TRAILER has verdict=FAIL — commit blocked." >&2
-                echo "  Address the design-critic findings before committing." >&2
-                exit 1
-                ;;
-            *)
-                echo "✗ design-review-trailer: envelope $TRAILER has unrecognized verdict '$VERDICT'" >&2
-                exit 1
-                ;;
-        esac
-    fi
-fi
-
-cat >&2 <<EOF
+if [ -z "$RECORD" ]; then
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    LAST_DR="$REPO_ROOT/.claude/gates/last-design-review.json"
+    cat >&2 <<EOF
 ✗ design-review-trailer: envelope sha '$TRAILER' does not resolve to a record.
 
 Looked for:
-  $GATES_DIR/$TRAILER.json                (not found)
-  $LAST_DR                                ($([ -f "$LAST_DR" ] && echo "exists but sha does not match" || echo "does not exist"))
+  $REPO_ROOT/.claude/gates/$TRAILER.json    (not found)
+  $LAST_DR                                  ($([ -f "$LAST_DR" ] && echo "exists but sha does not match" || echo "does not exist"))
 
 Produce a fresh envelope:
   # invoke design-critic → captures envelope to .claude/gates/last-design-review.json
@@ -175,4 +149,22 @@ Produce a fresh envelope:
   sha=\$(shasum -a 256 .claude/gates/last-design-review.json | cut -c1-12)
   # Replace 'Design-reviewed: <old-sha>' with the new sha in your commit message.
 EOF
-exit 1
+    exit 1
+fi
+
+VERDICT=$(pe_trailer_verdict "$RECORD")
+
+case "$VERDICT" in
+    PASS|WARN)
+        exit 0
+        ;;
+    FAIL)
+        echo "✗ design-review-trailer: envelope $TRAILER has verdict=FAIL — commit blocked." >&2
+        echo "  Address the design-critic findings before committing." >&2
+        exit 1
+        ;;
+    *)
+        echo "✗ design-review-trailer: envelope $TRAILER has unrecognized verdict '$VERDICT'" >&2
+        exit 1
+        ;;
+esac

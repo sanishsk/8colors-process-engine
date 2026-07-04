@@ -85,8 +85,20 @@ fi
 
 fail=0
 ran_any=0
+# v0.36.0: `ran_actual_tool` tracks whether a real SAST tool
+# executed. Before this change, `ran_any` was set from language
+# detection alone, so a Python-only host with no semgrep + no bandit
+# would print two "not installed" advisory lines and then exit 0 —
+# false confidence on the #1-priority security gate. `log_run` now
+# flips the flag; if it's still 0 at the end AND we saw staged files
+# for at least one detected language, we refuse the commit unless
+# `PE_SKIP_SAST=1` is set explicitly (audit trail).
+ran_actual_tool=0
 
-log_run()  { printf '\n[sast-scan] %s\n' "$*" >&2; }
+log_run()  {
+    printf '\n[sast-scan] %s\n' "$*" >&2
+    ran_actual_tool=1
+}
 log_skip() { printf '[sast-scan] %s (not installed — skipped)\n' "$*" >&2; }
 
 # ─── semgrep excluded rules ──────────────────────────────────────────
@@ -237,10 +249,35 @@ run_python
 run_go
 run_js
 
-if [ "$ran_any" -eq 0 ]; then
-    # No tools installed — surface once so the operator knows the gate is passive.
-    echo "[sast-scan] no SAST tools installed (semgrep/bandit/gosec/eslint) — advisory skip" >&2
-    exit 0
+if [ "$ran_actual_tool" -eq 0 ]; then
+    # v0.36.0: FAIL LOUDLY instead of silently passing. Staged security-
+    # sensitive files with zero installed SAST tools means the gate is
+    # effectively OFF; the previous "advisory skip" printed one line
+    # and returned 0, letting adopters accumulate months of unscanned
+    # commits under the illusion of protection.
+    cat >&2 <<EOF
+
+[sast-scan] BLOCK — commit touches source files but NO SAST tool is
+            installed. This is the #1-priority security gate; a silent
+            pass here defeats the whole security row.
+
+To resolve (one-time):
+
+  pipx install semgrep bandit
+  # or, for Go / JS shops:
+  go install github.com/securego/gosec/v2/cmd/gosec@latest
+  npm install --global eslint eslint-plugin-security
+
+To bypass on THIS commit (logs to audit trail — every use is a signal):
+
+  PE_SKIP_SAST=1 git commit ...
+
+Detected staged surface:
+$( [ -n "$STAGED_PY" ] && printf '  py: %s\n' "$(echo "$STAGED_PY" | head -3 | tr '\n' ' ')" )
+$( [ -n "$STAGED_GO" ] && printf '  go: %s\n' "$(echo "$STAGED_GO" | head -3 | tr '\n' ' ')" )
+$( [ -n "$STAGED_JS" ] && printf '  js: %s\n' "$(echo "$STAGED_JS" | head -3 | tr '\n' ' ')" )
+EOF
+    exit 1
 fi
 
 if [ "$fail" -ne 0 ]; then
