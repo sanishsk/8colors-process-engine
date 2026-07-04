@@ -7,6 +7,145 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.33.0] — 2026-07-03
+
+> **A8 shipped — native plugin manifest + per-project version pinning.**
+> Two surfaces close the "each symlink-onboarded adopter is
+> migration debt" gap called out in the plan: the engine now ships
+> a `.claude-plugin/plugin.json` marketplace manifest advertising
+> its capabilities in Claude Code's native shape, and every
+> adopter tree carries a `.claude/.engine-pin.json` written by
+> `install.sh` at install time. `pe pin show|verify|bump`
+> inspects and reconciles the pin so an adopter who runs
+> `pe upgrade` (git pull in engine) knows whether they've drifted
+> from the version they installed against — no more silent
+> HEAD-riding.
+
+### Added — `.claude-plugin/plugin.json`
+
+- Native Claude Code marketplace manifest at the engine root.
+  Points at the existing `agents/`, `commands/`, `skills/`,
+  `hooks/hooks.json` entry points. Advertises the `pe` CLI, the
+  Python + Bash version requirements, and the pin file location
+  (`.claude/.engine-pin.json`).
+- Kept in step with the legacy `plugin.json` at the repo root —
+  the test suite asserts both point at the same VERSION.
+
+### Added — `scripts/pe_pin.py` + `pe pin` subcommand
+
+- **`pe pin show`** — prints pinned version + SHA + install
+  timestamp + install mode, plus a drift verdict against the
+  engine on disk. `--json` for programmatic reads.
+- **`pe pin verify`** — exits 0 when pin matches engine, 1 on
+  drift, 2 on missing/corrupt pin. Suitable as a CI gate: a
+  downstream project's CI can fail the build when the local
+  engine repo is ahead of the pinned version.
+- **`pe pin bump [--to VERSION]`** — rewrites the pin to the
+  engine's current VERSION + HEAD SHA. `--to VERSION` guards
+  against accidental bump when the engine's checked-out version
+  differs. Preserves `previous_version` + `previous_sha` in the
+  new pin so the audit trail survives every reconcile.
+- **Drift verdicts:**
+  - `pinned` — version + SHA match exactly.
+  - `engine_ahead` — engine on disk moved forward past the pin.
+  - `engine_behind` — engine on disk is BEHIND the pin
+    (someone reverted; usually means `git pull` in the engine
+    hasn't happened yet).
+  - `sha_orphan` — pinned SHA is no longer reachable
+    (force-push, rewrite, or same-version untagged change).
+  - `ok_no_git` — engine isn't a git tree (adopter-side copy);
+    version drift can still be reported.
+
+### Added — `scripts/install.sh` writes the pin file
+
+- After the symlink pass, `install.sh` writes
+  `<project>/.claude/.engine-pin.json` with
+  `{engine_path, engine_sha, engine_version, install_mode,
+   installed_at}`. Non-fatal: if the write fails (permissions,
+  missing python), the install still succeeds — the pin is
+  advisory, not a gate on install itself.
+
+### Added — `tests/test_pe_pin.sh` (12 cases)
+
+- Missing pin → verify exit 2 / show exit 0 with hint.
+- Pin matching HEAD → verify exit 0 (pinned).
+- Pin at older version → verify exit 1 (engine_ahead drift).
+- Unreachable SHA → sha_orphan verdict surfaced by show.
+- `--json` emits parseable payload with `drift_verdict` field.
+- `bump` rewrites pin to engine version + preserves
+  `previous_version`.
+- Bump → verify roundtrip is clean.
+- `bump --to VERSION` mismatch → exit 2 (safety guard against
+  accidental cross-version bump).
+- `install.sh` writes `.engine-pin.json` with the current
+  VERSION.
+- Corrupt pin file → verify exit 2 (treated as missing).
+- `.claude-plugin/plugin.json` present + `name`/`version`
+  aligned with the engine's VERSION file.
+
+### Updated
+
+- `scripts/pe` — new `cmd_pin` + dispatch entry.
+- `plugin.json.description` — mentions A8 pin surface.
+- `README.md` badge → 0.33.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` A8 marker: MISSING → SHIPPED v0.33.0.
+- `docs/HANDOFF.md` — v0.33.0 header, A8 row added, resume notes.
+- `MANIFEST.sha256` regenerated (surface grew by two —
+  `pe_pin.py` + `.claude-plugin/plugin.json`).
+
+### Reviewer fixes (applied pre-commit)
+
+- **MEDIUM — pin file commit intent.** Reviewer flagged that
+  `.claude/.engine-pin.json` isn't added to `.gitignore` and adopters
+  might not know whether to commit it. **Fix:** added a rationale
+  comment to `install.sh` — the pin file is intentionally COMMITTED
+  so every teammate + CI run sees the same engine version the
+  project was installed against.
+- **LOW — schema URL placeholder.** `.claude-plugin/plugin.json`
+  had a `$schema` field pointing at a not-yet-published Anthropic
+  schema URL that offline validators would fail to resolve.
+  **Fix:** removed the `$schema` line; can be re-added when the
+  official schema is published.
+- **LOW — pre-release version tuple.** `_version_tuple()`
+  silently mapped non-numeric parts to -1 with no docstring hint
+  that this yields correct semver-ish RC ordering. **Fix:**
+  expanded docstring to name the invariant so future readers
+  don't accidentally "fix" it into a symmetric compare.
+
+### Alignment
+
+- All 19 test scripts + `pe docs check` green at v0.33.0.
+
+### Notes — deliberately out of scope
+
+- **Copy-mode install.** The plan mentioned "Windows-friendly"
+  installs. Today install.sh is symlink-only (Unix). A copy-mode
+  install (`install.sh --mode copy`) would let Windows adopters
+  install without symlink privileges, but isn't wired in v0.33.0
+  — the pin file + native manifest are the load-bearing pieces
+  for "no more silent HEAD-riding", and copy-mode is a follow-up
+  when the first Windows adopter shows up.
+- **Automatic upgrade prompts.** `pe upgrade` doesn't yet consult
+  the pin to warn about breaking changes. A future release can
+  read the pinned version, diff CHANGELOG entries since, and
+  surface "MIGRATION" lines to the operator. For v0.33.0 the
+  operator still runs `pe pin show` manually.
+- **Enable/disable per project.** Claude Code's native
+  marketplace supports enabling/disabling installed plugins.
+  We ship the manifest so the shape is right; disable-flow
+  wiring (which agents/commands the operator suppressed) is a
+  follow-up.
+
+### Migration
+
+- No breaking changes. Existing adopters install cleanly at
+  v0.33.0 — the pin file is written automatically the next time
+  they run `pe install`. Adopters can run `pe pin show` right
+  after upgrading to confirm they're pinned to the version they
+  intended.
+
+---
+
 ## [0.32.0] — 2026-07-03
 
 > **A7 shipped — cross-session agent memory.** Three surfaces close

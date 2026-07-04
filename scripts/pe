@@ -1241,6 +1241,14 @@ EOF
     esac
 }
 
+cmd_pin() {
+    # A8 per-project version pin. `pe pin show|verify|bump` inspects and
+    # reconciles .claude/.engine-pin.json so adopters don't silently ride
+    # engine HEAD after `pe upgrade`.
+    local py; py="$(pe_python)" || exit 1
+    exec "$py" "$ENGINE_DIR/scripts/pe_pin.py" "$@"
+}
+
 cmd_recall() {
     # A7 cross-session decision memory. Reads .pe/decisions.jsonl +
     # .pe/reconciliations.jsonl and returns the top-K slots whose
@@ -1400,6 +1408,7 @@ case "$cmd" in
     gate)       cmd_gate "$@" ;;
     verify)     cmd_verify "$@" ;;
     recall)     cmd_recall "$@" ;;
+    pin)        cmd_pin "$@" ;;
     shadow)     cmd_shadow "$@" ;;
     docs)       cmd_docs "$@" ;;
     version|-v|--version) echo "$VERSION" ;;

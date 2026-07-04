@@ -1,0 +1,43 @@
+{
+  "name": "8colors-process-engine",
+  "displayName": "8colors Process Engine",
+  "version": "0.33.0",
+  "description": "Portable Claude Code process engine — 20 agents, 9 commands, 2 session skills, cross-platform schedulers, multi-provider RAG with FTS5 hybrid retrieval, deterministic quality/security gates, and A6 SaaS domain modules (auth + tenancy + api-credentials + billing). Enforcement is deterministic, not prompt-hope.",
+  "author": "8Colors",
+  "license": "MIT",
+  "homepage": "https://github.com/sanishsk/8colors-process-engine",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sanishsk/8colors-process-engine.git"
+  },
+  "entryPoints": {
+    "agents": "agents/",
+    "commands": "commands/",
+    "skills": "skills/",
+    "hooks": "hooks/hooks.json"
+  },
+  "capabilities": {
+    "agents": 20,
+    "commands": 9,
+    "skills": 2,
+    "hooks": {
+      "preToolUse": ["Bash", "Edit", "Write", "MultiEdit"],
+      "postToolUse": ["Edit", "Write", "MultiEdit", "Bash", "Read", "WebFetch", "WebSearch"],
+      "stop": true
+    }
+  },
+  "cli": {
+    "command": "pe",
+    "entryPoint": "scripts/pe"
+  },
+  "requirements": {
+    "python": ">=3.10",
+    "bash": ">=3.2",
+    "claudeCode": ">=1.0.0"
+  },
+  "install": {
+    "primary": "scripts/install.sh",
+    "supportsPinning": true,
+    "pinFile": ".claude/.engine-pin.json"
+  }
+}

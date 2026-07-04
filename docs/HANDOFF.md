@@ -3,17 +3,15 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.32.0 shipped — A7 cross-session
-> memory: `pe recall` reads shadow-decide logs with Jaccard token
-> overlap + per-slot trajectory collapse; research_index.py gains
-> FTS5 sparse + RRF hybrid retrieval; retrospective-agent §7b
-> promotes ≥3-slot recurring patterns into feedback auto-memory.
-> Thirteen V2 items shipped since the fresh 360° re-audit produced
-> `docs/ENHANCEMENT_PLAN_V2.md`.)
+> **Last updated:** 2026-07-03 (v0.33.0 shipped — A8 native plugin
+> manifest + per-project version pin. `.claude-plugin/plugin.json`
+> ships alongside `.claude/.engine-pin.json`; `pe pin show|verify|bump`
+> reconciles adopter drift. Fourteen V2 items shipped since the
+> fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.)
 
 ---
 
-## Current state — v0.32.0 (`0da41af` → `<v0.32.0 sha>` this session)
+## Current state — v0.33.0 (`bc67143` → `<v0.33.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -43,22 +41,21 @@
 | S4 transcript-guard + pe verify (LLM/agent threat hardening) | ✅ SHIPPED | v0.30.0 |
 | S5 container + secrets-history + license CI gates | ✅ SHIPPED | v0.31.0 |
 | A7 cross-session agent memory (pe recall + FTS5 hybrid + retro §7b) | ✅ SHIPPED | v0.32.0 |
+| A8 native plugin manifest + per-project version pin | ✅ SHIPPED | v0.33.0 |
 
 **PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
 with a named prerequisite, on a specific release queue, or
 explicitly not yet started.
 
-**Not started yet:** A8 (native plugin migration), A9 higher tiers,
-PF1 (runtime N+1), PF4/PF5 (soak + load), PF6 (perf-reviewer agent),
-D3 (visual-regression).
+**Not started yet:** A9 higher tiers, PF1 (runtime N+1), PF4/PF5
+(soak + load), PF6 (perf-reviewer agent), D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.32.0** — `pe install`
-   picks up the new `pe recall` subcommand. Adopters with an
-   existing dense RAG index should run
-   `python scripts/research_index.py rebuild` to backfill the FTS5
-   sparse side; until then, hybrid falls back to dense-only.
+1. **Adopters need to be re-installed at v0.33.0** — `pe install`
+   picks up `pe pin` and writes `.claude/.engine-pin.json`.
+   Run `pe pin show` after upgrade to confirm the pinned version
+   matches the intended one.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -70,10 +67,10 @@ D3 (visual-regression).
      evidence on enforce-mode.
    - **PF-row** — runtime N+1 (PF1) → soak/load templates
      (PF4/PF5) → perf-reviewer agent (PF6). Complements the
-     static perf-lint that already ships. A7 shipped v0.32.0.
-   - **A8** — native Claude Code plugin migration (before widening
-     the beta). Each new symlink-onboarded adopter is migration
-     debt.
+     static perf-lint that already ships. A7 shipped v0.32.0,
+     A8 shipped v0.33.0.
+   - **A9 higher tiers** — extend the shadow-decide primitive
+     with more test-generation + eval tiers.
    - **A6 extensions** — module library baseline is COMPLETE
      (scaffold + api-credentials + auth + tenancy + billing all
      shipped). Only extensions remain deferred: email flows

@@ -445,6 +445,30 @@ elif [ "$NO_GIT_HOOKS" = "1" ]; then
     echo "  ⚠ Git hooks: --no-git-hooks — skipped"
 fi
 
+# A8 pin file. Records the engine version + SHA the adopter was
+# installed against, so `pe pin show|verify` can report drift on
+# subsequent `pe upgrade` runs. Non-fatal: if the pin can't be
+# written (permissions, missing python), the install still succeeds.
+#
+# The pin file is intentionally COMMITTED to the adopter's git repo —
+# every teammate + CI run should see the same engine version the
+# project was installed against. Do NOT add it to `.gitignore`.
+ENGINE_VERSION=$(cat "$ENGINE_DIR/VERSION")
+ENGINE_SHA=$(git -C "$ENGINE_DIR" rev-parse HEAD 2>/dev/null || echo "")
+PIN_TS=$(date -u +'%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "unknown")
+PIN_FILE="$TARGET/.claude/.engine-pin.json"
+mkdir -p "$(dirname "$PIN_FILE")"
+cat > "$PIN_FILE.tmp" <<EOF
+{
+  "engine_path": "$ENGINE_DIR",
+  "engine_sha": "$ENGINE_SHA",
+  "engine_version": "$ENGINE_VERSION",
+  "install_mode": "symlink",
+  "installed_at": "$PIN_TS"
+}
+EOF
+mv "$PIN_FILE.tmp" "$PIN_FILE"
+
 echo "✓ 8colors-process-engine v$(cat "$ENGINE_DIR/VERSION") installed to $TARGET"
 echo "  Subset:    $SUBSET (${#INSTALLED_AGENTS[@]} agents installed, ${#SKIPPED_AGENTS[@]} skipped)"
 if [ "${#SKIPPED_AGENTS[@]}" -gt 0 ]; then

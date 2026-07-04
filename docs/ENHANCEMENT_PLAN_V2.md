@@ -487,7 +487,7 @@ agent gates actually catch anything.
   AGI" that's honestly achievable at this layer.
 
 ### A8 Distribution: native plugin + version pinning
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]** · **before widening beta**
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.33.0 — .claude-plugin/plugin.json marketplace manifest (name, version, entryPoints, capabilities, cli, requirements, install.pinFile pointer); scripts/pe_pin.py with pe pin show|verify|bump subcommands; drift verdicts pinned/engine_ahead/engine_behind/sha_orphan/ok_no_git (SHA reachability via git cat-file -e); install.sh writes .claude/.engine-pin.json {engine_version, engine_sha, installed_at, install_mode, engine_path} on every install; --json machine-readable mode; bump preserves previous_version + previous_sha for audit trail; pin verify suitable as CI gate (exit 1 on drift, 2 on missing pin). Test coverage: tests/test_pe_pin.sh (12 cases).]** · **before widening beta**
 - **Fix:** the symlink model has no version pinning (every adopter rides HEAD on `pe sync`) and the
   shadowing hazard cost the E1_b incident (partly fixed v0.11.1). Migrate to native `.claude-plugin/`
   format: versioned installs, enable/disable per project, Windows-friendly, marketplace path. Do
