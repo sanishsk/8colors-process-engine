@@ -564,8 +564,11 @@ cmd_status() {
     head_author=$(git log -1 --format=%an 2>/dev/null || echo "?")
 
     local n_agents n_commands n_skills n_scripts n_templates
-    n_agents=$(find "$ENGINE_DIR/agents" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-    n_commands=$(find "$ENGINE_DIR/commands" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+    # Exclude leading-underscore files (specs like _gate-contract.md are
+    # not agents). Same rule as `pe docs check` — keeps counts consistent
+    # across the two commands and with plugin.json's advertised inventory.
+    n_agents=$(find "$ENGINE_DIR/agents" -maxdepth 1 -name '*.md' ! -name '_*' 2>/dev/null | wc -l | tr -d ' ')
+    n_commands=$(find "$ENGINE_DIR/commands" -maxdepth 1 -name '*.md' ! -name '_*' 2>/dev/null | wc -l | tr -d ' ')
     n_skills=$(find "$ENGINE_DIR/skills" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
     n_scripts=$(find "$ENGINE_DIR/scripts" -maxdepth 1 -type f -name '*' 2>/dev/null | wc -l | tr -d ' ')
     n_templates=$(find "$ENGINE_DIR/templates" -maxdepth 2 -type f 2>/dev/null | wc -l | tr -d ' ')

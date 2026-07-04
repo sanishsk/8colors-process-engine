@@ -7,6 +7,117 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.43.0] — 2026-07-04
+
+> **Dogfood fixes from 8CStudio adopter exercise.** Ran the full
+> engine surface against the adopter (real templates, real
+> `.pe/decisions.jsonl` corpus, real slot ids) and three concrete
+> bugs surfaced: `pe status` inflated the agent count by one
+> (spec files counted as agents), `pe recall` was blind to
+> envelope findings content (only metadata indexed), and the
+> Jaccard scoring metric silently sank matches on large slot
+> summaries. All three fixed with regression tests locked in.
+
+### Fixed — `pe status` inventory count parity
+
+- **Symptom:** `pe status` reported 22 agents while `pe docs
+  check`, `plugin.json`, and README all said 21. The `_gate-
+  contract.md` spec file (a shared contract, not an agent) was
+  counted by `pe status` but excluded by `pe docs check`.
+- **Fix:** `scripts/pe` counter now applies the same
+  `! -name '_*'` exclusion `pe docs check` already used.
+  Consistent inventory across all three surfaces.
+- **Regression lock:** `tests/test_pe_status_docs_consistency.sh`
+  (5 cases) asserts `pe status` / `pe docs check` /
+  `plugin.json` agent + command counts all agree, and that
+  leading-underscore spec files stay out of the agent count.
+
+### Fixed — `pe recall` indexes finding content
+
+- **Symptom:** On a real 8CStudio slot with 12 decision records
+  (envelopes carrying `sql-placeholder-style` rule + rich
+  message bodies), `pe recall placeholder` and
+  `pe recall psycopg2` both returned zero matches. The
+  tokeniser only extracted `slot_id`, `gate_name`, `verdict`,
+  `failure_class`, `notes`, and router action/rule — but NOT
+  `envelope.summary` or `envelope.findings[].{rule,file,message,
+  suggestion,severity}`. The semantic content operators actually
+  query for was invisible.
+- **Fix:** `_collect_decision_tokens` now also indexes
+  `envelope.summary` and up to 20 findings per envelope with
+  per-field caps (severity/rule/file as full tokens;
+  message/suggestion capped to 200 chars each).
+- **Fix:** `_tokenize` now emits both the atomic token AND
+  sub-tokens split on `.`, `_`, `-` — so `sql-placeholder-style`
+  is queryable via `placeholder`, `sql`, `style`, OR the atomic
+  form. Length-1 sub-tokens are skipped as noise. This
+  preserves exact-token queries (slot IDs, SHAs) AND enables
+  substring-word queries.
+- **Regression lock:** `tests/test_pe_recall.sh` cases 9a + 9b
+  (seed a slot with a finding carrying
+  `rule: sql-placeholder-style` + message body naming
+  `psycopg2`; assert `pe recall placeholder` and
+  `pe recall psycopg2` both land 1 match).
+
+### Fixed — `pe recall` scoring metric (Jaccard → coverage)
+
+- **Symptom:** A 1-token query against a slot with 359 tokens
+  (typical after finding-content indexing landed) scored
+  Jaccard 0.003 — below the default `--min-score 0.01`. Real
+  matches (100% of the query landed in the slot) sank to "0%
+  similar" and got filtered out.
+- **Fix:** New scoring — coverage (`|query ∩ slot| / |query|`)
+  answers the operator's actual question: "how many of MY
+  query terms did this slot mention?" Jaccard used only as
+  tie-break among equal-coverage matches so a smaller focused
+  slot beats a large catch-all. The default `--min-score 0.01`
+  behavior now means "at least 1% of the query covered"
+  (which for a 1-term query is 0% or 100% — matches always
+  land above the floor when the term is present).
+- **Test-suite adjustment:** `tests/test_pe_recall.sh` case 10
+  updated — the old assertion ("worker_quality at min-score
+  0.5 returns 0") assumed Jaccard punishing 1-token queries.
+  Under coverage semantics the correct assertion is that a
+  two-term query where one term doesn't appear scores 50%,
+  which `--min-score 0.6` correctly filters.
+
+### Alignment
+
+- All 33 test scripts + `pe docs check` green at v0.43.0.
+  Regression scripts: test_pe_recall.sh grew 11 → 14; new
+  test_pe_status_docs_consistency.sh (5 cases).
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps.
+- README badge synced.
+- MANIFEST.sha256 regenerated.
+
+### Notes — not fixed here
+
+- **8CStudio adopter-side findings** (design-lint FAILs on
+  inline styles in `templates/base.html`, motion-lint WARN
+  for effect-stacking, motion-lint BLOCK on landing.html
+  missing `prefers-reduced-motion` guard) are the engine
+  working correctly — they need operator judgment in the
+  adopter project, not an engine change. Documented here so
+  the release trail is honest about what the exercise
+  surfaced.
+- **A4 loop first-fire** against real Claude invocation is
+  still `tested=false` per the §9 watchpoint carried over
+  from v0.42.0. The dogfood exercise exercised the loop
+  end-to-end with mock invokers only (see `test_a4_loop.py`),
+  not against a live `claude -p`.
+
+### Migration
+
+- No breaking changes to CLI shape. Behavior changes are
+  strictly improvements: `pe status` now agrees with
+  `pe docs check` and `plugin.json`; `pe recall` finds more
+  matches (query terms buried in findings are now
+  discoverable); default `--min-score` still 0.01 but its
+  semantics shifted from Jaccard-similarity to
+  query-coverage — a saner floor for a recall tool.
+
+---
+
 ## [0.42.0] — 2026-07-04
 
 > **A4 shipped — auto-escalation loop closed.** The last V2

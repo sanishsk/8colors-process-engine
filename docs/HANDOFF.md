@@ -3,23 +3,18 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.42.0 shipped — A4
-> auto-escalation loop. `pe shadow decide --auto-execute
-> --enforce --agent <name>` closes the loop missing since
-> v0.21.0: on worker_quality FAIL, invokes `pe agent run` at the
-> next tier with a deterministic escalation brief, re-parses the
-> emitted envelope, re-routes, and iterates bounded by
-> --max-iterations + breaker. Trajectory logged to
-> .pe/a4-runs/<decision_id>/. Guardrails: --auto-execute requires
-> both --enforce AND --agent. §9 watchpoint remains open until
-> first-fire enforce-mode review. All V2 PARTIAL items now
-> SHIPPED — twenty-three V2 items shipped, zero PARTIAL. D-row
-> COMPLETE (D1+D2+D4+D5+D6+D7+D8). Only D3+A9.3 remain — both
-> external-service-dependent (Percy/Chromatic).)
+> **Last updated:** 2026-07-04 (v0.43.0 shipped — dogfood fix
+> bundle. Ran the full engine surface against 8CStudio and
+> three bugs surfaced: `pe status` inflated agent count by 1
+> (spec files counted); `pe recall` was blind to envelope
+> findings content; Jaccard scoring sank valid matches on
+> large slot summaries. All three fixed with regression tests
+> locked in. No V2 progress change: twenty-three items shipped,
+> zero PARTIAL. §9 watchpoint on A4 first-fire still open.)
 
 ---
 
-## Current state — v0.42.0 (`35a8071` → `<v0.42.0 sha>` this session)
+## Current state — v0.43.0 (`96b8602` → `<v0.43.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 

@@ -114,12 +114,45 @@ else
     record_fail "--limit ignored: '$count'"
 fi
 
-# ─── 10. --min-score suppresses weak matches ────────────────────────
-out=$("$PE" recall --project "$proj" "worker_quality" --min-score 0.5 --json 2>&1)
+# ─── 9a. finding content is indexed, not just metadata ────────────
+# v0.43.0 dogfood regression: 8CStudio's decisions.jsonl carries rule
+# `sql-placeholder-style` in envelope.findings[]. Before v0.43.0, the
+# tokeniser indexed only slot_id/gate_name/verdict/failure_class — so
+# `pe recall placeholder` found nothing. This case seeds a finding and
+# asserts the recall lands.
+proj_f="$TMP/proj_findings"
+mkdir -p "$proj_f/.pe"
+cat > "$proj_f/.pe/decisions.jsonl" <<'EOF'
+{"decision_id":"df1","ts":"2026-07-04T10:00:00Z","slot_id":"FIND.1","slot_kind":"feature","iteration":1,"gate_name":"code-reviewer","envelope":{"verdict":"WARN","failure_class":"none","findings":[{"severity":"MEDIUM","rule":"sql-placeholder-style","message":"Seeds use SQLite-style ? placeholders against psycopg2","file":"tests/x.py"}]},"router_decision":{"action":"continue","rule_matched":"none","rule_source":"policy.toml"},"breaker_state_at_decision":{}}
+EOF
+out=$("$PE" recall --project "$proj_f" "placeholder" --json 2>&1)
 count=$(echo "$out" | "$PY" -c 'import json,sys; print(len(json.load(sys.stdin)["matches"]))' 2>/dev/null || echo "-1")
-# At min_score 0.5, nothing this coarse should match; expect 0.
+if [ "$count" = "1" ]; then
+    record_pass "finding.rule sub-token 'placeholder' indexed and matched"
+else
+    record_fail "finding sub-token not indexed: count=$count out='$out'"
+fi
+
+# ─── 9b. sub-token split works for hyphenated names ─────────────
+# Same corpus above — query for `psycopg2` (in message body) should
+# also land since finding messages are now capped-length indexed.
+out=$("$PE" recall --project "$proj_f" "psycopg2" --json 2>&1)
+count=$(echo "$out" | "$PY" -c 'import json,sys; print(len(json.load(sys.stdin)["matches"]))' 2>/dev/null || echo "-1")
+if [ "$count" = "1" ]; then
+    record_pass "finding.message content indexed (message-body query)"
+else
+    record_fail "finding.message not indexed: count=$count out='$out'"
+fi
+
+# ─── 10. --min-score suppresses partial-coverage matches ────────────
+# Coverage scoring (v0.43.0): `--min-score` filters slots that cover less
+# than the given fraction of the query tokens. A two-term query where
+# only one term appears in the slot scores 0.5. `--min-score 0.6` cuts
+# every slot that fails to cover 60% of the query.
+out=$("$PE" recall --project "$proj" "worker_quality nonexistent_token_xyz" --min-score 0.6 --json 2>&1)
+count=$(echo "$out" | "$PY" -c 'import json,sys; print(len(json.load(sys.stdin)["matches"]))' 2>/dev/null || echo "-1")
 if [ "$count" = "0" ]; then
-    record_pass "--min-score 0.5 filters out weak matches"
+    record_pass "--min-score 0.6 filters partial-coverage matches"
 else
     record_fail "--min-score not applied: got '$count' matches"
 fi

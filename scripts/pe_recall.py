@@ -49,14 +49,33 @@ from typing import Any, Iterable
 TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
+_SUBTOKEN_SEP_RE = re.compile(r"[._-]+")
+
+
 def _tokenize(text: str) -> list[str]:
     """Alphanumeric-plus-punctuation-preserving tokenizer.
 
     Keeps slot IDs (`1M.3`), SHAs (`b6c566e`), snake_case (`worker_quality`),
-    dotted paths (`modules.billing.money`) as single tokens. Lowercases
-    everything so `WorkerQuality` matches `worker_quality`.
+    dotted paths (`modules.billing.money`) as atomic tokens so exact-token
+    queries land — AND ALSO emits sub-tokens split on `.`, `_`, `-` so that
+    `placeholder` matches a rule named `sql-placeholder-style`. Both
+    representations coexist in the token set; scoring against `all_tokens`
+    picks up whichever the query supplies.
+
+    Lowercases everything so `WorkerQuality` matches `worker_quality`.
     """
-    return [t.lower() for t in TOKEN_RE.findall(text or "")]
+    tokens: list[str] = []
+    for atomic in TOKEN_RE.findall(text or ""):
+        low = atomic.lower()
+        tokens.append(low)
+        # Emit sub-tokens only when a punctuation separator is present.
+        # Length-1 sub-tokens are noise (a bare digit or letter fragment)
+        # and would flood the token set — skip them.
+        if _SUBTOKEN_SEP_RE.search(low):
+            for sub in _SUBTOKEN_SEP_RE.split(low):
+                if len(sub) > 1:
+                    tokens.append(sub)
+    return tokens
 
 
 @dataclass
@@ -119,8 +138,10 @@ def _collect_decision_tokens(rec: dict[str, Any]) -> list[str]:
 
     Concatenates the load-bearing fields (slot_id, gate_name,
     envelope.failure_class, envelope.verdict, router action + rule).
-    Also pulls `notes` and any short-string envelope fields — bodies
-    can be long, so we cap per-field.
+    Also pulls `notes`, envelope.summary, and finding metadata
+    (rule / file / message + suggestion capped) — the semantic signal
+    operators actually query for lives inside findings[], not just the
+    verdict metadata. Bodies can be long, so we cap per-field.
     """
     parts: list[str] = []
     for key in ("slot_id", "slot_kind", "gate_name"):
@@ -133,12 +154,29 @@ def _collect_decision_tokens(rec: dict[str, Any]) -> list[str]:
             v = env.get(key)
             if isinstance(v, str):
                 parts.append(v)
-        # Notes / short-strings — cap at 400 chars per field to keep the
-        # token set small.
-        for key in ("notes", "model_used", "gate_name"):
+        # Notes / summary / short-strings — cap per field. The summary
+        # is the reviewer's one-line synthesis; usually the highest-
+        # signal-per-token in the whole envelope.
+        for key in ("notes", "model_used", "gate_name", "summary"):
             v = env.get(key)
             if isinstance(v, str):
                 parts.append(v[:400])
+        # Findings — the actual semantic content operators search for.
+        # Cap at first 20 findings + first 200 chars per message so a
+        # runaway envelope can't blow the token set.
+        findings = env.get("findings")
+        if isinstance(findings, list):
+            for f in findings[:20]:
+                if not isinstance(f, dict):
+                    continue
+                for k in ("severity", "rule", "file"):
+                    v = f.get(k)
+                    if isinstance(v, str):
+                        parts.append(v)
+                for k in ("message", "suggestion"):
+                    v = f.get(k)
+                    if isinstance(v, str):
+                        parts.append(v[:200])
     router = rec.get("router_decision") or {}
     if isinstance(router, dict):
         for key in ("action", "rule_matched", "rule_source"):
@@ -230,23 +268,53 @@ def _jaccard(a: set[str], b: set[str]) -> float:
     return inter / len(a | b)
 
 
+def _coverage(query_tokens: set[str], slot_tokens: set[str]) -> float:
+    """Fraction of the query tokens that appear in the slot's token set.
+
+    Coverage answers the operator's actual question — "how many of MY
+    query terms did this slot mention?" — better than Jaccard, which
+    penalises small queries against large slots. Jaccard on a 1-token
+    query vs a 359-token slot maxes out at 1/359 ≈ 0.003, dropping every
+    real match below the default min_score threshold. Coverage is 1.0 in
+    that same case: the single query token is fully covered.
+    """
+    if not query_tokens:
+        return 0.0
+    return len(query_tokens & slot_tokens) / len(query_tokens)
+
+
 def rank(
     slots: dict[str, SlotSummary],
     query: str,
     limit: int,
     min_score: float,
 ) -> list[tuple[SlotSummary, float]]:
+    """Score each slot by query-coverage, tie-break by Jaccard, then by recency.
+
+    Score is coverage (fraction of query tokens found in the slot).
+    Jaccard is used only to break ties among slots with equal coverage —
+    a smaller, more focused slot beats a large catch-all when both cover
+    the query equally.
+    """
     query_tokens = set(_tokenize(query))
     if not query_tokens:
         return []
-    scored: list[tuple[SlotSummary, float]] = []
+    scored: list[tuple[SlotSummary, float, float]] = []
     for slot in slots.values():
-        score = _jaccard(query_tokens, slot.all_tokens)
-        if score < min_score:
+        cov = _coverage(query_tokens, slot.all_tokens)
+        if cov < min_score:
             continue
-        scored.append((slot, score))
-    scored.sort(key=lambda pair: (-pair[1], pair[0].last_ts or "", pair[0].slot_id))
-    return scored[:limit]
+        tie = _jaccard(query_tokens, slot.all_tokens)
+        scored.append((slot, cov, tie))
+    scored.sort(
+        key=lambda triple: (
+            -triple[1],
+            -triple[2],
+            triple[0].last_ts or "",
+            triple[0].slot_id,
+        )
+    )
+    return [(s, cov) for s, cov, _tie in scored[:limit]]
 
 
 def _format_trajectory(trajectory: list[str]) -> str:
