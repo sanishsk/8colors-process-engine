@@ -210,10 +210,11 @@ agent gates actually catch anything.
   **Lenis** for smooth-scroll.
 
 ### D7 Aspirational reference library + Style Dictionary token pipeline
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet + operator taste · **[MISSING]**
-- **Files:** `docs/design/aspirational/<archetype>.png` (marketing/gallery/dashboard/form), adopt
-  **Style Dictionary** for the token source.
-- **Fix:** curate 1 award-grade reference per surface archetype (source: Awwwards/Godly/Land-book/
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet + operator taste · **[SHIPPED v0.40.0 — all 4 archetype files (marketing-site / client-gallery / internal-dashboard / form-flow) upgraded from narrative stubs to CURATED VISUAL REFERENCE tables. Each table carries per-dimension anchor rows (Reference | Fold / anchor | Dimension | Bar | Concrete visual anchor) with real URLs (Linear / Vercel / Stripe / Squarespace / Format / Prophoto / Notion / Superhuman / Stripe Checkout / Typeform / Notion signup / Linear signup) + measurable descriptions (typography scale, palette hex, focus-ring specificity, row density, motion timing) + at least one 9.0 exemplar row + at least one 6.0 anti-exemplar row per archetype. STUB caveat retired from docs/design/aspirational/README.md AND from agents/design-critic.md ("v0.38.0 caveats" replaced with "v0.40.0 — D7 curated visual reference library"). Style Dictionary token pipeline seed in templates/design/ (tokens.json.template with color+typography+spacing+radius+motion families as valid JSON; style-dictionary.config.js.template emitting CSS custom properties + Tailwind theme extension + flat JSON; README.md documents bootstrap + per-tenant overlay). Quarterly design-scan ritual in commands/design-scan.md (5-step pass: collect ceiling → retire stale → add new → file capability D-items → retrospective note). commands count 9 → 10. Design-critic Step 1 updated to read 5 sections (added Curated visual references between Pass bar and What earns 9.0). Test coverage: tests/test_d7_visual_references.sh (22 cases: all 4 archetypes have curated section + 9.0 row + anti-exemplar row; README retires STUB; design-critic advertises D7 + STUB language gone; design-scan command landed; Style Dictionary template valid JSON + config wired + README documents pipeline).]**
+- **Files:** `docs/design/aspirational/*.md` (four archetype files), `templates/design/tokens.json.template`,
+  `templates/design/style-dictionary.config.js.template`, `templates/design/README.md`,
+  `commands/design-scan.md`, `agents/design-critic.md`.
+- **Original fix:** curate 1 award-grade reference per surface archetype (source: Awwwards/Godly/Land-book/
   Mobbin per DESIGN_EXCELLENCE §4) — this is what D5 scores against. Adopt Style Dictionary so tokens
   v2 become a single source (CSS-vars/Tailwind/per-tenant theme) that outlives Tailwind. Feeds
   8CStudio's tokens v2 as the first consumer.

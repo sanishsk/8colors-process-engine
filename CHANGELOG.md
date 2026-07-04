@@ -7,6 +7,187 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.40.0] — 2026-07-04
+
+> **D7 shipped — curated visual reference library.** D5 landed
+> the scoring shape against narrative-only stubs; D7 upgrades
+> those stubs to per-dimension anchor tables citing real
+> award-grade surfaces (Linear / Vercel / Stripe / Squarespace /
+> Format / Prophoto / Notion / Superhuman / Stripe Checkout /
+> Typeform) with **measurable visual descriptions** — typography
+> scale, palette hex, focus-ring specificity, row density, motion
+> timing. The description column is the durable contract when the
+> reference site redesigns. Plus a Style Dictionary token
+> pipeline seed + a `/design-scan` quarterly ritual to refresh
+> the ceiling as design trends churn. **The D5 STUB caveat is
+> retired** from both `design-critic` and the aspirational
+> README.
+
+### Added — Curated visual reference tables (D7)
+
+All four archetype files in `docs/design/aspirational/` gain a
+new "Curated visual references (D7, v0.40.0)" section between
+"Real-world exemplars" and "What earns 9.0":
+
+- **`marketing-site.md`** — 7 anchor rows citing Linear.app
+  hero + hero motion, Vercel feature grid, Stripe docs-home +
+  pricing page, plus two 6.0 anti-exemplar rows (the "SaaS
+  with Space Grotesk + Inter" AI-era smell + effect-stacked
+  hero).
+- **`client-gallery.md`** — 8 anchor rows citing Squarespace
+  Bedford/Almar templates, Format portfolio load-in, Prophoto
+  client-facing header, plus 4 anti-exemplar rows (Pixieset
+  uniform grid baseline, template motion, 25%-chrome galleries,
+  "Powered by X" watermark).
+- **`internal-dashboard.md`** — 8 anchor rows citing Linear
+  issues view (30+ rows / keyboard-first), Stripe payments
+  optimistic UI, Notion empty state, Superhuman motion posture,
+  plus 3 anti-exemplar rows (classic Bootstrap admin theme,
+  staggered-fade page-load, mouse-required primary action).
+- **`form-flow.md`** — 9 anchor rows citing Stripe Checkout
+  (card entry + decline error), Typeform question pacing,
+  Notion onboarding pacing, Linear zero-friction signup, plus
+  4 anti-exemplar rows (Bootstrap focus defaults, pre-checked
+  marketing opt-in, gradient behind payment fields, silent
+  progress inflation).
+
+Each row is a five-column table: Reference | Fold / anchor |
+Dimension | Bar | Concrete visual anchor. The last column is the
+measurable description the critic scores against.
+
+### Added — Style Dictionary token pipeline seed
+
+- **`templates/design/tokens.json.template`** — single JSON
+  source of truth for color / typography / spacing / radius /
+  motion tokens. Color families: brand (primary / secondary),
+  surface (background / alt / border), text (primary /
+  secondary / muted / inverse), feedback (success / warning /
+  danger), focus-ring (2px offset 2px, form-flow archetype
+  anchor). Typography: display / body / mono family + 9-step
+  modular scale (1.250 major third) + 4 weights + 3 line-heights.
+  Spacing: 4px base unit. Motion: 4 durations (80ms instant →
+  480ms narrative) + 3 easing curves. Adopter-editable via JSON
+  overlay; per-tenant themes are a second `source` entry
+  (later wins on collision).
+- **`templates/design/style-dictionary.config.js.template`** —
+  Style Dictionary build config emitting three consumer formats:
+  CSS custom properties (`static/css/tokens.css`), Tailwind
+  theme extension (`tailwind.tokens.js`, imported under
+  `theme.extend`), and flat JSON (`design/build/tokens.flat.json`).
+- **`templates/design/README.md`** — pipeline bootstrap
+  documentation, per-tenant overlay pattern, and rationale for
+  Style Dictionary over raw Tailwind config (single source,
+  outlives Tailwind, per-tenant swap is JSON overlay).
+
+### Added — `/design-scan` quarterly ritual command
+
+- **`commands/design-scan.md`** — five-step ritual: (1) collect
+  the ceiling from Awwwards SOTD / CSSDA / Mobbin / Land-book for
+  the quarter, (2) retire stale references (URL 404s or
+  redesigns) to `RETIRED.md`, (3) add new candidate rows
+  displacing retired ones, (4) file capability gaps as new
+  D-items in `ENHANCEMENT_PLAN_V2.md`, (5) log a retrospective
+  note (was the ceiling moved this quarter). This is the
+  mechanism that keeps the ceiling current without a rebuild —
+  design trends churn; the ritual keeps `design-critic`'s ceiling
+  current. Commands count: 9 → 10.
+
+### Modified — `agents/design-critic.md`
+
+- Step 1 now reads **5 sections** (added Curated visual
+  references between Pass bar and What earns 9.0). The
+  description column is measurable; the critic scores against
+  it and cites the specific anchor row in
+  `awwwards_score.reference_used`.
+- **STUB caveat retired.** The "v0.38.0 caveats" section
+  replaced with "v0.40.0 — D7 curated visual reference library"
+  which documents the new anchor-row citation contract and the
+  anti-exemplar cap behavior (e.g. a form with pre-checked
+  opt-in caps Content at 4.0 regardless of other polish).
+- Description frontmatter now advertises "D7, v0.40.0 curated
+  visual references" with the measurable-anchor list.
+
+### Modified — `docs/design/aspirational/README.md`
+
+- v0.38.0 STUB status section replaced with "v0.40.0 status —
+  CURATED (D7)" documenting the new anchor-table contract, the
+  optional local snapshot workflow (`design/references/<archetype>/*.png`
+  in the adopter project), and the quarterly refresh ritual
+  pointing at `/design-scan`.
+- The archetype file schema block now lists "Curated visual
+  references (D7, v0.40.0)" as a required section between
+  "Real-world exemplars" and "What earns 9.0".
+- Consumer contract now reads 4 sections (added Curated visual
+  references at position 2, before What earns 9.0).
+
+### Added — `tests/test_d7_visual_references.sh` (22 cases)
+
+- All 4 archetypes carry the "Curated visual references" section.
+- Each archetype carries at least one 9.0-anchor row.
+- Each archetype carries at least one 6.0-or-below anti-exemplar
+  row.
+- Aspirational README retires the STUB caveat + points at
+  `/design-scan`.
+- `design-critic` description advertises D7 + body has the new
+  section replacing the STUB caveat + STUB language is GONE
+  (not just augmented).
+- `commands/design-scan.md` landed with description frontmatter
+  + "Quarterly design-scan" language.
+- Style Dictionary template parses as valid JSON + config has
+  source + platforms + README documents pipeline.
+- Archetype schema block in README updated to include
+  "Curated visual references (D7, v0.40.0)".
+
+### Alignment
+
+- All 27 test scripts + `pe docs check` green at v0.40.0
+  (`test_d7_visual_references.sh` new).
+- `plugin.json` + `.claude-plugin/plugin.json` commands count
+  9 → 10; description strings updated in both.
+- `docs/ENHANCEMENT_PLAN_V2.md` D7 marker MISSING → SHIPPED
+  v0.40.0 with detailed close list.
+- `docs/HANDOFF.md`: v0.40.0 header + D7 row added + adopter
+  re-install note updated (no behavior change unless using
+  ceiling mode) + "Not started yet" list drops D7.
+- **Twenty-one V2 items shipped, one PARTIAL (A4 loop).** D-row
+  progress: D1+D2+D4 (floor) + D5 (ceiling scoring) + D6
+  (motion) + D7 (curated visual refs) shipped; D3+D8+A9.3
+  still pending.
+
+### Notes — deliberately out of scope
+
+- **Vision-model scoring against actual PNGs.** The anchor
+  descriptions are measurable, and the reference URLs are for
+  operator inspection. Vision-model scoring against real
+  screenshots is not required — the durable contract is the
+  description column, not the pixels.
+- **Retired references archive.** The `/design-scan` ritual
+  says to move stale rows to
+  `docs/design/aspirational/RETIRED.md`; that file will be
+  created on first quarterly scan (2026-Q4), not in this
+  release. Retired archive is empty on v0.40.0.
+- **`design/references/<archetype>/*.png` local snapshots.**
+  The README documents the pattern for adopters who want the
+  visuals cached alongside the anchors; the engine itself does
+  not ship snapshots (bloat + licensing).
+- **Style Dictionary as a required dependency.** The pipeline
+  is opt-in — adopters not using Style Dictionary see no
+  change. The seed is copied by the adopter, not auto-installed
+  by `pe install`.
+
+### Migration
+
+- No breaking changes. Adopters not using `design-critic` ceiling
+  mode see no behavior change. Adopters using it now score
+  against curated anchor tables — the STUB caveat is gone from
+  `awwwards_score.reference_used`, and citations now name the
+  specific row (e.g.
+  `"docs/design/aspirational/marketing-site.md#curated-visual-references linear.app hero"`).
+  Style Dictionary is opt-in — adopters can adopt on their own
+  cadence.
+
+---
+
 ## [0.39.0] — 2026-07-04
 
 > **D6 shipped — motion-craft gate.** Motion is the #1 amateur

@@ -1,0 +1,65 @@
+/**
+ * D7 Style Dictionary config (v0.40.0).
+ *
+ * Reads templates/design/tokens.json.template (or the adopter's
+ * design/tokens.json after copy) and emits three consumer formats:
+ *
+ *   1. CSS custom properties → static/css/tokens.css
+ *   2. Tailwind theme extension → tailwind.tokens.js (imported into
+ *      tailwind.config.js under `theme.extend`)
+ *   3. JSON (untransformed) → design/build/tokens.flat.json for
+ *      any other consumer (JS runtime, per-tenant override
+ *      generator)
+ *
+ * Usage (adopter):
+ *   npm install --save-dev style-dictionary
+ *   npx style-dictionary build --config style-dictionary.config.js
+ *
+ * Per-tenant themes:
+ *   Copy design/tokens.json → design/tenants/<slug>/tokens.json,
+ *   override only the values that change (usually color.brand.*).
+ *   Add a second `source` entry pointing at the tenant file; the
+ *   later entry wins on collision.
+ */
+
+module.exports = {
+  source: ['design/tokens.json'],
+
+  platforms: {
+    css: {
+      transformGroup: 'css',
+      buildPath: 'static/css/',
+      files: [
+        {
+          destination: 'tokens.css',
+          format: 'css/variables',
+          options: {
+            outputReferences: true,
+          },
+        },
+      ],
+    },
+
+    tailwind: {
+      transformGroup: 'js',
+      buildPath: './',
+      files: [
+        {
+          destination: 'tailwind.tokens.js',
+          format: 'javascript/module-flat',
+        },
+      ],
+    },
+
+    json: {
+      transformGroup: 'js',
+      buildPath: 'design/build/',
+      files: [
+        {
+          destination: 'tokens.flat.json',
+          format: 'json/flat',
+        },
+      ],
+    },
+  },
+};

@@ -32,6 +32,34 @@ a prospect sees before signing in.
   clearly with taste." Content voice + hierarchy do more than
   visual polish.
 
+## Curated visual references (D7, v0.40.0)
+
+Concrete visual anchors per dimension. Each row names a URL + which
+fold + which score bar it exemplifies. Operators inspect the live
+surface; the critic reasons about the anchor description below when
+scoring a diff against this archetype. Capture the reference into
+`design/references/marketing/<slug>.png` if the surface is likely to
+change; the anchor description is the durable contract.
+
+| Reference | Fold / anchor | Dimension | Bar | Concrete visual anchor |
+|---|---|---|---|---|
+| `linear.app` | Hero (above the fold) | Design | 9.0 | Single-weight display face (Inter Display 400) at 72px, one line, one accent color for the "Plan and build" phrase; NO gradient background; palette is neutral gray with a single blue accent (#5E6AD2) — recognizable in one glance. |
+| `linear.app` | Hero motion | Creativity | 9.0 | ONE signature scroll interaction — the isometric plane rotates through 3 keyframes as the user scrolls a single section. No parallax stacking. `prefers-reduced-motion` respected: reduced path shows the third keyframe statically. |
+| `vercel.com` | Feature grid | Design | 9.0 | 12-column grid with varied cell widths (asymmetric), each cell has ONE hero element + one line of proof-copy. No card-grid-as-menu. Palette: pure black + white + one product accent per feature — the polychrome is intentional, not stock. |
+| `stripe.com` | Docs-home hero | Content | 9.0 | Copy voice: "The financial infrastructure for the internet." Concrete noun ("infrastructure") + concrete audience ("the internet"). No manifesto verb. Below-hero: real code snippet running, not a marketing illustration. |
+| `stripe.com` | Pricing page | Content | 9.0 | Real numbers per tier ("2.9% + 30¢"), one recommended tier visually marked WITHOUT a pre-checked upsell, "Contact sales" only for the highest tier. Explicit "no hidden fees" section with the specific fees enumerated. |
+| Generic "SaaS-with-Space-Grotesk-and-Inter" landing | Hero | Design | 6.0 | Type pairing is Space Grotesk display + Inter body — the AI-era smell. Hero background is a dark cyan-to-black gradient. Emoji in primary CTA. Marketing verbs: "Imagine.", "Unleash", "Empower". Card-grid-as-menu below fold. |
+| Any landing with 5+ animated backgrounds | Hero motion | Creativity | 6.0 | Effect stacking — parallax + orb pulses + fade-in + typewriter + gradient shimmer + scroll-triggered slides. Nothing communicates; everything decorates. `prefers-reduced-motion` either absent or leaves the page silently-static with no signal state changed. |
+
+**How to use these when scoring:**
+
+- If the diff's hero visually resembles the Linear/Vercel/Stripe row
+  named for its dimension, that dimension scores toward 9.0.
+- If the diff visually resembles the 6.0 anti-exemplar row, the
+  dimension caps at 6.5 regardless of other polish.
+- Cite the anchor row in `awwwards_score.reference_used` (e.g.
+  `"docs/design/aspirational/marketing-site.md#curated-visual-references linear.app hero"`).
+
 ## What earns 9.0
 
 - **Typography is a system**, not a font choice. Multiple weights

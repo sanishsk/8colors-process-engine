@@ -1,0 +1,110 @@
+{
+  "_comment": "D7 Style Dictionary token source (v0.40.0). Single JSON source; the build script emits CSS custom properties + Tailwind config + per-tenant overrides. Style Dictionary is the pipeline — this file is the seed. Adopters swap the values, not the shape. See templates/design/README.md.",
+
+  "color": {
+    "brand": {
+      "primary":   { "value": "#5E6AD2", "comment": "Linear-esque neutral accent. Adopters replace with tenant primary." },
+      "secondary": { "value": "#1E1E2E", "comment": "Neutral dark. Not the AI-era dark-cyan." }
+    },
+    "surface": {
+      "background":     { "value": "#FFFFFF" },
+      "background-alt": { "value": "#F7F7F9" },
+      "border":         { "value": "#E4E4E7" }
+    },
+    "text": {
+      "primary":   { "value": "#0A0A0F" },
+      "secondary": { "value": "#4B4B58" },
+      "muted":     { "value": "#8A8A99" },
+      "inverse":   { "value": "#FFFFFF" }
+    },
+    "feedback": {
+      "success": { "value": "#16A34A" },
+      "warning": { "value": "#D97706" },
+      "danger":  { "value": "#DC2626" }
+    },
+    "focus-ring": {
+      "value": "#5E6AD2",
+      "comment": "Form-flow archetype floor: 2px focus ring, offset 2px, uses palette accent. See docs/design/aspirational/form-flow.md."
+    }
+  },
+
+  "typography": {
+    "family": {
+      "display": {
+        "value": "Inter Display, ui-sans-serif, system-ui, sans-serif",
+        "comment": "Marketing-site 9.0 anchor: single-weight distinctive display face. Space Grotesk + Inter default pairing is the AI-era smell (marketing-site.md 6.0 row) — this template avoids it."
+      },
+      "body": {
+        "value": "Inter, ui-sans-serif, system-ui, sans-serif"
+      },
+      "mono": {
+        "value": "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
+        "comment": "Numeric column mono for internal-dashboard tabular-nums pattern."
+      }
+    },
+    "scale": {
+      "_comment": "Modular scale 1.250 (major third). Base 16px. Rounded to integer px.",
+      "xs":   { "value": "12px" },
+      "sm":   { "value": "14px" },
+      "base": { "value": "16px" },
+      "lg":   { "value": "20px" },
+      "xl":   { "value": "24px" },
+      "2xl":  { "value": "32px" },
+      "3xl":  { "value": "40px" },
+      "4xl":  { "value": "56px" },
+      "5xl":  { "value": "72px", "comment": "Hero display size (marketing-site 9.0 anchor)." }
+    },
+    "weight": {
+      "regular":  { "value": "400" },
+      "medium":   { "value": "500" },
+      "semibold": { "value": "600" },
+      "bold":     { "value": "700" }
+    },
+    "line-height": {
+      "tight":   { "value": "1.15" },
+      "normal":  { "value": "1.45" },
+      "relaxed": { "value": "1.65" }
+    }
+  },
+
+  "spacing": {
+    "_comment": "4px base unit. Powers of 2 + intermediate 6/10/12/16/24/32/40/48/64.",
+    "0":   { "value": "0" },
+    "1":   { "value": "4px" },
+    "2":   { "value": "8px" },
+    "3":   { "value": "12px" },
+    "4":   { "value": "16px" },
+    "5":   { "value": "20px" },
+    "6":   { "value": "24px" },
+    "8":   { "value": "32px" },
+    "10":  { "value": "40px" },
+    "12":  { "value": "48px" },
+    "16":  { "value": "64px" },
+    "20":  { "value": "80px" },
+    "24":  { "value": "96px" }
+  },
+
+  "radius": {
+    "none": { "value": "0" },
+    "sm":   { "value": "4px" },
+    "md":   { "value": "8px" },
+    "lg":   { "value": "12px" },
+    "xl":   { "value": "16px" },
+    "full": { "value": "9999px" }
+  },
+
+  "motion": {
+    "_comment": "D6 motion-craft — durations short (functional > decorative). Reduced-motion path: set all durations to 0.01ms via @media rule in the app CSS.",
+    "duration": {
+      "instant":     { "value": "80ms",  "comment": "Optimistic UI state changes." },
+      "quick":       { "value": "180ms", "comment": "Modal open, tab activate." },
+      "considered":  { "value": "320ms", "comment": "Signature interaction. Reserve for one moment per surface." },
+      "narrative":   { "value": "480ms", "comment": "Scroll-tied choreography. Use sparingly." }
+    },
+    "easing": {
+      "standard":  { "value": "cubic-bezier(0.2, 0, 0, 1)",     "comment": "Material-esque decel." },
+      "emphasized":{ "value": "cubic-bezier(0.4, 0, 0.2, 1)",   "comment": "Modal opens, primary CTAs." },
+      "spring":    { "value": "cubic-bezier(0.34, 1.56, 0.64, 1)", "comment": "Reserve for signature moment." }
+    }
+  }
+}

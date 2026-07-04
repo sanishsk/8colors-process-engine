@@ -1,6 +1,6 @@
 ---
 name: design-critic
-description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references; surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
+description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft; D7, v0.40.0 curated visual references) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references with per-dimension measurable visual anchors (typography scale, palette hex, focus-ring specificity, row density, motion timing); surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: medium
@@ -233,14 +233,27 @@ the summary.
 
 ## Step 1 — read the aspirational reference
 
-Open the chosen archetype file. Read four sections in order:
+Open the chosen archetype file. Read five sections in order:
 
 1. **Pass bar** — what score each dimension must clear for this
    archetype.
-2. **What earns 9.0** — the target ceiling anchors.
-3. **What earns 6.0** — the current floor threshold.
-4. **Signature signals unique to this archetype** — additional
+2. **Curated visual references (D7, v0.40.0)** — the measurable
+   per-dimension anchor table. Find the row that most closely
+   matches the diff for each dimension being scored. Cite the
+   specific row in `awwwards_score.reference_used` (e.g.
+   `"docs/design/aspirational/marketing-site.md#curated-visual-references linear.app hero"`).
+3. **What earns 9.0** — the target ceiling anchors.
+4. **What earns 6.0** — the current floor threshold.
+5. **Signature signals unique to this archetype** — additional
    caps that override the general rubric.
+
+The Curated visual references table is the D7 addition — the
+description column ("Concrete visual anchor") is measurable
+(typography scale, palette hex, focus-ring specificity, row
+density, motion timing). Score against that description; the
+reference URL is provided for operator inspection but the anchor
+description is the durable contract even if the reference site
+redesigns.
 
 ## Step 2 — score each of the four Awwwards dimensions
 
@@ -378,20 +391,28 @@ top-change just to fill the array — omit that dimension and offer
 fewer than 3 changes. Empty `top_changes` is legal on a well-clear
 PASS; the pull-up principle is about direction, not padding.
 
-## v0.38.0 caveats
+## v0.40.0 — D7 curated visual reference library
 
-The `docs/design/aspirational/*.md` files ship as **stubs** in
-v0.38.0 — narrative descriptions, not visual references. Vision-
-model scoring against real screenshots is D7's job (upgrade path
-already documented). Until D7 lands:
+The `docs/design/aspirational/*.md` files ship with **curated
+visual references** — each archetype has a "Curated visual
+references" table with measurable per-dimension anchors. The D5
+STUB caveat is retired.
 
-- Score based on the diff's code + the archetype's textual anchors.
-- Note the "reference is a stub" limitation in
-  `awwwards_score.reference_used` (e.g.
-  `"docs/design/aspirational/marketing-site.md (stub, D7 will add
-  visual references)"`).
+Scoring guidance:
+
+- Match the diff to the closest anchor row per dimension. The
+  "Concrete visual anchor" column is measurable — typography scale,
+  palette hex, focus-ring specificity, row density, motion timing.
+- Cite the specific row in `awwwards_score.reference_used`, not
+  just the file path (e.g.
+  `"docs/design/aspirational/marketing-site.md#curated-visual-references linear.app hero"`).
 - If the diff includes a screenshot in the brief, use it — vision
-  reading is not required by v0.38.0 but not forbidden.
+  reading complements the anchor descriptions but the descriptions
+  are the durable contract.
+- Anti-exemplar rows (the 6.0 rows) cap the noted dimension when
+  the diff matches them, regardless of other polish. Example: a
+  form with pre-checked marketing opt-in caps Content at 4.0 per
+  the form-flow archetype table, even if focus states are perfect.
 
 ---
 

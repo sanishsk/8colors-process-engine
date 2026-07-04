@@ -3,19 +3,20 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.39.0 shipped — D6 motion-craft
-> gate. Deterministic hooks/motion-lint.sh + design-critic
-> motion-craft rubric. WCAG-hard prefers-reduced-motion enforcement
-> + effect-stacking heuristic + CWV-under-motion judgment.
-> Twenty V2 items shipped, one PARTIAL (A4 loop). D-row progress:
-> D1+D2+D4 (floor) + D5 (ceiling scoring) + D6 (motion) shipped;
-> D3+D7+D8+A9.3 still pending. D7 upgrade path swaps stub
-> references for real visuals when the 8CStudio Delivery gallery
-> lands.)
+> **Last updated:** 2026-07-04 (v0.40.0 shipped — D7 curated
+> visual reference library. All 4 archetype files upgraded from
+> narrative stubs to per-dimension anchor tables citing Linear /
+> Vercel / Stripe / Squarespace / Format / Prophoto / Notion /
+> Superhuman / Stripe Checkout / Typeform with measurable visual
+> descriptions. Style Dictionary token pipeline seed in
+> templates/design/ + /design-scan quarterly ritual in commands/.
+> STUB caveat retired from design-critic + aspirational README.
+> Twenty-one V2 items shipped, one PARTIAL (A4 loop). D-row
+> progress: D1+D2+D4+D5+D6+D7 shipped; D3+D8+A9.3 pending.)
 
 ---
 
-## Current state — v0.39.0 (`ce6d5b9` → `<v0.39.0 sha>` this session)
+## Current state — v0.40.0 (`d09dd96` → `<v0.40.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -52,26 +53,26 @@
 | PF6 performance-reviewer agent (judgment 20% gate) | ✅ SHIPPED | v0.37.0 |
 | D5 design-critic ceiling mode (Awwwards scoring, stub refs) | ✅ SHIPPED | v0.38.0 |
 | D6 motion-craft gate (motion-lint + prefers-reduced-motion + effect-stacking + critic rubric) | ✅ SHIPPED | v0.39.0 |
+| D7 curated visual reference library + Style Dictionary token pipeline + /design-scan ritual | ✅ SHIPPED | v0.40.0 |
 
 **PARTIAL count: 1** — A4's auto-escalation loop.
 Every other V2 item is either SHIPPED, GATED with a named
 prerequisite, on a specific release queue, or explicitly not yet
 started.
 
-**Not started yet:** A9 higher tiers, D3 (visual-regression), D7
-(curated visual reference library — upgrades D5's stubs), D8
+**Not started yet:** A9 higher tiers, D3 (visual-regression), D8
 (signature-system gate), A9.3 (visual-regression tool wiring).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.39.0** —
-   `hooks/motion-lint.sh` lands + gets wired into their
-   `.claude/settings.json` PostToolUse and
-   `.pre-commit-config.yaml`. Adopters with existing motion in
-   their UI will see the BLOCK on next commit unless a
-   prefers-reduced-motion guard is present (per-file or global via
-   `motion_gate.global_guard_file` in `.process-engine.yaml`).
-   Bypass: `PE_SKIP_MOTION_LINT=1`.
+1. **Adopters need to be re-installed at v0.40.0** —
+   `commands/design-scan.md` lands (commands count 9 → 10),
+   `docs/design/aspirational/*.md` upgraded with curated visual
+   reference tables, `templates/design/tokens.json.template` +
+   `templates/design/style-dictionary.config.js.template` land.
+   No behavior change for adopters not using design-critic ceiling
+   mode; adopters using it now score against the anchor tables
+   (STUB caveat retired). Style Dictionary is opt-in.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -81,14 +82,12 @@ started.
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **D7 curated reference library** — swaps the D5 stubs for
-     real visual references (screenshot swatches, motion clips,
-     token snapshots). Naturally follows once the 8CStudio
-     Delivery gallery (backlog #237) provides live target
-     screens. Until then, D5's stub-mode holds.
    - **D8 signature-system gate** — codifies "every product has
      ≥1 signature element" as a FAIL condition on flagship
-     screens. D6 shipped v0.39.0.
+     screens. Natural next release — D7 shipped v0.40.0, and D8
+     turns the last remaining "no signature" tell from soft
+     (design-critic Creativity dimension) to hard (FAIL on
+     flagship screens without a signature declaration).
    - **D3 + A9.3** — visual-regression baselines + wiring the
      orphaned `run_visual_regression` MCP tool into the critic.
    - **A4 auto-escalation loop** — the loop itself (status

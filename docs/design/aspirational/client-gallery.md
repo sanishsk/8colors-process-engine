@@ -32,6 +32,32 @@ tenant showcases, media libraries surfaced to end-consumers.
   gallery integration."
 - **Format** — the bar for professional portfolio delivery.
 
+## Curated visual references (D7, v0.40.0)
+
+Concrete visual anchors per dimension. Operators inspect the live
+surface; the critic reasons about the anchor description below when
+scoring a diff against this archetype.
+
+| Reference | Fold / anchor | Dimension | Bar | Concrete visual anchor |
+|---|---|---|---|---|
+| Squarespace `Bedford` template gallery | Grid view | Design | 9.0 | Asymmetric masonry — cells honor image aspect (3:2, 4:5, square all coexist). Zero chrome above imagery except one small back arrow. Client name in serif title above grid; studio brand as a small footer mark. |
+| Squarespace `Almar` template gallery | Detail view | Creativity | 9.0 | Image transition is a considered cross-fade with subtle Ken-Burns-style scale (1.02× over 400ms), NOT a slide. Reduced-motion path: instant cross-fade with no scale, still communicates the shift. |
+| `format.com` portfolio | Load-in | Usability | 9.0 | Progressive blurhash → sharpen. LCP <1.2s on Fast 3G. Grid renders shape immediately (aspect-ratio boxes reserved) so no CLS shift when images arrive. |
+| `prophoto` gallery | Client-facing header | Content | 9.0 | Client name (shoot title / wedding date) is the h1, larger than the studio brand mark. Delivery message from the studio is one line, italic serif, present but recedes. |
+| Pixieset default gallery | Grid view | Design | 7.5 | Uniform-aspect grid (crops enforce 1:1 or 3:2 whether or not the image fits). Chrome bar with logo + share + download is 60px tall above the fold — takes attention off the photography. This is the baseline to beat. |
+| Any gallery with template motion | Detail view | Creativity | 6.0 | Default template transition — fade-in over 300ms, no directional or spatial cue. Reduced-motion path: no transition at all, the modal just appears with no signal state changed. |
+| Any gallery with 25%+ chrome | Grid view | Design | 6.0 | Top bar (nav + brand + client dropdown), breadcrumbs row, action toolbar, and footer share row together occupy >25% of viewport height on the gallery view. Photography is decoration, not lead. |
+| "Powered by X" watermarked gallery | Any | Design | 6.0 | Vendor watermark visible anywhere on the client-facing surface (footer, corner of gallery frame, share-modal). Studio is renting a template, not delivering a signature product. |
+
+**How to use these when scoring:**
+
+- If the diff's grid resembles the Squarespace masonry row, Design
+  scores toward 9.0. If it resembles the Pixieset uniform-aspect
+  row, Design caps at 7.5.
+- Chrome-height threshold (25%) is measurable — if the diff includes
+  the template, measure it.
+- Cite the anchor row in `awwwards_score.reference_used`.
+
 ## What earns 9.0
 
 - **Chrome truly recedes.** Nav is minimal on gallery view — often

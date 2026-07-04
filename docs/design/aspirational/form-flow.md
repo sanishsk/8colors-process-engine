@@ -33,6 +33,33 @@ product information or money.
 - **Linear signup** — the bar for zero-friction sign-in that still
   feels premium.
 
+## Curated visual references (D7, v0.40.0)
+
+Concrete visual anchors per dimension. Form-flow scoring is
+weighted toward Usability (9.0 floor) and Content (8.5 floor) —
+the visual references emphasize focus, error copy, honest defaults,
+and payment-field convention.
+
+| Reference | Fold / anchor | Dimension | Bar | Concrete visual anchor |
+|---|---|---|---|---|
+| Stripe Checkout | Card entry | Usability | 9.5 | Focus ring 2px, offset 2px, uses palette accent — unmistakable at tab-lands. Autofill respected (Chrome yellow doesn't fight the field styling). Card number, expiry, CVC laid out canonical (number full-width, expiry+CVC side-by-side); zip only shown when Stripe requires it. |
+| Stripe Checkout | Decline error | Content | 9.5 | "Your card was declined — try another card or use a different payment method." Human sentence, actionable, offers the recovery path in the same line. No error code visible to user. |
+| Typeform | Question pacing | Usability | 9.0 | One question per screen, progress shown as "3 of 8" and 8 doesn't grow after user starts. Keyboard flow: Enter advances, Tab moves within field. Autofocus on primary input each step. |
+| Notion signup | Onboarding pacing | Content | 9.0 | Each step names WHY the field is asked ("So we can address you in emails" next to first name). Skip is visible where legal. No upsell prompt appears until after activation. |
+| Linear signup | Zero-friction premium | Design | 9.0 | Single input above the fold (email), one primary CTA, focus states unmistakable. Type hierarchy: h1 states the offer, one line of proof-copy, one field, one CTA. No side illustrations, no upsell modal, no "why sign up?" bullet list. |
+| Any Bootstrap-styled form | Focus states | Usability | 6.0 | Browser default 1px dotted outline OR `outline: none` with no replacement focus indicator. Keyboard-only user hunts for cursor position. |
+| Any form with pre-checked marketing opt-in | Consent | Content | 4.0 | Marketing-email checkbox pre-checked at signup. "Add card for free trial" toggle pre-selected. Unsubscribe is 3 clicks; subscribe was 1 click. Dark-pattern gate — Content caps at 4.0. |
+| Any payment page with gradient behind card fields | Payment surface | Design + Content | 5.0 | Card number field sits over a gradient hero background. Glow or shimmer near the input. Fails the trust test — Content AND Design both dinged; convention is white background, quiet chrome, canonical layout. |
+| Any signup with silent progress inflation | Progress meter | Usability | 5.5 | "Step 2 of 3" becomes "Step 4 of 7" after commit to first two. Total silently grew. Trust broken. |
+
+**How to use these when scoring:**
+
+- Focus-ring specificity (2px offset 2px) is measurable in the
+  diff CSS — check it.
+- Pre-checked upsell / progress-inflation / payment-decoration
+  patterns are pass/fail — one match caps the noted dimension.
+- Cite the anchor row in `awwwards_score.reference_used`.
+
 ## What earns 9.0
 
 - **Focus states are unmistakable.** Keyboard tab lands on
