@@ -121,6 +121,13 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: signature-lint
+        name: Signature-system gate (D8 — flagship pages must reference a declared signature)
+        entry: hooks/signature-lint.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: copy-lint
         name: In-app copy lint (AI-manifesto phrases, emoji-icons)
         entry: hooks/copy-lint.sh
@@ -169,6 +176,7 @@ repos:
 #   PE_SKIP_MIGRATION_LINT=1       # bypass migration-lint for one commit
 #   PE_SKIP_DESIGN_LINT=1          # bypass design-lint for one commit
 #   PE_SKIP_MOTION_LINT=1          # bypass motion-lint for one commit (D6)
+#   PE_SKIP_SIGNATURE_LINT=1       # bypass signature-lint for one commit (D8)
 #   PE_SKIP_COPY_LINT=1            # bypass copy-lint for one commit
 #   PE_SKIP_BOOT_SMOKE=1           # bypass boot-smoke (used by pe doctor + CI)
 #   PE_SKIP_SAST=1                 # bypass sast-scan for one commit

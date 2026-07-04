@@ -1,0 +1,115 @@
+# <product-name> — Signature System
+
+> D8 signature-system declaration (v0.41.0). This file is the
+> adopter's declaration of what makes THIS product visually
+> unrecognizable-if-removed. `signature-lint.sh` blocks flagship
+> screens (marketing / landing / pricing / about / hero) that don't
+> textually reference at least one declared signature element.
+> `design-critic` upgrades tell #9 ("No signature element") from
+> soft to HARD FAIL on flagship diffs when this file exists but
+> no signature is demonstrated in the composition.
+>
+> Absence of this file is not a fail — the signature gate is
+> opt-in per adopter. Presence + a flagship diff carrying zero
+> signature references IS a fail.
+
+## The product signature (required section — critic reads this)
+
+Declare between 1 and 5 signature elements that make this product
+visually unmistakable. Each MUST be:
+
+- **Concrete** — a specific object, color combination, motif, or
+  typographic device, not a value ("we're minimal").
+- **Ownable** — a competitor could not use it without looking
+  derivative.
+- **Load-bearing** — actually present on flagship screens today
+  (or immediately after this file lands).
+
+Format each element as a heading + a short paragraph + one or
+more `signature_token: <slug>` lines. `signature-lint.sh` greps
+for the token slugs in the diff. Keep slugs short and
+kebab-cased. Compose new slugs from the ones you invent for this
+product — do NOT reuse generic ones like `hero` or `button`.
+
+### Example (replace with your product's real signatures)
+
+#### 1. Film-slate typography motif
+
+Every headline on flagship screens is wrapped in a slate-style
+device — top rule + timecode label above + slugline in the
+condensed display face. Reads as "this is a filmmaker's tool"
+in one glance.
+
+- `signature_token: slate-headline`
+- `signature_token: timecode-label`
+- `signature_token: slugline`
+
+#### 2. Green-black-cream palette
+
+Not neutral, not the AI-era dark-cyan. A specific dark green
+(#0C1F17) + warm cream (#F4EDE1) + a single vermilion accent
+(#D93B1A). Wouldn't be mistaken for any other SaaS.
+
+- `signature_token: palette-green-black-cream`
+
+#### 3. Frame-margin device
+
+Flagship pages carry a persistent 32px frame margin with corner
+crop marks — reads as "a film frame we're looking through."
+Present on every marketing page, absent on internal screens.
+
+- `signature_token: frame-margin`
+- `signature_token: corner-crop-marks`
+
+---
+
+## Where signatures must appear (flagship paths)
+
+By default `signature-lint.sh` scans commits touching these path
+patterns as "flagship":
+
+- `templates/marketing/**`
+- `templates/landing/**`
+- `pages/marketing/**`
+- `app/marketing/**`
+- `app/(marketing)/**`
+- `templates/home.*`
+- `templates/index.*`
+- `templates/pricing.*`
+- `templates/about.*`
+- `templates/docs-home.*`
+- `app/page.tsx`, `app/page.jsx`
+- `app/marketing/page.*`
+- `app/pricing/page.*`
+- `app/about/page.*`
+
+Override in `.process-engine.yaml`:
+
+```yaml
+signature_gate:
+  enabled: true              # default true when this file exists
+  flagship_paths:            # list of regexes; matches trigger the gate
+    - '^templates/marketing/'
+    - '^app/\(marketing\)/'
+    - '^templates/(home|pricing|about)\.'
+  require_count: 1           # min distinct signature tokens per flagship diff
+```
+
+## What NOT to declare
+
+- **Generic tokens** ("primary color", "hero image") — the gate
+  is meaningless if the token slug is what every SaaS has.
+- **Aspirational signatures** — declare what SHIPS today. If you
+  want a future signature, land it first, then update this file.
+- **More than 5 signatures** — the point is unmistakability; a
+  product with 10 signatures has none.
+- **Signatures that are just brand colors from your token file** —
+  the palette-hex row is fine as ONE signature, but the file
+  should also carry a signature that isn't reducible to CSS
+  variables (a motif, an interaction, a photography rule).
+
+## Bypass
+
+`PE_SKIP_SIGNATURE_LINT=1 git commit ...` for the one-off case
+(migration commits, tooling PRs). The commit still gets the
+audit trail; the gate just doesn't block.

@@ -3,20 +3,20 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.40.0 shipped — D7 curated
-> visual reference library. All 4 archetype files upgraded from
-> narrative stubs to per-dimension anchor tables citing Linear /
-> Vercel / Stripe / Squarespace / Format / Prophoto / Notion /
-> Superhuman / Stripe Checkout / Typeform with measurable visual
-> descriptions. Style Dictionary token pipeline seed in
-> templates/design/ + /design-scan quarterly ritual in commands/.
-> STUB caveat retired from design-critic + aspirational README.
-> Twenty-one V2 items shipped, one PARTIAL (A4 loop). D-row
-> progress: D1+D2+D4+D5+D6+D7 shipped; D3+D8+A9.3 pending.)
+> **Last updated:** 2026-07-04 (v0.41.0 shipped — D8
+> signature-system gate. hooks/signature-lint.sh + design-critic
+> tell #9 upgraded to HARD FAIL on flagship screens when
+> docs/design/SIGNATURE.md declares signature tokens. Opt-in per
+> adopter (no SIGNATURE.md → gate inert). templates/design/
+> SIGNATURE.md.template documents the declaration format;
+> install.sh drops it into docs/templates/design/. hooks count
+> 16 → 17. Twenty-two V2 items shipped, one PARTIAL (A4 loop).
+> D-row progress: D1+D2+D4+D5+D6+D7+D8 shipped — design ceiling
+> wave COMPLETE. D3+A9.3 remain (visual-regression, tool wiring).)
 
 ---
 
-## Current state — v0.40.0 (`d09dd96` → `<v0.40.0 sha>` this session)
+## Current state — v0.41.0 (`7911b8f` → `<v0.41.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -54,25 +54,28 @@
 | D5 design-critic ceiling mode (Awwwards scoring, stub refs) | ✅ SHIPPED | v0.38.0 |
 | D6 motion-craft gate (motion-lint + prefers-reduced-motion + effect-stacking + critic rubric) | ✅ SHIPPED | v0.39.0 |
 | D7 curated visual reference library + Style Dictionary token pipeline + /design-scan ritual | ✅ SHIPPED | v0.40.0 |
+| D8 signature-system gate (signature-lint + SIGNATURE.md template + design-critic tell #9 HARD FAIL on flagship) | ✅ SHIPPED | v0.41.0 |
 
 **PARTIAL count: 1** — A4's auto-escalation loop.
 Every other V2 item is either SHIPPED, GATED with a named
 prerequisite, on a specific release queue, or explicitly not yet
 started.
 
-**Not started yet:** A9 higher tiers, D3 (visual-regression), D8
-(signature-system gate), A9.3 (visual-regression tool wiring).
+**Not started yet:** A9 higher tiers, D3 (visual-regression),
+A9.3 (visual-regression tool wiring).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.40.0** —
-   `commands/design-scan.md` lands (commands count 9 → 10),
-   `docs/design/aspirational/*.md` upgraded with curated visual
-   reference tables, `templates/design/tokens.json.template` +
-   `templates/design/style-dictionary.config.js.template` land.
-   No behavior change for adopters not using design-critic ceiling
-   mode; adopters using it now score against the anchor tables
-   (STUB caveat retired). Style Dictionary is opt-in.
+1. **Adopters need to be re-installed at v0.41.0** —
+   `hooks/signature-lint.sh` lands + wires into
+   `.claude/settings.json` PostToolUse and
+   `.pre-commit-config.yaml` (hooks count 16 → 17).
+   `templates/design/SIGNATURE.md.template` lands in
+   `docs/templates/design/` via install.sh. The gate is
+   **opt-in** — no `docs/design/SIGNATURE.md` in adopter project
+   → gate is inert (no behavior change). Adopters who declare a
+   SIGNATURE.md get the flagship-path enforcement.
+   Bypass: `PE_SKIP_SIGNATURE_LINT=1`.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -82,12 +85,12 @@ started.
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **D8 signature-system gate** — codifies "every product has
-     ≥1 signature element" as a FAIL condition on flagship
-     screens. Natural next release — D7 shipped v0.40.0, and D8
-     turns the last remaining "no signature" tell from soft
-     (design-critic Creativity dimension) to hard (FAIL on
-     flagship screens without a signature declaration).
+   - **D3 + A9.3** — visual-regression baselines (D3) and
+     wiring the orphaned `run_visual_regression` MCP tool into
+     design-critic (A9.3). Requires a Percy/Chromatic account or
+     equivalent — pick one, wire the CI job, add the trailer
+     gate. This is what's left of the D-row after v0.41.0
+     completes the design ceiling wave.
    - **D3 + A9.3** — visual-regression baselines + wiring the
      orphaned `run_visual_regression` MCP tool into the critic.
    - **A4 auto-escalation loop** — the loop itself (status

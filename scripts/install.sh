@@ -287,6 +287,21 @@ if [ -d "$ENGINE_DIR/templates/tests" ]; then
     done
 fi
 
+# Copy design templates (v0.40.0 — D7 Style Dictionary + tokens seed;
+# v0.41.0 — D8 SIGNATURE.md template). These land in docs/templates/design/
+# as `.template` files; adopter renames (drops the .template suffix) and
+# moves into the correct project path when ready to opt in.
+# SIGNATURE.md remains .template so the D8 gate is inert until the adopter
+# explicitly authors + moves the file to docs/design/SIGNATURE.md.
+if [ -d "$ENGINE_DIR/templates/design" ]; then
+    mkdir -p "$TARGET/docs/templates/design"
+    for f in "$ENGINE_DIR"/templates/design/*; do
+        [ -f "$f" ] || continue
+        dst="$TARGET/docs/templates/design/$(basename "$f")"
+        [ -f "$dst" ] || cp "$f" "$dst"
+    done
+fi
+
 # Copy security templates (v0.17.0 — S1). semgrep allowlist starter +
 # README explaining the SAST tool ladder.
 if [ -d "$ENGINE_DIR/templates/security" ]; then

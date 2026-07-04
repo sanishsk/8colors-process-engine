@@ -7,6 +7,170 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.41.0] — 2026-07-04
+
+> **D8 shipped — signature-system gate.** The deepest AI-tell is
+> "nothing ties this to the product." D8 turns it into an
+> enforceable rule on flagship screens (marketing / landing /
+> pricing / about / hero) via a two-layer split: a deterministic
+> `hooks/signature-lint.sh` that BLOCKS commits touching flagship
+> paths that don't textually reference a declared signature
+> token, and a design-critic tell-#9 upgrade that HARD-FAILs
+> flagship compositions where the signature is phantom (class
+> present but visually absent) or entirely missing. Opt-in per
+> adopter — no `docs/design/SIGNATURE.md` in the project → gate
+> is inert. **Design ceiling wave COMPLETE** — D1+D2+D4 (floor)
+> + D5+D6+D7+D8 (ceiling).
+
+### Added — `hooks/signature-lint.sh` (deterministic gate)
+
+- **Opt-in:** looks for `docs/design/SIGNATURE.md` in the adopter
+  project. Absence → gate is inert (exit 0 silent). Presence with
+  zero declared `signature_token: <slug>` lines → advisory notice
+  (exit 0). Presence with declared tokens → the gate is live.
+- **Flagship-path detection.** Default set covers
+  `templates/marketing/`, `templates/landing/`,
+  `pages/marketing/`, `app/marketing/`, `app/(marketing)/`,
+  `templates/home.*`, `templates/index.*`, `templates/pricing.*`,
+  `templates/about.*`, `templates/docs-home.*`, `app/page.*`,
+  `app/(marketing|pricing|about)/page.*`. Adopters override via
+  `.process-engine.yaml → signature_gate.flagship_paths` (regex
+  list — custom list REPLACES defaults).
+- **BLOCKS** when a flagship-path file carries fewer than
+  `signature_gate.require_count` distinct declared signature
+  tokens (default 1). Names the counts in the failure output and
+  offers three fixes (add a token to the class/attribute, update
+  SIGNATURE.md if the system changed, or bypass one-off).
+- Runs pre-commit (git-staged diff) + PostToolUse (Write/Edit/
+  MultiEdit only, silent on Bash). PostToolUse absolute-path
+  normalization so flagship regexes still match.
+- Config in `.process-engine.yaml`:
+  `signature_gate.enabled|flagship_paths|require_count`.
+  Bypass via `PE_SKIP_SIGNATURE_LINT=1`.
+- Filename-with-spaces handling via `PE_SIGNATURE_LINT_FILES`
+  env var (learned from D6 motion-lint reviewer fix).
+
+### Added — `templates/design/SIGNATURE.md.template`
+
+- Engine-side template. Adopter copies to
+  `docs/design/SIGNATURE.md` when ready to opt into the gate.
+- Documents the declaration format: 1–5 signature elements per
+  product, each with a heading + short paragraph + one or more
+  `signature_token: <slug>` lines that the hook + critic scan for.
+- Ships three example signatures (film-slate typography motif,
+  green-black-cream palette, frame-margin device) so the adopter
+  has a concrete shape to imitate.
+- Documents flagship-path defaults + override YAML.
+- Documents anti-patterns: don't declare generic tokens
+  ("primary color"), don't declare aspirational signatures,
+  don't declare more than 5 (unmistakability principle), don't
+  reduce signatures to just CSS variables.
+
+### Modified — `agents/design-critic.md`
+
+- **Tell #9 row upgraded.** The "No signature element" tell now
+  carries an inline note: *"D8 upgrade (v0.41.0): on FLAGSHIP
+  screens (marketing / landing / pricing / about / hero) when
+  `docs/design/SIGNATURE.md` exists, this tell is a HARD FAIL on
+  its own."* Retains its soft-tell role on non-flagship surfaces.
+- **New "D8 signature-system rule (v0.41.0)" section.** Documents
+  the two-layer split (hook = text presence; critic = visual
+  demonstration), the flagship semantic definition (a screen a
+  prospect sees before signing in, or a screen that represents
+  the product externally), the mixed-diff behavior (rule fires
+  only on flagship files in a mixed commit), and the
+  no-SIGNATURE-declared-yet WARN behavior (nudges adopters to
+  declare).
+- **Three new finding rules** named:
+  `d8.signature_phantom` (class present, composition doesn't
+  show it), `d8.signature_absent_flagship` (flagship diff with
+  no signature), `d8.signature_system_unknown` (flagship diff
+  but no SIGNATURE.md — WARN, not FAIL).
+- Description frontmatter advertises "D8, v0.41.0
+  signature-system HARD FAIL on flagship" and cites
+  `hooks/signature-lint.sh`.
+
+### Modified — install.sh
+
+- New `templates/design/` copy loop drops
+  `SIGNATURE.md.template` + `tokens.json.template` +
+  `style-dictionary.config.js.template` + `README.md` into
+  `docs/templates/design/` on install. `SIGNATURE.md` stays as
+  `.template` so the D8 gate is inert until the adopter
+  explicitly renames + moves the file to `docs/design/SIGNATURE.md`.
+
+### Added — 2 new test scripts (29 total green)
+
+- **`tests/test_signature_lint.sh`** (15 cases) — opt-in gate
+  (no SIGNATURE.md silent + empty-tokens advisory), flagship
+  detection (no-token BLOCK + token OK + non-flagship skipped
+  + Next.js `app/(marketing)/` + `templates/pricing.html`),
+  config override honored (custom flagship_paths replace
+  defaults), `require_count=2` blocks single-token + OK on
+  two-token, `enabled=false` silent, `PE_SKIP` bypass,
+  PostToolUse Write BLOCK + Bash silent, filename-with-spaces
+  regression from D6.
+- **`tests/test_d8_signature_gate.sh`** (16 cases) — hook
+  present + executable, `hooks.json` wires PostToolUse,
+  pre-commit template registers signature-lint id, bypass
+  documented, SIGNATURE.md template landed with 4 required
+  sections (The product signature / signature_token: /
+  flagship_paths / PE_SKIP_SIGNATURE_LINT), design-critic body
+  + description advertise D8, three finding rules named, tell
+  #9 upgraded, install.sh copies templates/design/.
+
+### Alignment
+
+- All 29 test scripts + `pe docs check` green at v0.41.0.
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps;
+  plugin.json hook count 16 → 17.
+- `docs/ENHANCEMENT_PLAN_V2.md` D8 marker MISSING → SHIPPED
+  v0.41.0 with detailed close list.
+- `docs/HANDOFF.md`: v0.41.0 header + D8 row added + adopter
+  re-install note updated (gate inert without SIGNATURE.md) +
+  "Not started yet" drops D8 + resume notes reordered (D3+A9.3
+  the only D-row items left).
+- MANIFEST.sha256 regenerated. `pe docs check` confirms
+  inventory (21 agents / 10 commands).
+- **Twenty-two V2 items shipped, one PARTIAL (A4 loop).**
+  **D-row COMPLETE:** D1+D2+D4 (floor) + D5 (ceiling scoring)
+  + D6 (motion) + D7 (curated visual refs) + D8 (signature) all
+  shipped. Only D3 (visual-regression) + A9.3 (tool wiring)
+  remain — both require an external service account
+  (Percy/Chromatic) so they're a separate operator decision.
+
+### Notes — deliberately out of scope
+
+- **Signature evaluation fixture.** The gate-efficacy corpus
+  gains no new design-critic fixture in v0.41.0 — the wiring
+  test (`test_d8_signature_gate.sh`) proves the rule names are
+  advertised. A demonstration fixture for
+  `d8.signature_absent_flagship` can land in v0.41.x if the
+  reviewer requests it; the corpus already has motion + client-
+  below-bar + internal-quiet-excellence fixtures.
+- **SIGNATURE.md auto-generation.** The critic does NOT
+  auto-write SIGNATURE.md for the adopter. Signatures are a
+  product-authorship decision, not a scan output. The critic
+  can suggest signatures in its Step-4 top-changes on ceiling
+  mode, but the file is authored by the operator.
+- **Signature scoring dimension.** D8 is a gate, not a scoring
+  dimension — a signature's PRESENCE is required; its QUALITY
+  is scored under D5's Creativity dimension using the archetype
+  Signature signals section. Not double-counting.
+
+### Migration
+
+- No breaking changes. Adopters without `docs/design/SIGNATURE.md`
+  see zero behavior change — the gate is inert. Adopters who
+  want D8 create the file (copy from
+  `docs/templates/design/SIGNATURE.md.template`), declare 1–5
+  signatures with `signature_token: <slug>` lines, and the gate
+  becomes live. Flagship-path defaults cover common cases;
+  override via `.process-engine.yaml → signature_gate.flagship_paths`
+  if the project structure differs.
+
+---
+
 ## [0.40.0] — 2026-07-04
 
 > **D7 shipped — curated visual reference library.** D5 landed

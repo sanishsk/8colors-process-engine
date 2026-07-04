@@ -1,6 +1,6 @@
 ---
 name: design-critic
-description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft; D7, v0.40.0 curated visual references) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references with per-dimension measurable visual anchors (typography scale, palette hex, focus-ring specificity, row density, motion timing); surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
+description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft; D7, v0.40.0 curated visual references; D8, v0.41.0 signature-system HARD FAIL on flagship) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references with per-dimension measurable visual anchors (typography scale, palette hex, focus-ring specificity, row density, motion timing); surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), hooks/signature-lint.sh (flagship-path signature-token gate, D8), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: medium
@@ -62,7 +62,7 @@ a screenshot or the diff plus the file context.
 | 6 | **Over-padding** (>64px vertical padding on primary containers by default) | Sea-of-empty-space feel. Common on landing pages generated from "make it feel premium" prompts. |
 | 7 | **Default font pairing** (Inter + system-ui, no signature typeface) | Not wrong per se, but reads as unbranded when there's no signature element to compensate. |
 | 8 | **Word-chip UI** ("Design ✨ Ship 🚀 Iterate 🌱") | Floating pill/badge word-chains, especially in headings or "features" strips. |
-| 9 | **No signature element** — nothing ties the screen to the product | Absence tell. Every professional design has at least one moment (a logo mark, a photo, a signature color combo, a signature illustration style) that says "this is X, not any other SaaS." |
+| 9 | **No signature element** — nothing ties the screen to the product | Absence tell. Every professional design has at least one moment (a logo mark, a photo, a signature color combo, a signature illustration style) that says "this is X, not any other SaaS." **D8 upgrade (v0.41.0):** on FLAGSHIP screens (marketing / landing / pricing / about / hero) when `docs/design/SIGNATURE.md` exists in the project, this tell is a HARD FAIL on its own — see D8 rule below. |
 
 **Verdict rule for the tells:**
 
@@ -76,6 +76,64 @@ a screenshot or the diff plus the file context.
 - 3+ tells on an EXISTING screen where the diff is small (bug fix, a
   copy change): downgrade to **WARN** with the same rule — the diff
   didn't introduce the composition; flag for a future refactor.
+
+### D8 signature-system rule (v0.41.0) — HARD FAIL on flagship
+
+Tell #9 ("No signature element") is the deepest AI-tell — the
+composition is competent but nothing ties it to the product.
+Historically it was one of nine, contributing to the ≥3-FAIL
+threshold. **D8 upgrades it to a stand-alone HARD FAIL on flagship
+screens** when the adopter has declared a signature system.
+
+**Preconditions:**
+
+- `docs/design/SIGNATURE.md` exists in the project (adopter has
+  opted in).
+- The diff touches a FLAGSHIP path (marketing / landing / pricing /
+  about / hero / docs-home — the config is
+  `signature_gate.flagship_paths` in `.process-engine.yaml`; see
+  `hooks/signature-lint.sh` for the default list).
+
+**Rule:**
+
+- The `hooks/signature-lint.sh` gate blocks commits where a
+  flagship-path file carries **zero** declared signature tokens
+  (`signature_token: <slug>` lines from SIGNATURE.md).
+- **This agent** catches the case the hook can't: the diff CARRIES
+  a signature token as a class / attribute, but the composition
+  doesn't visually demonstrate it. Example: the file has
+  `class="slate-headline"` but the slate device (top rule +
+  timecode label + slugline) isn't actually laid out — the class
+  is a phantom. Emit finding rule `d8.signature_phantom` — HARD
+  FAIL with `failure_class = worker_quality`.
+- Also emit `d8.signature_absent_flagship` when the diff introduces
+  a flagship page and no signature is present visually (regardless
+  of what the hook already caught — the hook is deterministic on
+  text presence; you judge composition).
+- Non-flagship surfaces (internal dashboards, admin views) are NOT
+  subject to this rule. An internal dashboard is not penalized for
+  the absence of a signature.
+
+**What "flagship" means for the critic:**
+
+The path-based rule is a proxy; the semantic rule is stricter.
+Flagship = a screen a prospect or client sees before signing in,
+or a screen that represents the product externally (marketing,
+pricing, docs-home, brand pages). A logged-in "welcome dashboard"
+is generally NOT flagship even if it's the first post-login screen
+— the signature system exists to differentiate the product to the
+outside world.
+
+**On mixed diffs (flagship + internal in one commit):** the
+signature rule fires only on the flagship files; internal files
+score normally.
+
+**On new flagship pages without SIGNATURE.md:** the hook is
+inert (opt-in per adopter); this agent still notes the absence as
+a WARN with rule `d8.signature_system_unknown` — "flagship page
+shipped without a project SIGNATURE.md; declare one now or the
+critic can't verify signature presence in future diffs." This is
+the mechanism that nudges adopters toward declaring.
 
 ### The 5 quality dimensions (D1 addition)
 
