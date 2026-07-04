@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.92,
+  "model_used": "claude-haiku-4-5",
+  "tier": "haiku",
+  "timestamp": "2026-07-05T10:00:00Z",
+  "summary": "billing_util.py has a HIGH float-money finding + MEDIUM unused-imports finding; escalate for a deeper reviewer pass.",
+  "findings": [
+    {"severity": "HIGH", "rule": "money-float-not-decimal", "file": "billing_util.py", "line": 3, "message": "calculate_fee multiplies float * float for monetary amounts. Money must use Decimal to avoid rounding errors that compound at scale."},
+    {"severity": "MEDIUM", "rule": "unused-imports", "file": "billing_util.py", "line": 1, "message": "Imports json, os, sys, hashlib all unused. Remove."}
+  ]
+}

@@ -3,18 +3,20 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.43.0 shipped — dogfood fix
-> bundle. Ran the full engine surface against 8CStudio and
-> three bugs surfaced: `pe status` inflated agent count by 1
-> (spec files counted); `pe recall` was blind to envelope
-> findings content; Jaccard scoring sank valid matches on
-> large slot summaries. All three fixed with regression tests
-> locked in. No V2 progress change: twenty-three items shipped,
-> zero PARTIAL. §9 watchpoint on A4 first-fire still open.)
+> **Last updated:** 2026-07-05 (v0.44.0 shipped — A4 §9
+> watchpoint CLOSED. First live invocation of the auto-
+> escalation loop against real `claude -p`: haiku FAIL on a
+> seeded money-float finding + unused-imports, escalated one
+> tier, sonnet resolved both findings and emitted PASS in ~56s.
+> Router's escalation choice matched operator judgment. Policy
+> `worker_quality → escalate_one_tier` flipped
+> `tested=false → tested=true` in
+> `policy/failure_class_routing.toml`. Evidence bundle at
+> `docs/incidents/A4_FIRST_FIRE.md`.)
 
 ---
 
-## Current state — v0.43.0 (`96b8602` → `<v0.43.0 sha>` this session)
+## Current state — v0.44.0 (`66c481d` → `<v0.44.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -54,13 +56,16 @@
 | D7 curated visual reference library + Style Dictionary token pipeline + /design-scan ritual | ✅ SHIPPED | v0.40.0 |
 | D8 signature-system gate (signature-lint + SIGNATURE.md template + design-critic tell #9 HARD FAIL on flagship) | ✅ SHIPPED | v0.41.0 |
 | A4 auto-escalation loop (--auto-execute + --agent + trajectory log; §9 watchpoint tested=false) | ✅ SHIPPED | v0.42.0 |
+| A4 §9 watchpoint closed (first-fire evidence: live claude -p → haiku→sonnet escalation resolved worker_quality FAIL; tested=false → tested=true) | ✅ CLOSED | v0.44.0 |
 
-**PARTIAL count: 0** — v0.42.0 closed the A4 loop, the last
-PARTIAL. Every V2 item is either SHIPPED, GATED with a named
-prerequisite, on a specific release queue, or explicitly not yet
-started. The §9 watchpoint on A4 (`tested=false` against real
-Claude invocations until first-fire enforce-mode review) is a
-runtime observation task, not an open PARTIAL.
+**PARTIAL count: 0** — v0.42.0 closed the A4 loop; v0.44.0
+closed the §9 watchpoint on the escalation ladder with live-
+Claude first-fire evidence (`docs/incidents/A4_FIRST_FIRE.md`).
+Every V2 item is either SHIPPED, GATED with a named prerequisite,
+on a specific release queue, or explicitly not yet started. The
+runtime observation continues (review new `enforced=true AND
+action="escalate_one_tier"` rows as they land) but the flag flip
+in `policy/failure_class_routing.toml` is done.
 
 **Not started yet:** A9 higher tiers, D3 (visual-regression),
 A9.3 (visual-regression tool wiring).
@@ -80,20 +85,14 @@ A9.3 (visual-regression tool wiring).
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
 
-   - **§9 watchpoint follow-through** — A4 loop landed but its
-     first-fire behavior against real Claude is still
-     `tested=false`. Next runtime task: run the loop against a
-     seeded worker_quality FAIL on an actual slot, review the
-     `.pe/decisions.jsonl` rows where `enforced=true AND
-     action == "escalate_one_tier"`, and decide whether to flip
-     the policy `tested=true` flag in
-     `policy/failure_class_routing.toml`.
    - **D3 + A9.3** — visual-regression baselines (D3) and
      wiring the orphaned `run_visual_regression` MCP tool into
      design-critic (A9.3). Requires a Percy/Chromatic account or
      equivalent — pick one, wire the CI job, add the trailer
      gate. This is what's left of the D-row after v0.41.0
-     completes the design ceiling wave.
+     completes the design ceiling wave. With A4 §9 closed
+     v0.44.0, this is the only remaining V2 item with a
+     concrete unblocking action.
    - **TOK3** — terse-output mode for mechanical agents (real
      token win, deferred).
    - **A9 higher tiers** — extend the shadow-decide primitive

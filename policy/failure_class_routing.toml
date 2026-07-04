@@ -36,24 +36,41 @@ blocked              = "halt_to_human"
 out_of_scope         = "halt_to_human"
 none                 = "continue"
 
-# Escalation-ladder STATUS at graduation (2026-06-28):
-#   worker_quality → escalate_one_tier — tested = false  # see §9 watchpoint
+# Escalation-ladder STATUS (updated 2026-07-05):
+#   worker_quality → escalate_one_tier — tested = true  # §9 watchpoint CLOSED
 #
-# Per brief §9 path (b) (PR #14 generalization, 2026-06-27): the
-# escalation ladder carries untested with explicit flag because no
-# shadow slot in cohort produced an organic worker_quality FAIL.
-# Fail-safe eligibility proof: top-tier exhaustion → halt via
-# `top_tier_worker_quality`; unknown tier → halt; unknown failure_class
-# → halt; schema error → halt; confidence below threshold → halt. No
-# fallback-to-continue anywhere on the escalate path. Cited in
-# graduation signoff. Operator watchpoint: M=3 enforce-mode slots'
-# .pe/decisions.jsonl reviewed for first-fires detected by
-# `router_decision.action == "escalate_one_tier" AND enforced == true`.
-# On first-fire: same scrutiny that slot 1M.3.224b got — operator
-# inspects whether router's escalation matched what they would have
-# done; if diverges, policy tightened OR tested=false escalated to
-# real re-evaluation before next slot runs. Flip to `tested = true`
-# only after first-fire match-with-reality is confirmed.
+# HISTORY of the tested flag:
+#
+# 2026-06-28 (graduation):
+#   Flag set tested=false. No shadow slot in the graduation cohort
+#   produced an organic worker_quality FAIL, so the ladder shipped
+#   untested. Fail-safe eligibility documented: top-tier exhaustion
+#   halts via `top_tier_worker_quality`; unknown tier / unknown
+#   failure_class / schema error / low confidence all halt. No
+#   fallback-to-continue anywhere on the escalate path.
+#
+# 2026-07-05 (first-fire evidence, this release):
+#   A4 loop landed in v0.42.0. First live invocation exercised in
+#   docs/incidents/A4_FIRST_FIRE.md (slot A4-FIRST-FIRE-001, tracked
+#   in .pe/decisions.jsonl with enforced=true). Trajectory:
+#     iteration 1 (haiku): FAIL/worker_quality on seeded envelope
+#                          with HIGH money-float finding + MEDIUM
+#                          unused-imports finding.
+#     iteration 2 (sonnet): PASS — envelope emitted by real `claude -p`
+#                           invocation removed both findings and
+#                           documented the Decimal switch in the
+#                           summary. Total wallclock ~56s.
+#   Operator judgment: sonnet's escalation output MATCHED what the
+#   operator would have done — money must be Decimal, unused imports
+#   removed. Router's escalation choice validated against reality.
+#   Flag flipped tested=false → tested=true.
+#
+# Operator watchpoint remains as an ongoing signal, not a shipping
+# gate: continue reviewing `.pe/decisions.jsonl` rows where
+# `router_decision.action == "escalate_one_tier" AND enforced == true`
+# during normal operation. If a future escalation diverges from what
+# the operator would have done, the flag can be flipped back to
+# tested=false while the policy is tightened.
 
 [terminal_rules]
 # Operator refinement: top-tier worker_quality FAIL has nowhere to

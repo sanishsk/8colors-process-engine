@@ -7,6 +7,112 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.44.0] — 2026-07-05
+
+> **A4 §9 watchpoint CLOSED — first-fire evidence landed.** The
+> auto-escalation loop shipped v0.42.0 with the escalation
+> ladder marked `tested=false` because no graduation-cohort
+> slot had produced an organic worker_quality FAIL. This
+> release runs the loop against a real `claude -p` subprocess
+> for the first time, observes the router's escalation choice
+> matches what an operator would have done, and flips the flag
+> in `policy/failure_class_routing.toml`.
+
+### The first-fire experiment
+
+- **Seed:** `billing_util.py` with two real code smells — a
+  `float * float` for monetary calculation (HIGH
+  `money-float-not-decimal`) and four unused imports on line 1
+  (MEDIUM `unused-imports`). Seed envelope declares
+  `verdict=FAIL`, `failure_class=worker_quality`, tier=haiku.
+- **Invocation:** `python3 pe_orchestrator.py decide --envelope
+  seed --slot-id A4-FIRST-FIRE-001 --iteration 1 --current-tier
+  haiku --auto-execute --enforce --agent code-reviewer
+  --max-iterations 2 --campaign-id first-fire --bare`
+- **Observed trajectory:**
+  - iteration 1 (haiku): `escalate_one_tier` to sonnet.
+  - iteration 2 (sonnet): real `claude -p` spawned; emitted a
+    valid gate envelope with `verdict=PASS`,
+    `failure_class=none`, `confidence=0.97`, `findings=[]`, and
+    a summary line reading *"Fixed: replaced float arithmetic
+    with Decimal for monetary amounts; removed all unused
+    imports (json, os, sys, hashlib). No remaining CRITICAL or
+    HIGH findings."*
+  - Loop halted with `A4_EXIT_CONTINUE` (exit 0).
+  - Wallclock: ~56 seconds for the single escalation iteration.
+- **Operator judgment:** the router's escalation matched what a
+  human would have done. Money must be Decimal; unused imports
+  should be removed. No divergence between router and
+  operator on this slot.
+
+### Fixed / flipped
+
+- **`policy/failure_class_routing.toml`** — the comment block
+  around `worker_quality → escalate_one_tier` now names the
+  2026-07-05 first-fire trajectory and flips the tested flag
+  from `false` → `true`. The runtime rule was already active;
+  this is a documentation/policy-status change acknowledging
+  that reality has now confirmed the shape.
+
+### Added — evidence bundle
+
+- **`docs/incidents/A4_FIRST_FIRE.md`** — narrative writeup of
+  the experiment (seed, invocation, trajectory summary,
+  operator judgment, cost/performance notes,
+  reversibility path if a future fire diverges).
+- **`docs/incidents/A4_FIRST_FIRE_artifacts/00-seed-envelope.json`**
+  — the seeded FAIL envelope handed to the loop.
+- **`docs/incidents/A4_FIRST_FIRE_artifacts/01-decisions.jsonl`**
+  — both shadow decision records (iterations 1 and 2, both
+  `enforced=true`).
+- **`docs/incidents/A4_FIRST_FIRE_artifacts/02-trajectory.jsonl`**
+  — full A4 loop trajectory (`loop_start` / `invoke` /
+  `post_invoke` / `halt` records).
+- **`docs/incidents/A4_FIRST_FIRE_artifacts/03-iter-2-envelope.txt`**
+  — the raw `claude -p` output text (validated envelope +
+  wrapper text preserved for the audit trail).
+
+### Alignment
+
+- All 33 test scripts + `pe docs check` green at v0.44.0.
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps.
+- README badge synced.
+- `docs/ENHANCEMENT_PLAN_V2.md` A4 marker updated with the
+  §9-watchpoint-closed detail block.
+- `docs/HANDOFF.md`: v0.44.0 header + A4 §9 CLOSED row added +
+  resume notes trimmed (§9 watchpoint follow-through no longer
+  the top priority).
+- MANIFEST.sha256 regenerated.
+
+### Notes — deliberately out of scope
+
+- **Multi-iteration first-fire** (2+ escalations in one loop).
+  A single iteration was enough to prove the wiring; the next
+  observation shape would be a slot where sonnet also FAILs
+  and opus is invoked. Deferred until an adopter's real slot
+  produces it organically.
+- **Cost surfacing in the trajectory log.** The `claude -p
+  --output-format json` payload does carry token counts, but
+  the A4 trajectory writer doesn't summarise per-loop cost
+  yet. Shape improvement deferred until adopter demand.
+- **CI job to run a first-fire regression on release.** The
+  experiment is a one-time evidence bundle for the flag flip;
+  running it on every release would burn API credit without
+  new signal. If the policy is re-opened (`tested=true` flipped
+  back), a fresh evidence bundle would land at that time.
+
+### Migration
+
+- No breaking changes. The `tested=true` flip is a
+  documentation status change; the runtime rule was already
+  active in v0.42.0 and v0.43.0. Adopters see no behavior
+  difference. The `docs/incidents/A4_FIRST_FIRE.md` evidence
+  bundle is new; adopters who were waiting on it to invoke
+  `--auto-execute` on their own slots can now do so with a
+  reviewed precedent.
+
+---
+
 ## [0.43.0] — 2026-07-04
 
 > **Dogfood fixes from 8CStudio adopter exercise.** Ran the full

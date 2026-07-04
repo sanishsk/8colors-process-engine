@@ -1,0 +1,29 @@
+Validation passed (exit 0). Emitting the validated transcript:
+
+---
+
+Envelope key values
+  schema_version: 1.0.0
+  gate_name:      code-reviewer
+  verdict:        PASS
+  failure_class:  none
+  model_used:     claude-sonnet-4-6
+  timestamp:      2026-07-05T00:10:00Z
+
+```json gate-envelope
+{
+  "schema_version": "1.0.0",
+  "gate_name": "code-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.97,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-05T00:10:00Z",
+  "summary": "Fixed: replaced float arithmetic with Decimal for monetary amounts; removed all unused imports (json, os, sys, hashlib). No remaining CRITICAL or HIGH findings.",
+  "findings": [],
+  "scope": {
+    "files_reviewed": ["billing_util.py"]
+  }
+}
+```
