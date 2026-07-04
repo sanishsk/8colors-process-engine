@@ -3,15 +3,15 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-03 (v0.33.0 shipped — A8 native plugin
-> manifest + per-project version pin. `.claude-plugin/plugin.json`
-> ships alongside `.claude/.engine-pin.json`; `pe pin show|verify|bump`
-> reconciles adopter drift. Fourteen V2 items shipped since the
-> fresh 360° re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.)
+> **Last updated:** 2026-07-04 (v0.34.0 shipped — PF1 perf-gate
+> commit-msg trailer hook closes the last open piece of PF1:
+> query-count template + hook + database-reviewer rubric now
+> all landed. Fifteen V2 items shipped since the fresh 360°
+> re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.)
 
 ---
 
-## Current state — v0.33.0 (`bc67143` → `<v0.33.0 sha>` this session)
+## Current state — v0.34.0 (`7515231` → `<v0.34.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -42,20 +42,23 @@
 | S5 container + secrets-history + license CI gates | ✅ SHIPPED | v0.31.0 |
 | A7 cross-session agent memory (pe recall + FTS5 hybrid + retro §7b) | ✅ SHIPPED | v0.32.0 |
 | A8 native plugin manifest + per-project version pin | ✅ SHIPPED | v0.33.0 |
+| PF1 perf-gate commit-msg trailer (query-count enforcement) | ✅ SHIPPED | v0.34.0 |
 
 **PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
 with a named prerequisite, on a specific release queue, or
 explicitly not yet started.
 
-**Not started yet:** A9 higher tiers, PF1 (runtime N+1), PF4/PF5
-(soak + load), PF6 (perf-reviewer agent), D3 (visual-regression).
+**Not started yet:** A9 higher tiers, PF4/PF5 (soak + load), PF6
+(perf-reviewer agent), D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.33.0** — `pe install`
-   picks up `pe pin` and writes `.claude/.engine-pin.json`.
-   Run `pe pin show` after upgrade to confirm the pinned version
-   matches the intended one.
+1. **Adopters need to be re-installed at v0.34.0** — `pe install`
+   picks up `hooks/perf-gate.sh`. Adopters who already had git
+   hooks enabled will see the new `perf-gate` entry in
+   `.pre-commit-config.yaml` after re-install; commits touching
+   ORM / query / migration paths now require a `Perf-tested:`
+   trailer.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -65,12 +68,17 @@ explicitly not yet started.
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **PF-row** — runtime N+1 (PF1) → soak/load templates
-     (PF4/PF5) → perf-reviewer agent (PF6). Complements the
-     static perf-lint that already ships. A7 shipped v0.32.0,
-     A8 shipped v0.33.0.
+   - **PF4/PF5** — soak + load templates (Locust / k6 scaffolds
+     + latency budgets that grow through the load ramp). PF1
+     shipped v0.34.0, PF2 + PF3 shipped v0.18.x. PF4/PF5 are
+     the next in the perf row.
+   - **PF6** — perf-reviewer agent that consumes the query-count
+     + latency + soak envelopes and returns a scored perf
+     verdict. Depends on PF4/PF5 shape stabilizing.
    - **A9 higher tiers** — extend the shadow-decide primitive
      with more test-generation + eval tiers.
+   - **D3** — visual-regression (Percy / Chromatic wired into
+     Playwright).
    - **A6 extensions** — module library baseline is COMPLETE
      (scaffold + api-credentials + auth + tenancy + billing all
      shipped). Only extensions remain deferred: email flows

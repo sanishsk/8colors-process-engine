@@ -49,6 +49,12 @@ repos:
         language: script
         stages: [commit-msg]
 
+      - id: perf-gate
+        name: Perf-tested trailer required on ORM / query / migration paths
+        entry: hooks/perf-gate.sh
+        language: script
+        stages: [commit-msg]
+
       # Pre-commit (evidence-backed gates — v0.10.0)
       - id: test-run
         name: Run scoped tests before commit

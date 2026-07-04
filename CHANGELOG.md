@@ -7,6 +7,134 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.34.0] — 2026-07-04
+
+> **PF1 fully shipped — perf-gate commit-msg trailer.** The
+> query-count pytest template landed in 2026-07-03, but the
+> plan called for a commit-msg hook + a database-reviewer
+> rubric pointer to make it enforceable rather than
+> aspirational. This release adds both. Commits touching ORM /
+> query / migration / serializer / repository / schema paths
+> now REQUIRE a `Perf-tested:` trailer (or explicit skip
+> reason) or the commit-msg hook rejects them — same shape as
+> the existing `Security-reviewed` / `Design-reviewed` /
+> `Code-reviewed` trailers.
+
+### Added — `hooks/perf-gate.sh` (PF1 enforcement)
+
+- Commit-msg trailer hook. Scans `git diff --cached --name-only`
+  against `ENGINE_PERF_PATHS` (default:
+  `(models?|/db/|/orm/|/repositor|serializer|query_?count|migration|schema)`).
+- When money-adjacent-perf paths are staged, the commit message
+  must carry ONE of:
+  - `Perf-tested: <envelope-sha>` — resolves against
+    `.claude/gates/perf.json` or `.claude/gates/last-gate.json`
+    (or a named `.claude/gates/<sha>.json`). PASS/WARN accepted;
+    FAIL blocks with the record path echoed.
+  - `Perf-tested: query-count` — legacy self-attest (same shape
+    as `Security-reviewed: security-reviewer`).
+  - `Perf-skip-reason: <text>` — explicit skip.
+- `tests/` paths are exempt (they're the evidence, not the risk).
+- Override the money-adjacent-perf regex via
+  `ENGINE_PERF_PATHS`. Bypass with `git commit --no-verify`.
+
+### Updated — wiring + rubric
+
+- `hooks/.pre-commit-config.yaml.template` — new `perf-gate`
+  hook wired into the `commit-msg` stage alongside the other
+  four trailer hooks (`code-review`, `docs-updated`,
+  `design-review`, `security-review`).
+- `agents/database-reviewer.md` — N+1 rubric row now names the
+  hook by path + trailer shapes, so a reviewer flagging a
+  suspected N+1 can point the adopter directly at the
+  enforcement path.
+
+### Added — tests
+
+- **`tests/test_perf_gate.sh`** (10 cases): non-ORM paths pass
+  silently; model + no trailer BLOCKED; migration +
+  `Perf-tested: query-count` accepted; `Perf-skip-reason`
+  accepted; serializer path (indirect N+1 catch) BLOCKED;
+  `tests/` path exempt; `ENGINE_PERF_PATHS` override respected;
+  bogus sha rejected; valid sha resolving to PASS envelope
+  accepted; FAIL-verdict envelope blocks.
+
+### Updated
+
+- `plugin.json.description` — mentions perf-gate.
+- `README.md` badge → 0.34.0.
+- `.claude-plugin/plugin.json` version → 0.34.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` PF1 marker: `template done;
+  hook/rubric open` → **SHIPPED v0.34.0** (fully closed).
+- `docs/HANDOFF.md` — v0.34.0 header, PF1 row updated to fully
+  SHIPPED, resume notes point at PF4/PF5.
+- `MANIFEST.sha256` regenerated (surface grew by one —
+  `perf-gate.sh`).
+
+### Reviewer fixes (applied pre-commit)
+
+- **HIGH — schema regex false-positive.** Bare `schema` matched
+  `openapi.json`, `json-schema-validator.js`, `.proto` files.
+  **Fix:** tightened to Python / SQL data-layer conventions:
+  `_schema.py`, `/schema.py`, `schema.sql` — plus explicit
+  `models?.py`, `/models/`, `migrations/` paths. openapi.json
+  and .proto files now pass the gate silently. Regression tests
+  added for both.
+- **HIGH — dual-gate coupling documentation.** A commit touching
+  `billing/models.py` now fires BOTH `perf-gate` and
+  `security-review-trailer`. That's the correct behavior (payment
+  paths are both perf-critical AND security-critical) but wasn't
+  documented anywhere. Callout: the two hooks run independently in
+  the `commit-msg` stage; a single commit can carry both trailers
+  (`Perf-tested: <sha1>` + `Security-reviewed: <sha2>`) and both
+  gates will accept.
+- **MEDIUM — missing-verdict envelope handling.** Gate envelopes
+  older than the current schema might not have a `verdict` field.
+  **Fix:** sharpened the error message to name the missing field
+  explicitly instead of echoing an empty string. Regression test
+  covers.
+
+### Alignment
+
+- All 20 test scripts + `pe docs check` green at v0.34.0
+  (`test_perf_gate.sh` grew 10 → 13 cases).
+- **Fifteen V2 items shipped.** PF row now has PF1 fully closed
+  and PF2 + PF3 already shipped (v0.18.1 / v0.18.0). PF4/PF5
+  (soak + load templates) and PF6 (perf-reviewer agent) remain
+  as the natural next in the row.
+
+### Notes — deliberately out of scope
+
+- **Auto-run the query-count suite on commit.** The hook is
+  a TRAILER gate, not a pytest runner. Running the adopter's
+  full pytest suite on every commit would slow the commit
+  loop unpredictably. If an adopter wants that, they can wire
+  `pytest -k query_count` into the existing
+  `hooks/test-run.sh` pre-commit stage — the trailer hook
+  stays cheap and universal.
+- **Envelope schema for perf gates.** The hook accepts any
+  `.claude/gates/*.json` with a `verdict` field; the shape is
+  compatible with the existing gate-envelope contract (E1) but
+  no dedicated perf-envelope schema ships yet. When the
+  ai-testing-agent starts emitting query-count gate envelopes,
+  they'll drop in without any hook change.
+- **Ratchet on baseline drift.** The plan mentioned adding a
+  query-count baseline to `baseline.py` so a commit that
+  raises the per-endpoint query count on a hot path is
+  flagged. That's a follow-up — the current gate is
+  presence-of-evidence, not ratchet-vs-history.
+
+### Migration
+
+- No breaking changes. Adopters who don't touch ORM paths see
+  no behavior change. Adopters who DO will see the hook fire
+  on their next money-adjacent commit — copy the pytest
+  template, wire the adopter stubs, and add
+  `Perf-tested: query-count` to the message (or a real
+  `Perf-tested: <sha>` after running the suite).
+
+---
+
 ## [0.33.0] — 2026-07-03
 
 > **A8 shipped — native plugin manifest + per-project version pinning.**

@@ -257,11 +257,17 @@ agent gates actually catch anything.
 > pytest template the adopter runs in its own suite. Correct split:
 > **engine = the real detector (in-process query count); agent = complementary
 > black-box latency smoke.** Neither replaces the other.
-- **STATUS: ✅ template SHIPPED 2026-07-03** — `templates/tests/query-count.test.py.template`
-  (SQLAlchemy `before_cursor_execute` counter + Django `CaptureQueriesContext` variant;
-  two tests: bounded-ceiling + does-not-scale-with-N). Remaining: an optional `hooks/perf-gate.sh`
-  wrapper + a database-reviewer rubric line pointing at it.
-- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[template done; hook/rubric open]**
+- **STATUS: ✅ FULLY SHIPPED 2026-07-04** — template + hook + rubric all landed.
+  Template: `templates/tests/query-count.test.py.template` (SQLAlchemy `before_cursor_execute`
+  counter + Django `CaptureQueriesContext` variant; two tests: bounded-ceiling +
+  does-not-scale-with-N). Hook: `hooks/perf-gate.sh` (v0.34.0) — commit-msg trailer gate,
+  wired into `.pre-commit-config.yaml.template`, path regex `(models?|/db/|/orm/|/repositor|
+  serializer|query_?count|migration|schema)` overridable via `ENGINE_PERF_PATHS`, tests/
+  paths exempt; accepts `Perf-tested: <sha>` (envelope resolution against .claude/gates/
+  perf.json), `Perf-tested: query-count` (legacy self-attest), or `Perf-skip-reason: <text>`.
+  Test coverage: `tests/test_perf_gate.sh` (10 cases). Rubric: `agents/database-reviewer.md`
+  N+1 row now names the hook by path + trailer shapes.
+- **Severity:** HIGH · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.34.0]**
 - **Files:** `templates/tests/query-count.test.py.template` (new), `hooks/perf-gate.sh` (new),
   `agents/database-reviewer.md`.
 - **Why:** N+1 is the #1 silent performance killer in SaaS — fine with 10 rows in dev, dies with
