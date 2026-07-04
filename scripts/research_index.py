@@ -491,6 +491,19 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- A7 FTS5 sparse index. Pairs with the dense embedding table for
+-- reciprocal-rank-fusion hybrid retrieval. Dense misses exact-token
+-- queries (slot IDs like "1M.3", SHAs like "b6c566e", error strings
+-- like "IntegrityError") — FTS5 catches those on the sparse side.
+-- Populated at rebuild time; falls back to dense-only on old indexes
+-- that were built before FTS5 was added.
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    text,
+    content='chunks',
+    content_rowid='id',
+    tokenize='unicode61 remove_diacritics 2'
+);
 """
 
 
@@ -636,6 +649,15 @@ def cmd_rebuild(
 
         if row:
             doc_id = row[0]
+            # A7: external-content FTS5 doesn't cascade on DELETE, so
+            # explicitly drop the FTS5 rows keyed by the chunks we're
+            # about to delete. Otherwise a doc that's rebuilt keeps
+            # stale sparse rows pointing at now-vanished chunk rowids.
+            conn.execute(
+                "DELETE FROM chunks_fts WHERE rowid IN "
+                "(SELECT id FROM chunks WHERE doc_id = ?)",
+                (doc_id,),
+            )
             conn.execute("DELETE FROM chunks WHERE doc_id = ?", (doc_id,))
             conn.execute(
                 "UPDATE docs SET mtime = ?, sha256 = ?, indexed_at = ? WHERE id = ?",
@@ -651,9 +673,17 @@ def cmd_rebuild(
             new_count += 1
 
         for idx, chunk_text, vec in successful:
-            conn.execute(
+            cur = conn.execute(
                 "INSERT INTO chunks (doc_id, chunk_idx, text, embedding) VALUES (?, ?, ?, ?)",
                 (doc_id, idx, chunk_text, pack_embedding(vec)),
+            )
+            # A7: mirror into FTS5. content='chunks' + content_rowid='id'
+            # means the FTS table doesn't own the text — it points at
+            # chunks.id. Insert here so the sparse index is populated
+            # alongside the dense one on every rebuild.
+            conn.execute(
+                "INSERT INTO chunks_fts (rowid, text) VALUES (?, ?)",
+                (cur.lastrowid, chunk_text),
             )
             chunks_total += 1
 
@@ -681,12 +711,78 @@ def cmd_rebuild(
 # ─── query ───────────────────────────────────────────────────────────────────
 
 
+def _fts5_query(conn: sqlite3.Connection, query: str, top_k: int) -> list[tuple[int, float]]:
+    """Return [(chunk_id, bm25_score), ...] top-K by FTS5 BM25.
+
+    Returns [] gracefully if:
+      - FTS5 isn't compiled in (rare on modern Python sqlite3)
+      - The chunks_fts table is empty (old index built before A7)
+      - The query is unparseable (only stop-words / punctuation)
+
+    BM25 in SQLite is a distance-like score (lower = better), so we
+    invert it to a similarity-shaped 1/(1+bm25) before returning.
+    """
+    # Sanitize: FTS5's syntax rejects `:`, `.`, `-` in unquoted terms
+    # but slot IDs like "1M.3" and error names like "worker_quality"
+    # are exactly the reason for hybrid. Wrap each whitespace-separated
+    # token in double quotes so FTS5 treats it as a phrase.
+    #
+    # Strip both double AND single quotes from each token before
+    # re-quoting — a token with an embedded `"` would break out of the
+    # phrase-quote and let the remainder be parsed as FTS5 operators
+    # (NEAR, NOT, wildcards). Same for `'`. Any residual char that
+    # FTS5 doesn't like will just miss the match, which is fine —
+    # advisory retrieval, not authoritative.
+    raw_tokens = [t.strip() for t in query.split() if t.strip()]
+    tokens: list[str] = []
+    for t in raw_tokens:
+        cleaned = t.replace('"', '').replace("'", '')
+        if cleaned:
+            tokens.append(cleaned)
+    if not tokens:
+        return []
+    fts_query = " OR ".join(f'"{t}"' for t in tokens)
+    try:
+        rows = conn.execute(
+            "SELECT rowid, bm25(chunks_fts) AS score "
+            "FROM chunks_fts WHERE chunks_fts MATCH ? "
+            "ORDER BY score LIMIT ?",
+            (fts_query, top_k),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # FTS5 unavailable or table missing on a legacy index.
+        return []
+    # bm25() is negative in SQLite's implementation (more negative =
+    # better). Convert to a positive similarity-shaped score so RRF
+    # only cares about the RANK, not the magnitude.
+    return [(int(cid), -float(s)) for cid, s in rows]
+
+
+def _rrf_fuse(
+    dense_ranked: list[int],
+    sparse_ranked: list[int],
+    k: int = 60,
+) -> list[tuple[int, float]]:
+    """Reciprocal-rank fusion: score(id) = Σ 1/(k + rank).
+
+    k=60 is the RRF paper default. Robust across score magnitudes —
+    dense (cosine) and sparse (BM25) don't need to be normalized.
+    """
+    scores: dict[int, float] = {}
+    for rank_i, cid in enumerate(dense_ranked):
+        scores[cid] = scores.get(cid, 0.0) + 1.0 / (k + rank_i)
+    for rank_i, cid in enumerate(sparse_ranked):
+        scores[cid] = scores.get(cid, 0.0) + 1.0 / (k + rank_i)
+    return sorted(scores.items(), key=lambda pair: -pair[1])
+
+
 def cmd_query(
     db_path: Path,
     embedder: Embedder,
     query: str,
     top_k: int,
     snippet_chars: int,
+    hybrid: bool = True,
 ) -> int:
     if not db_path.exists():
         print(
@@ -753,8 +849,41 @@ def cmd_query(
     # walk in order collecting distinct dedupe_keys, stop at top_k.
     sorted_idx = np.argsort(-sims)
 
+    # A7 hybrid: fuse dense ranks with FTS5 BM25 ranks via RRF, so
+    # exact-token queries (slot IDs, SHAs, error strings) don't get
+    # buried by semantically-adjacent-but-token-different chunks.
+    # Legacy indexes built before FTS5 was added return [] here, and
+    # we fall back to dense-only silently.
+    mode = "dense"
+    if hybrid:
+        row_by_id = {r[0]: i for i, r in enumerate(rows)}
+        dense_ranked_ids = [rows[i][0] for i in sorted_idx]
+        # Pull a wider FTS5 slice than top_k so fusion has candidates
+        # even for terms that only appear in mid-ranked dense hits.
+        sparse_ranked = _fts5_query(conn, query, max(50, top_k * 5))
+        if sparse_ranked:
+            sparse_ranked_ids = [cid for cid, _ in sparse_ranked]
+            fused = _rrf_fuse(dense_ranked_ids, sparse_ranked_ids)
+            fused_idx: list[int] = []
+            fused_scores: dict[int, float] = {}
+            for cid, s in fused:
+                idx = row_by_id.get(cid)
+                if idx is None:
+                    continue
+                fused_idx.append(idx)
+                fused_scores[cid] = s
+            if fused_idx:
+                sorted_idx = np.array(fused_idx)
+                # Rewrite sims to the fused score for display consistency.
+                sims_hybrid = np.zeros(len(rows), dtype=np.float32)
+                for cid, s in fused_scores.items():
+                    idx = row_by_id[cid]
+                    sims_hybrid[idx] = s
+                sims = sims_hybrid
+                mode = "hybrid (dense + FTS5 BM25, RRF fused)"
+
     print(f"# Top matches for: {query!r}")
-    print(f"# (provider: {embedder.NAME}, model: {embedder.MODEL}, dim: {embedder.DIM})\n")
+    print(f"# (provider: {embedder.NAME}, model: {embedder.MODEL}, dim: {embedder.DIM}, mode: {mode})\n")
     seen_docs: set[str] = set()
     shown = 0
     for i in sorted_idx:
@@ -848,6 +977,15 @@ def main() -> int:
     p_query.add_argument(
         "--snippet", type=int, default=500, help="Snippet length in chars (default 500)"
     )
+    # A7: hybrid dense + FTS5 BM25 is on by default. Set --no-hybrid
+    # for A/B comparison or if the FTS5 index appears corrupted.
+    p_query.add_argument(
+        "--no-hybrid",
+        dest="hybrid",
+        action="store_false",
+        help="Skip FTS5 sparse fusion; run dense-only (default: hybrid)",
+    )
+    p_query.set_defaults(hybrid=True)
 
     sub.add_parser("status", help="Show index stats")
 
@@ -878,7 +1016,10 @@ def main() -> int:
     if args.cmd == "rebuild":
         return cmd_rebuild(corpus, db_path, embedder, args.force)
     if args.cmd == "query":
-        return cmd_query(db_path, embedder, args.query, args.top, args.snippet)
+        return cmd_query(
+            db_path, embedder, args.query, args.top, args.snippet,
+            hybrid=args.hybrid,
+        )
     return 1
 
 

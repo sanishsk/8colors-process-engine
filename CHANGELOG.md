@@ -7,6 +7,161 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.32.0] — 2026-07-03
+
+> **A7 shipped — cross-session agent memory.** Three surfaces close
+> the retrieval half of the A row: `pe recall <query>` reads the
+> shadow-decide + reconciliation logs so an agent picking up a new
+> slot can see "this is 40% similar to 1M.3; that approach passed
+> in 2 iterations." The RAG index gains an FTS5 sparse side with
+> reciprocal-rank fusion so exact-token queries (slot IDs, SHAs,
+> snake_case, error strings) don't get buried by
+> semantically-adjacent chunks. And the retrospective-agent now
+> promotes ≥3-slot recurring failure patterns into
+> auto-memory via `pe memory add`, capped at 3 new memories per
+> retro so the system stays a living memory, not a growing swamp.
+
+### Added — `scripts/pe_recall.py` + `pe recall` (retrieval half)
+
+- Reads `.pe/decisions.jsonl` (+ `.pe/reconciliations.jsonl` when
+  present) and returns the top-K slots whose signal tokens overlap
+  the query.
+- **Tokenizer:** alphanumeric + `.` / `-` / `_` runs, lowercased.
+  Slot IDs (`1M.3`), SHAs (`b6c566e`), snake_case
+  (`worker_quality`), dotted paths (`modules.billing.money`)
+  survive intact as single tokens.
+- **Similarity:** Jaccard over token multisets. Robust to query
+  length, no embeddings required. Default `--min-score 0.01`
+  because a 1-token query against a 30-token slot record naturally
+  scores below 5%.
+- **Aggregation:** multiple decisions for the same slot collapse
+  into one summary — verdict trajectory (`FAIL → PASS`, `FAIL×2`),
+  iteration count, gate list, router actions, reconciliation
+  outcome.
+- **Modes:** default human report, `--json` for programmatic reads,
+  `--limit N`, `--min-score S`, `--project <path>`.
+- **Exit codes:** 0 match, 1 no match, 2 corpus missing / usage.
+- Read-only — never writes to the decisions log.
+
+### Added — FTS5 sparse index + RRF hybrid in `scripts/research_index.py`
+
+- New `chunks_fts` virtual table with `unicode61 remove_diacritics 2`
+  tokenizer. Populated at rebuild time; legacy indexes migrate
+  forward transparently on next rebuild.
+- `_fts5_query()` runs BM25-scored sparse retrieval, sanitizing
+  query tokens through phrase-quoting so `1M.3` / `worker_quality`
+  don't trigger FTS5's punctuation errors.
+- `_rrf_fuse()` combines dense (cosine) and sparse (BM25) rank
+  lists via reciprocal-rank fusion at k=60 (the RRF-paper default).
+  Score magnitudes don't need normalization — RRF only sees ranks.
+- Hybrid mode is default on `pe query`; `--no-hybrid` restores
+  dense-only for A/B comparison. Query header prints
+  `mode: hybrid (dense + FTS5 BM25, RRF fused)` when active.
+- Legacy indexes built before FTS5 was added: the schema migrates
+  the virtual table forward, but existing chunks aren't
+  auto-backfilled — the hybrid path silently returns [] sparse
+  hits and falls back to dense-only until the operator runs
+  `rebuild`.
+
+### Added — `agents/retrospective-agent.md` §7b (synthesis half)
+
+- New "A7 — Synthesize recurring patterns into auto-memory"
+  section. Trigger: same `envelope.failure_class` (or router
+  `rule_matched`) appears on ≥3 distinct `slot_id`s in the retro
+  window.
+- For each pattern, the agent uses `pe recall <failure_class>` to
+  sanity-check + writes a `feedback` memory via `pe memory add`
+  with a `Why:` line naming the ≥3 evidence slots and a
+  `How to apply:` line.
+- Ceiling: **3** new memories per retro run. Above that, the
+  agent instead flags "auto-memory saturation" as its own
+  systemic finding.
+- Garbage collection: previous patterns that show 0 hits this
+  window get `pe memory rm`'d.
+
+### Added — tests
+
+- **`tests/test_pe_recall.sh`** (11 cases): empty corpus → exit
+  1 with hint; missing project → exit 2; failure_class token
+  match; slot ID preserved as single token (`1M.3` hits,
+  `2A.1` doesn't); trajectory collapse (`FAIL → PASS`, `FAIL×2`);
+  reconciliation outcome surfaced; `--json` returns matches
+  array; `--limit` caps; `--min-score 0.5` filters weak; corrupt
+  jsonl line skipped silently; reconciliation-only slot still
+  recallable.
+- **`tests/test_research_index_hybrid.sh`** (5 cases): schema
+  creates `chunks_fts` virtual table; `_fts5_query` catches
+  snake_case exact tokens; whitespace-only query returns [];
+  RRF ranks common-top-1 highest; hybrid degrades gracefully
+  on legacy indexes.
+
+### Updated
+
+- `scripts/pe` — new `cmd_recall` + dispatch entry.
+- `plugin.json.description` — mentions `pe recall`, FTS5 hybrid,
+  retro §7b.
+- `README.md` badge → 0.32.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` A7 marker: MISSING → SHIPPED v0.32.0.
+- `docs/HANDOFF.md` — v0.32.0 header, A7 row added, resume notes.
+- `MANIFEST.sha256` regenerated.
+
+### Reviewer fixes (applied pre-commit)
+
+- **CRITICAL — FTS5 query injection surface.** Original quote-strip
+  only stripped `"`; a token with `'` or FTS5 operators inside
+  could break out of phrase quotes. **Fix:** strip both `"` and
+  `'` before wrapping each token in phrase quotes; a regression
+  test in `test_research_index_hybrid.sh` fires the attacker-shape
+  query `chunk" NOT everything "OR"` and asserts it doesn't crash
+  or leak.
+- **HIGH — FTS5 external-content table left orphan rows on
+  rebuild.** When a doc was re-indexed, `DELETE FROM chunks WHERE
+  doc_id = ?` fired, but `chunks_fts` (external content pointing
+  at `chunks.id`) kept stale rowids — `_fts5_query` could return
+  chunk ids that no longer existed. **Fix:** rebuild now issues
+  `DELETE FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks
+  WHERE doc_id = ?)` before the chunks delete. Regression test
+  seeds one chunk + FTS row, runs the cascade, asserts orphan count
+  is 0.
+- **HIGH — silent JSONL corruption in `pe recall`.** A malformed
+  decisions.jsonl line silently disappeared. **Fix:** log a
+  `WARNING skipped malformed line <path>:<lineno>` to stderr while
+  keeping stdout parseable. Regression test asserts the warning is
+  emitted.
+
+### Alignment
+
+- All 18 test scripts + `pe docs check` green at v0.32.0.
+
+### Notes — deliberately out of scope
+
+- **Semantic memory across projects.** `pe recall` is
+  project-scoped by design — a decision made in project A rarely
+  applies verbatim to project B, and the false-positive rate on a
+  cross-project retrieval would swamp the signal. Cross-project
+  memory belongs in the human-authored global CLAUDE.md, not in
+  a machine-mined index.
+- **Learned reranker.** The Jaccard scorer is dep-free by design.
+  A learned reranker (cross-encoder, small MLP over co-occurrence)
+  would edge the top-1 score up 5–10 points but adds a model
+  dependency and a training loop. Not worth it until the retro
+  reports show reranking as the bottleneck.
+- **Retro-agent auto-execution.** §7b tells the agent what to
+  synthesize; it does NOT auto-apply the memory writes. A human
+  still reviews each retro. This matches the "advisor principle"
+  — memory is a suggestion, not an escalation.
+
+### Migration
+
+- No breaking changes. `pe install` picks up the new subcommand.
+  The FTS5 virtual table is created transparently on next
+  `research_index.py` open — no manual migration.
+- Adopters with an existing dense index should run
+  `python scripts/research_index.py rebuild` to backfill the FTS5
+  side; until then, hybrid falls back to dense-only silently.
+
+---
+
 ## [0.31.0] — 2026-07-03
 
 > **S5 shipped — container + secrets-history + license CI gates.**

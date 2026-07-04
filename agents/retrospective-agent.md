@@ -148,6 +148,49 @@ Work through these checks in order. Every section must cite specific numbers fro
 - Any failed Agent invocations that got retried?
 - Categorize errors by cause if possible
 
+### 7b. A7 — Synthesize recurring patterns into auto-memory
+
+When the SAME failure_class shows up on ≥3 distinct slots in the window
+(check `.pe/decisions.jsonl` + `.pe/reconciliations.jsonl`), that's a
+systemic pattern, not a one-off. Persist it so the NEXT slot picks it up
+without a fresh retro run.
+
+For each recurring pattern:
+
+1. Confirm ≥3 distinct `slot_id`s in the window carry the same
+   `envelope.failure_class` (or the same `router_decision.rule_matched`).
+   Use `pe recall <failure_class>` to sanity-check that the pattern
+   is real and not a naming collision.
+2. Draft a one-sentence rule + a "Why" line naming the ≥3 slots
+   as evidence.
+3. Write it via the L3 memory primitive:
+
+   ```bash
+   pe memory add feedback <slug> \
+     --title "<terse rule>" \
+     --body "$(cat <<'EOF'
+Rule: <one-sentence rule>.
+Why: recurring in <window> across slots <id1>, <id2>, <id3> —
+     each failed on <failure_class>.
+How to apply: <when this rule fires in the next slot's shape>.
+EOF
+     )"
+   ```
+
+4. In the retro report, name the pattern you persisted so the operator
+   can review or delete it. Format:
+
+   > **Auto-memory added:** `feedback/<slug>` — "<title>" (evidence:
+   > 3 slots this window).
+
+If a pattern from PREVIOUS retros is now resolved (0 hits this window),
+run `pe memory rm <slug>` to garbage-collect. The point is a living
+memory, not a growing swamp.
+
+**Ceiling:** at most **3** new memories per retro. Above that the memory
+system's own noise floor becomes the systemic problem — flag "auto-memory
+saturation" instead and defer additions.
+
 ### 8. Process Drift Detection
 
 Compare THIS week's activity against CLAUDE.md Section 9 (Development Workflow).

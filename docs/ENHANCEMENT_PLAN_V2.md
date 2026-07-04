@@ -477,7 +477,7 @@ agent gates actually catch anything.
   Origyn are the current calibration corpus).
 
 ### A7 Cross-session agent memory (learn from prior decisions)
-- **Severity:** LOW-MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]** · **depends: A1, A2**
+- **Severity:** LOW-MEDIUM · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.32.0 — pe recall (Jaccard token overlap over .pe/decisions.jsonl + reconciliations.jsonl, per-slot trajectory collapse, --json/--limit/--min-score); research_index.py FTS5 sparse index + RRF fusion (reciprocal-rank k=60) for hybrid dense+sparse retrieval, --no-hybrid A/B flag, graceful degrade on legacy indexes; retrospective-agent §7b instructs pattern-synthesis into feedback auto-memory via pe memory add (≥3-slot recurrence trigger, ceiling 3 new memories per retro). Test coverage: tests/test_pe_recall.sh (11 cases) + tests/test_research_index_hybrid.sh (5 cases).]** · **depends: A1, A2**
 - **Fix:** today the RAG index is query-only and decisions.jsonl is write-only — agents start each
   slot from CLAUDE.md alone. Add `retrieve_prior_decision(pattern)` so an agent can see "this slot
   is 30% similar to 1M.3; that approach passed review in 2 iterations" and teach retrospective-agent
