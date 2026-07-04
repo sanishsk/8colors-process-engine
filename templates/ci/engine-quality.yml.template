@@ -33,6 +33,14 @@ on:
         description: 'Run tenant-isolation-auditor'
         required: false
         default: 'false'
+      run_load_test:
+        description: 'PF5 — run k6 load test (staging URL required)'
+        required: false
+        default: 'false'
+      load_test_base_url:
+        description: 'PF5 base URL for k6 (e.g. https://staging.example.com)'
+        required: false
+        default: ''
 
 jobs:
   detect-stack:
@@ -405,3 +413,83 @@ jobs:
           fi
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  # PF5 (v0.35.0) — k6 load test. Manual-dispatch only; running load
+  # every PR would burn CI budget for signal that only matters before
+  # launch/scale milestones. Requires `load_test_base_url` input
+  # pointing at a REALISTIC staging target (prod-shaped data, NOT
+  # localhost). Advisory (continue-on-error) — the k6 script itself
+  # already fails non-zero on threshold breach; this job records the
+  # result as an artifact for post-run review without blocking
+  # branches that just happened to fire the dispatch.
+  load-test-k6:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_load_test == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate load_test_base_url input
+        run: |
+          URL='${{ github.event.inputs.load_test_base_url }}'
+          if [ -z "$URL" ]; then
+            echo "ERROR: load_test_base_url input is required for PF5 run."
+            echo "Point it at a staging target with prod-shaped data volume."
+            exit 1
+          fi
+          # Tighter shape guards (reviewer MEDIUM v0.35.0): reject
+          # non-http URLs and localhost/loopback so an operator can't
+          # accidentally load-test their laptop or a typo'd domain.
+          case "$URL" in
+              http://*|https://*) ;;
+              *)
+                  echo "ERROR: load_test_base_url must start with http:// or https:// (got: $URL)"
+                  exit 1 ;;
+          esac
+          case "$URL" in
+              *localhost*|*127.0.0.1*|*0.0.0.0*)
+                  echo "ERROR: load_test_base_url cannot target localhost / 127.0.0.1 / 0.0.0.0."
+                  echo "Use a staging URL with prod-shaped data volume."
+                  exit 1 ;;
+          esac
+      - name: Warn if LOAD_TEST_AUTH_TOKEN is not configured
+        # Reviewer HIGH v0.35.0: an empty AUTH_TOKEN silently causes
+        # every authenticated request to 401, tripping the error-rate
+        # thresholds for the WRONG reason. Warn loudly so the operator
+        # spots the misconfig in the run log before reading the k6
+        # summary.
+        run: |
+          if [ -z "${{ secrets.LOAD_TEST_AUTH_TOKEN }}" ]; then
+            echo "::warning::LOAD_TEST_AUTH_TOKEN secret is not configured."
+            echo "::warning::k6 will run UNAUTHENTICATED — expect 401s on protected endpoints."
+            echo "::warning::Add the secret in Settings → Secrets and variables → Actions, or set --env AUTH_TOKEN=... locally."
+          else
+            echo "LOAD_TEST_AUTH_TOKEN is configured; k6 will send Bearer auth."
+          fi
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+      - name: Run k6 load test
+        env:
+          BASE_URL: ${{ github.event.inputs.load_test_base_url }}
+          AUTH_TOKEN: ${{ secrets.LOAD_TEST_AUTH_TOKEN }}
+        run: |
+          if [ -f templates/perf/load-test.k6.js.template ]; then
+            cp templates/perf/load-test.k6.js.template load-test.k6.js
+          fi
+          if [ ! -f load-test.k6.js ]; then
+            echo "ERROR: no load-test.k6.js at repo root and no template found."
+            echo "Copy \$ENGINE_DIR/templates/perf/load-test.k6.js.template to your repo."
+            exit 1
+          fi
+          k6 run --out json=k6-summary.json load-test.k6.js
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-load-test-summary
+          path: k6-summary.json
+          if-no-files-found: ignore

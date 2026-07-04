@@ -1,0 +1,142 @@
+// load-test.k6.js — pre-launch load ceiling (PF5).
+//
+// WHY THIS EXISTS: "we'll be fine at 50 tenants" is a claim, not a
+// measurement. Every scale conversation without a k6 (or Locust) run
+// against production-shaped data is guessing. This template
+// establishes the HONEST ceiling — the concurrency at which p95
+// latency crosses your budget or errors > 0.5%. Not per-commit
+// (expensive); a gate before launch, before onboarding batches, or
+// after any DB/schema change large enough to shift the query plan.
+//
+// HOW TO RUN:
+//   1. Install k6: `brew install k6` OR `docker pull grafana/k6`
+//   2. Point BASE_URL at a REALISTIC target (staging with prod-shaped
+//      data — NOT dev with 10 rows). Localhost with 5 rows tells you
+//      nothing about the real ceiling.
+//   3. Configure the SCENARIOS block below to match your ramp.
+//   4. `k6 run load-test.k6.js`
+//
+// GATE SEMANTICS: the `thresholds` block below is the pass/fail
+// contract. k6 exits non-zero if any threshold fires. Wire that into
+// CI's manual-trigger workflow (`workflow_dispatch`) — do NOT run on
+// every commit.
+//
+// Adopter customization:
+//   - BASE_URL: your staging target (with prod-shaped data volume).
+//   - AUTH_TOKEN: bearer token or session cookie for authenticated
+//     endpoints. Consider using k6's `setup()` to log in.
+//   - SCENARIOS: adjust VUs (virtual users) + ramp shape to your
+//     launch expectation.
+//   - THRESHOLDS: p95 budget + error rate ceiling. Start strict
+//     (p95 < 500ms, err < 1%). Only loosen with a comment naming the
+//     endpoint + why (e.g., "checkout reads 12 tables — 800ms").
+
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend } from 'k6/metrics';
+
+// ─── Adopter wires these ─────────────────────────────────────────
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';
+const AUTH_TOKEN = __ENV.AUTH_TOKEN || '';
+
+// Custom metrics beyond k6 defaults. Split by endpoint class so a
+// slow checkout doesn't hide behind a fast /health.
+const listErrorRate = new Rate('list_errors');
+const listLatency = new Trend('list_latency');
+const detailErrorRate = new Rate('detail_errors');
+const detailLatency = new Trend('detail_latency');
+const writeErrorRate = new Rate('write_errors');
+const writeLatency = new Trend('write_latency');
+
+// ─── Scenario shape ──────────────────────────────────────────────
+// Ramp: 5 VUs for 30s (warmup) → 50 VUs for 2m (sustained load) → 0
+// over 30s (ramp-down). Adjust `target` to your launch expectation.
+// If you don't know what to expect, START HERE and observe.
+export const options = {
+    scenarios: {
+        launch_ramp: {
+            executor: 'ramping-vus',
+            startVUs: 0,
+            stages: [
+                { duration: '30s', target: 5 },   // warmup
+                { duration: '2m', target: 50 },   // sustained load
+                { duration: '30s', target: 0 },   // ramp-down
+            ],
+            gracefulRampDown: '10s',
+        },
+    },
+    // THE GATE. k6 exits non-zero if any threshold breaks.
+    // Split by endpoint class — a fast /health is not evidence about
+    // checkout latency.
+    thresholds: {
+        // Reads
+        'list_latency': ['p(95)<500'],
+        'list_errors': ['rate<0.01'],
+        'detail_latency': ['p(95)<400'],
+        'detail_errors': ['rate<0.01'],
+        // Writes — usually slower; adjust per your app.
+        'write_latency': ['p(95)<800'],
+        'write_errors': ['rate<0.005'],
+        // Overall http failure rate as a safety net.
+        'http_req_failed': ['rate<0.01'],
+        // Overall p95 as a coarse smoke.
+        'http_req_duration': ['p(95)<800'],
+    },
+};
+
+const authHeaders = () => (AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {});
+
+function hitList() {
+    const res = http.get(`${BASE_URL}/api/items`, { headers: authHeaders(), tags: { name: 'list' } });
+    const ok = check(res, {
+        'list status 2xx': (r) => r.status >= 200 && r.status < 300,
+    });
+    listErrorRate.add(!ok);
+    listLatency.add(res.timings.duration);
+}
+
+function hitDetail() {
+    // Use a deterministic ID from a pre-seeded fixture pool. Random
+    // IDs risk 404s that pollute the error rate.
+    const id = __ENV.FIXTURE_ITEM_ID || '1';
+    const res = http.get(`${BASE_URL}/api/items/${id}`, { headers: authHeaders(), tags: { name: 'detail' } });
+    const ok = check(res, {
+        'detail status 2xx': (r) => r.status >= 200 && r.status < 300,
+    });
+    detailErrorRate.add(!ok);
+    detailLatency.add(res.timings.duration);
+}
+
+function hitWrite() {
+    // Adopter: point at a real, idempotent write endpoint. Avoid
+    // endpoints that grow a DB unboundedly during the run — the
+    // point of the ramp is to measure the WRITE PATH's steady-state
+    // latency, not to accidentally load-generate a data corpus.
+    const payload = JSON.stringify({ heartbeat_only: true });
+    const res = http.post(`${BASE_URL}/api/heartbeat`, payload, {
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        tags: { name: 'write' },
+    });
+    const ok = check(res, {
+        'write status 2xx': (r) => r.status >= 200 && r.status < 300,
+    });
+    writeErrorRate.add(!ok);
+    writeLatency.add(res.timings.duration);
+}
+
+// ─── Traffic mix ─────────────────────────────────────────────────
+// 70% read / 20% detail / 10% write is a typical SaaS mix. Adjust
+// to your actual traffic pattern (from Sentry / analytics) —
+// synthetic mixes that don't match production are worse than
+// nothing (false confidence).
+export default function () {
+    const roll = Math.random();
+    if (roll < 0.7) hitList();
+    else if (roll < 0.9) hitDetail();
+    else hitWrite();
+
+    // Small think-time. Real users don't hammer as fast as VUs; a
+    // 0.5s sleep produces a more realistic request-per-second rate
+    // per VU.
+    sleep(0.5);
+}

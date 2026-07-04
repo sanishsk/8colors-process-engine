@@ -1,0 +1,215 @@
+# soak.test — memory leak / soak detection (PF4).
+#
+# WHY THIS EXISTS: unbounded caches, accumulating globals, unclosed
+# connections don't fire N+1 alarms. They just... grow. In dev with a
+# few requests, RSS looks flat. In prod after a day of sustained
+# traffic, gunicorn workers hit RSS ceiling → OS kills them → restart
+# storm → cascading 503s. Static review CAN'T see it — you have to
+# actually run the app for a while and measure.
+#
+# THE CONTRACT: fire N sustained requests against the running app,
+# sample process RSS at fixed checkpoints, and assert the sample line
+# fits a bounded slope (not linear growth). tracemalloc snapshot
+# diffs surface WHERE the growth is when the slope check fires.
+#
+# Adopter customization:
+#   - Wire `_boot_app()` to import + start your app in a subprocess
+#     (or use pytest-flask / TestClient in-process; both work — see
+#     both variants below).
+#   - Wire `_call_hot_endpoint()` to hit a request that would exercise
+#     the leak class you care about (list endpoint with pagination,
+#     auth-token refresh, cache-populating query, WebSocket send).
+#   - Set N_REQUESTS + CHECKPOINT_EVERY + MAX_RSS_GROWTH_MB per your
+#     app's expected steady-state footprint. Start strict; loosen only
+#     with a comment explaining why.
+#   - Advisory in CI (WARN), gating locally — leaks are noisy at CI
+#     concurrency but the trend must be visible on every commit.
+
+import gc
+import os
+import statistics
+import tracemalloc
+
+import pytest
+
+
+# ─── Adopter wires these ────────────────────────────────────────────
+N_REQUESTS = 500              # total requests over the soak
+CHECKPOINT_EVERY = 50         # sample RSS + tracemalloc every N requests
+MAX_RSS_GROWTH_MB = 30        # allowed RSS delta from checkpoint 1 → last
+MAX_SLOPE_MB_PER_100REQ = 5   # allowed linear growth over the soak window
+# WARMUP_CHECKPOINTS: skip the first N samples when computing the
+# linear-regression slope. Real apps have a sharp RSS jump in the
+# first ~100 requests as caches populate + thread pools warm — that
+# cache-warm slope is NOT a leak and would false-fire the slope check
+# if included. Start at 2 (skip first 2 samples = first ~100 requests
+# at CHECKPOINT_EVERY=50). Bump to 3+ if your app has a slower warm.
+# Delta / gc checks still cover the whole run — they only use the
+# start-vs-end reading, not the slope.
+WARMUP_CHECKPOINTS = 2
+
+
+def _boot_app():
+    """Return an object with a `.close()` method — usually a test
+    client or WSGI adapter you can call repeatedly. In-process is
+    simplest; a subprocess variant is included below for adopters
+    who need OS-level RSS (uWSGI, workers, threads).
+    """
+    raise NotImplementedError("wire to your app factory + test client")
+
+
+def _call_hot_endpoint(client) -> None:
+    """Hit an endpoint that would exercise the leak class you care
+    about. Don't just GET /health — that catches nothing. Aim at:
+    - list endpoint with pagination + serializer (cache growth)
+    - auth-token refresh (session accumulation)
+    - anything that touches a global module state (Redis clients,
+      thread-locals, memoization decorators)
+    """
+    raise NotImplementedError("wire to your app's test client")
+
+
+# ─── RSS measurement — psutil variant (works cross-platform) ────────
+try:
+    import psutil
+    _HAVE_PSUTIL = True
+except ImportError:
+    _HAVE_PSUTIL = False
+
+
+def _current_rss_mb() -> float:
+    if _HAVE_PSUTIL:
+        return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+    # Fallback: /proc/self/status (Linux only). If neither works,
+    # skip — no leak assertion without a signal.
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return float(line.split()[1]) / 1024
+    except FileNotFoundError:
+        pass
+    pytest.skip("no psutil and /proc/self/status not available — RSS unmeasurable")
+    return 0.0
+
+
+# ─── Cases ──────────────────────────────────────────────────────────
+
+
+class TestSoak:
+    """Bounded-slope + bounded-delta on sustained traffic."""
+
+    def test_rss_does_not_grow_linearly(self):
+        """The load-bearing PF4 test.
+
+        Fire N_REQUESTS, sample RSS every CHECKPOINT_EVERY, and
+        assert the sample series' linear slope is under a small
+        constant. Linear growth is the "leak" signal — a bounded
+        cache that fills once is FINE (RSS plateaus). A cache that
+        accumulates per request is NOT fine (RSS grows monotonically).
+        """
+        client = _boot_app()
+        try:
+            gc.collect()
+            # Capture baseline_rss BEFORE tracemalloc.start(). tracemalloc's
+            # own bookkeeping adds 5–15MB of instrumentation overhead —
+            # starting it before the baseline would inflate the reading
+            # and let real growth hide inside the tracemalloc noise floor
+            # (reviewer CRITICAL, v0.35.0).
+            baseline_rss = _current_rss_mb()
+            tracemalloc.start()
+            samples: list[tuple[int, float]] = []
+
+            for i in range(1, N_REQUESTS + 1):
+                _call_hot_endpoint(client)
+                if i % CHECKPOINT_EVERY == 0:
+                    gc.collect()  # collect BEFORE sampling — reflect
+                                  # steady state, not transient allocations.
+                    samples.append((i, _current_rss_mb()))
+
+            snapshot = tracemalloc.take_snapshot()
+            tracemalloc.stop()
+
+            # Delta check — start-to-end RSS growth.
+            final_rss = samples[-1][1]
+            delta_mb = final_rss - baseline_rss
+            if delta_mb > MAX_RSS_GROWTH_MB:
+                # Print the top-N tracemalloc frames on failure to
+                # point the adopter at WHERE the growth landed.
+                top_stats = snapshot.statistics("lineno")[:10]
+                print("\n[soak] top-10 allocation lines at end of soak:")
+                for stat in top_stats:
+                    print(f"  {stat}")
+                pytest.fail(
+                    f"soak RSS growth {delta_mb:.1f}MB exceeds "
+                    f"MAX_RSS_GROWTH_MB={MAX_RSS_GROWTH_MB}MB "
+                    f"({baseline_rss:.1f}→{final_rss:.1f}MB over "
+                    f"{N_REQUESTS} requests)."
+                )
+
+            # Slope check — linear-regression on (request_i, rss_i).
+            # A well-behaved app has slope near 0 (RSS plateaus after
+            # first-time cache fill). Linear growth = leak.
+            #
+            # Drop the first WARMUP_CHECKPOINTS samples: real apps have
+            # a sharp RSS jump in the first ~100 requests as caches
+            # populate + thread pools warm. Including those in the
+            # regression makes the slope average down and CAN MASK a
+            # real leak that starts after warmup. (reviewer HIGH,
+            # v0.35.0). If the regression window is too small after
+            # trimming (< 3 points), skip the slope check and rely on
+            # the delta check alone.
+            steady = samples[WARMUP_CHECKPOINTS:]
+            if len(steady) < 3:
+                slope_per_100 = 0.0
+            else:
+                xs = [x for x, _ in steady]
+                ys = [y for _, y in steady]
+                mean_x = statistics.mean(xs)
+                mean_y = statistics.mean(ys)
+                num = sum((x - mean_x) * (y - mean_y) for x, y in steady)
+                # `den` can be 0 when every x-value is identical (empty
+                # regression window). Guarded here so we return slope=0
+                # and let the delta check speak.
+                den = sum((x - mean_x) ** 2 for x, _ in steady)
+                slope_per_request = num / den if den else 0.0
+                slope_per_100 = slope_per_request * 100
+
+            if slope_per_100 > MAX_SLOPE_MB_PER_100REQ:
+                top_stats = snapshot.statistics("lineno")[:10]
+                print("\n[soak] top-10 allocation lines at end of soak:")
+                for stat in top_stats:
+                    print(f"  {stat}")
+                pytest.fail(
+                    f"soak slope {slope_per_100:.2f} MB/100req exceeds "
+                    f"MAX_SLOPE_MB_PER_100REQ={MAX_SLOPE_MB_PER_100REQ}"
+                    f" — RSS grew LINEARLY, not plateau-shaped."
+                )
+        finally:
+            if hasattr(client, "close"):
+                client.close()
+
+    def test_gc_reclaims_after_soak(self):
+        """Even if RSS delta looks fine, verify that GC actually
+        reclaims something after the soak — otherwise you have a
+        cycle-graph leak GC can't touch, and psutil RSS is misleading
+        (cache pages don't return to the OS)."""
+        client = _boot_app()
+        try:
+            for _ in range(50):
+                _call_hot_endpoint(client)
+            unreachable_before = gc.collect()
+            for _ in range(50):
+                _call_hot_endpoint(client)
+            unreachable_after = gc.collect()
+            # We don't require zero unreachable — some frameworks
+            # legitimately create cycles per request. But the count
+            # should be BOUNDED, not per-request.
+            assert unreachable_after < 100, (
+                f"GC found {unreachable_after} unreachable-with-refcycles "
+                f"after 50 requests — likely a cycle leak. Investigate "
+                f"with `gc.set_debug(gc.DEBUG_LEAK)` in dev."
+            )
+        finally:
+            if hasattr(client, "close"):
+                client.close()

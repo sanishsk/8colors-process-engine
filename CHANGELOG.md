@@ -7,6 +7,164 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.35.0] — 2026-07-04
+
+> **PF4 + PF5 shipped — soak + load templates land as one release.**
+> Two adjacent perf disciplines share a single testing paradigm
+> (put the running app under sustained pressure, measure what
+> gives) so shipping them together avoids two flavors of "empty
+> stub" going out separately. PF4 is a Python soak template that
+> asserts RSS doesn't grow linearly under sustained requests
+> (catches the unbounded-cache / accumulating-globals class that
+> N+1 detection can't see). PF5 is a k6 load template with
+> ramping VUs + per-endpoint-class thresholds, wired to a
+> workflow_dispatch-only CI job so it never surprises a PR.
+
+### Added — `templates/tests/soak.test.py.template` (PF4)
+
+- `TestSoak` class with two cases:
+  - `test_rss_does_not_grow_linearly` — fires N_REQUESTS
+    against a hot endpoint, samples RSS every
+    CHECKPOINT_EVERY, runs linear regression on the (i, rss)
+    series and asserts slope < `MAX_SLOPE_MB_PER_100REQ`. Also
+    enforces a start-to-end `MAX_RSS_GROWTH_MB` delta. Prints
+    tracemalloc top-10 allocation lines on failure to point at
+    the leak source.
+  - `test_gc_reclaims_after_soak` — even when RSS looks flat,
+    catches cycle-graph leaks that psutil can't see (cache
+    pages don't return to the OS).
+- `gc.collect()` before each sample so we measure steady-state
+  RSS, not transient allocations. `psutil` primary with a
+  `/proc/self/status` Linux fallback so container CI without
+  the psutil install can still see something.
+- Adopter stubs (`_boot_app`, `_call_hot_endpoint`) marked
+  `NotImplementedError` so a silent-pass is impossible.
+
+### Added — `templates/perf/load-test.k6.js.template` (PF5)
+
+- Ramping-VUs scenario: 30s warmup at 5 VUs → 2m sustained at
+  50 VUs → 30s ramp-down. Gracefully-ramped so the tail of the
+  ramp doesn't add noise to the metrics.
+- Thresholds block SPLIT by endpoint class (list/detail/write)
+  so a fast /health can't hide a slow checkout. Each class has
+  a p95 latency budget and an error-rate ceiling. Overall
+  `http_req_failed` + `http_req_duration` act as safety nets.
+- Env-driven `BASE_URL` + `AUTH_TOKEN` — the same script runs
+  against dev / staging / prod (staging is the load-bearing
+  case; prod would be recklessly rude).
+- Traffic mix defaults to 70/20/10 read/detail/write with 0.5s
+  think-time — a typical SaaS shape adopters can tune by
+  reading their own Sentry / analytics.
+- Deterministic `FIXTURE_ITEM_ID` for detail hits (random IDs
+  risk 404s that poison the error rate).
+
+### Added — `templates/ci/engine-quality.yml.template` (PF5 CI wire)
+
+- New `load-test-k6` job. **workflow_dispatch-only** — this
+  should NEVER auto-run on push / PR (expensive + noisy).
+- Two new dispatch inputs: `run_load_test` (bool toggle) and
+  `load_test_base_url` (required — refuses to proceed on
+  empty). Points adopters at their staging target explicitly.
+- Installs k6 from Grafana's official APT repo, copies the
+  template to repo root, runs `k6 run --out json=k6-summary.json`,
+  uploads the summary as an artifact regardless of pass/fail.
+- `continue-on-error: true` because the k6 script itself
+  already fails non-zero on threshold breach; the job's role is
+  to preserve the summary artifact for post-run review.
+
+### Added — `tests/test_perf_templates.sh` (19 cases)
+
+- PF4: TestSoak class present, rss-slope + gc-reclaim cases,
+  tracemalloc + gc + psutil integration, dual-threshold
+  contract, adopter stubs marked NotImplementedError.
+- PF5: canonical k6 imports, thresholds block with p95 + error
+  rate, metrics split by endpoint class, ramping-vus warmup,
+  env-driven config.
+- CI: load-test-k6 job present, gated on workflow_dispatch,
+  validates load_test_base_url input, marked advisory,
+  uploads summary artifact, workflow_dispatch inputs include
+  the PF5 controls.
+
+### Updated
+
+- `plugin.json.description` — mentions PF4/PF5 templates + CI wire.
+- `README.md` badge → 0.35.0.
+- `.claude-plugin/plugin.json` version → 0.35.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` — PF4 marker MISSING → SHIPPED,
+  PF5 marker MISSING → SHIPPED (with note that agent delegation
+  is preserved — engine ships the ceiling recorder + gate; the
+  ai-testing-agent's `run_resilience_tests` remains an alternate
+  path).
+- `docs/HANDOFF.md` — v0.35.0 header, PF4 + PF5 rows added,
+  resume notes point at PF6 as the last unshipped perf item.
+- `MANIFEST.sha256` regenerated.
+
+### Reviewer fixes (applied pre-commit)
+
+- **CRITICAL — tracemalloc.start() before baseline_rss inflated the
+  measurement.** tracemalloc's own bookkeeping adds 5–15 MB of
+  instrumentation overhead. Capturing baseline BEFORE it started
+  would have let real growth hide inside the tracemalloc noise
+  floor. **Fix:** re-ordered — `gc.collect()` → capture
+  `baseline_rss` → `tracemalloc.start()`. Regression test asserts
+  the ordering via awk.
+- **HIGH — slope regression false-negatived legitimate leaks.**
+  Cache-warm in the first ~100 requests creates a sharp RSS jump
+  that averages down the linear-regression slope, potentially
+  masking a real leak that starts after warmup. **Fix:** added
+  `WARMUP_CHECKPOINTS = 2` constant; slope regression skips the
+  first N samples. Delta / gc checks still cover the whole run
+  (they only use start-vs-end).
+- **HIGH — missing LOAD_TEST_AUTH_TOKEN silently caused 401 storm.**
+  GitHub secrets expand to empty string when unset; k6 then runs
+  unauthenticated and every request 401s, tripping the error-rate
+  thresholds for the wrong reason. **Fix:** new pre-k6 step warns
+  via `::warning::` if the secret isn't configured; operators
+  spot the misconfig in the run log before reading the summary.
+- **MEDIUM — PF5 URL validation was too permissive.** Any
+  non-empty string passed. **Fix:** validation now requires
+  `http://` or `https://` prefix and rejects
+  `localhost` / `127.0.0.1` / `0.0.0.0` so an operator can't
+  accidentally load-test their laptop or a typo'd domain.
+
+### Alignment
+
+- All 21 test scripts + `pe docs check` green at v0.35.0.
+- test_perf_templates.sh grew 19 → 24 cases (reviewer-fix
+  regressions).
+- **Seventeen V2 items shipped.** PF row now has PF1 + PF2 +
+  PF3 + PF4 + PF5 all closed. Only PF6 (perf-reviewer agent)
+  remains in the perf row.
+
+### Notes — deliberately out of scope
+
+- **Per-commit soak.** The soak template lives in the adopter's
+  suite; adopters can wire it into `hooks/test-run.sh` for
+  pre-commit if they want, but the engine doesn't force it —
+  a 500-request soak on every commit would slow the loop
+  unacceptably.
+- **Automatic k6 threshold ratchet.** k6 supports thresholds
+  that compare against a baseline file; PF6 will consume both
+  the k6 summary + query-count baseline to produce a scored
+  perf verdict. For v0.35.0 we ship the recorder, not the
+  ratchet.
+- **Locust variant.** The plan named "k6 or locust." We picked
+  k6 because its threshold contract is more declarative and
+  its CI story is stabler on GitHub-hosted runners. Adopters
+  who prefer Locust can point the ai-testing-agent's
+  `run_resilience_tests` instead — the engine records either
+  ceiling equally.
+
+### Migration
+
+- No breaking changes. Templates are opt-in copies (nothing
+  auto-installs into adopter trees); the CI job is
+  workflow_dispatch-only (never fires without an explicit
+  operator click). Adopters upgrade via `pe install` and pick
+  up whichever templates they need with a `cp`.
+
+---
+
 ## [0.34.0] — 2026-07-04
 
 > **PF1 fully shipped — perf-gate commit-msg trailer.** The

@@ -3,15 +3,15 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.34.0 shipped — PF1 perf-gate
-> commit-msg trailer hook closes the last open piece of PF1:
-> query-count template + hook + database-reviewer rubric now
-> all landed. Fifteen V2 items shipped since the fresh 360°
-> re-audit produced `docs/ENHANCEMENT_PLAN_V2.md`.)
+> **Last updated:** 2026-07-04 (v0.35.0 shipped — PF4 soak
+> template + PF5 k6 load template + workflow_dispatch-only CI
+> job. Seventeen V2 items shipped since the fresh 360° re-audit
+> produced `docs/ENHANCEMENT_PLAN_V2.md`. Only PF6 (perf-reviewer
+> agent) remains in the perf row.)
 
 ---
 
-## Current state — v0.34.0 (`7515231` → `<v0.34.0 sha>` this session)
+## Current state — v0.35.0 (`61d5627` → `<v0.35.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -43,22 +43,23 @@
 | A7 cross-session agent memory (pe recall + FTS5 hybrid + retro §7b) | ✅ SHIPPED | v0.32.0 |
 | A8 native plugin manifest + per-project version pin | ✅ SHIPPED | v0.33.0 |
 | PF1 perf-gate commit-msg trailer (query-count enforcement) | ✅ SHIPPED | v0.34.0 |
+| PF4 soak template (RSS-slope + gc-reclaim + tracemalloc) | ✅ SHIPPED | v0.35.0 |
+| PF5 k6 load template + workflow_dispatch CI job | ✅ SHIPPED | v0.35.0 |
 
 **PARTIAL count: 0.** Every V2 item is now either SHIPPED, GATED
 with a named prerequisite, on a specific release queue, or
 explicitly not yet started.
 
-**Not started yet:** A9 higher tiers, PF4/PF5 (soak + load), PF6
-(perf-reviewer agent), D3 (visual-regression).
+**Not started yet:** A9 higher tiers, PF6 (perf-reviewer agent),
+D3 (visual-regression).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.34.0** — `pe install`
-   picks up `hooks/perf-gate.sh`. Adopters who already had git
-   hooks enabled will see the new `perf-gate` entry in
-   `.pre-commit-config.yaml` after re-install; commits touching
-   ORM / query / migration paths now require a `Perf-tested:`
-   trailer.
+1. **Adopters can pick up PF4/PF5 templates via `pe install` +
+   a `cp` of the specific template.** Templates are opt-in;
+   nothing auto-installs into adopter trees. PF5's k6 CI job is
+   workflow_dispatch-only, so it never fires without an explicit
+   operator click.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -68,13 +69,10 @@ explicitly not yet started.
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **PF4/PF5** — soak + load templates (Locust / k6 scaffolds
-     + latency budgets that grow through the load ramp). PF1
-     shipped v0.34.0, PF2 + PF3 shipped v0.18.x. PF4/PF5 are
-     the next in the perf row.
    - **PF6** — perf-reviewer agent that consumes the query-count
-     + latency + soak envelopes and returns a scored perf
-     verdict. Depends on PF4/PF5 shape stabilizing.
+     + latency + soak + k6 envelopes and returns a scored perf
+     verdict. All prerequisite templates now ship (PF1 shipped
+     v0.34.0, PF4/PF5 shipped v0.35.0).
    - **A9 higher tiers** — extend the shadow-decide primitive
      with more test-generation + eval tiers.
    - **D3** — visual-regression (Percy / Chromatic wired into

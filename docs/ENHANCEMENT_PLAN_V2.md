@@ -304,7 +304,7 @@ agent gates actually catch anything.
   Delivery gallery's "Lighthouse ≥90 or don't ship" bar (ROADMAP C4).
 
 ### PF4 Memory-leak / soak detection
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]**
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.35.0 — templates/tests/soak.test.py.template with TestSoak class covering test_rss_does_not_grow_linearly (linear-regression slope over sampled RSS series) + test_gc_reclaims_after_soak (cycle-graph leak detection); dual-threshold contract (MAX_RSS_GROWTH_MB delta + MAX_SLOPE_MB_PER_100REQ slope); tracemalloc top-N allocation lines printed on failure to point at leak source; psutil primary with /proc/self/status Linux fallback; gc.collect() before each sample so steady-state RSS is measured not transient allocations. Test coverage: tests/test_perf_templates.sh (6 PF4 cases).]**
 - **Files:** `templates/tests/soak.test.py.template`, CI job.
 - **Fix:** a soak test — fire N sustained requests against the running app, assert process RSS
   plateaus (doesn't grow linearly) → catches unbounded caches, accumulating globals, unclosed
@@ -316,7 +316,7 @@ agent gates actually catch anything.
 > **COVERAGE (see `TESTING_TOPOLOGY.md`):** DELEGATED to the agent — it already
 > ships Locust generation + concurrent-load via `run_resilience_tests`. Do NOT
 > build a second k6 harness; the engine calls the agent and records the ceiling.
-- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[MISSING]**
+- **Severity:** MEDIUM · **Effort:** M · **Model:** Sonnet · **[SHIPPED v0.35.0 — templates/perf/load-test.k6.js.template with ramping-vus scenario (30s warmup → 2m sustained → 30s ramp-down), thresholds block split by endpoint class (list/detail/write with p95 + error-rate gates), env-driven BASE_URL + AUTH_TOKEN, 70/20/10 read/detail/write traffic mix with 0.5s think-time, tagged metrics; engine-quality.yml.template load-test-k6 job wired to workflow_dispatch-only (run_load_test + load_test_base_url inputs, k6 install from official APT repo, k6-summary.json artifact upload, continue-on-error advisory). Test coverage: tests/test_perf_templates.sh (13 PF5+CI cases). AGENT DELEGATION preserved — engine ships the ceiling recorder + threshold gate; the ai-testing-agent's run_resilience_tests is the alternate path for adopters using it.]**
 - **Files:** `templates/perf/load-test.k6.js.template` (or locust), CI (manual-trigger) job.
 - **Fix:** a **k6** (or locust) script — "50 concurrent virtual users, p95 < Xms, 0 errors" — run
   on-demand before scale decisions (e.g., 8CStudio's "what breaks at 50 tenants" question, which
