@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "performance-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.9,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T12:15:00Z",
+  "summary": "Refactor closes the three perf concerns: keyset pagination + capped limit, explicit selectinload chain for the serializer, cursor-based next-page contract. No judgment-layer finding fires; PF1 query-count is the mechanical follow-up.",
+  "findings": [],
+  "scope": {
+    "branch": "refactor/orders-list-pagination",
+    "commit": "d4e5f6a",
+    "files_reviewed": ["modules/orders/views.py"],
+    "lines_reviewed": 26
+  }
+}

@@ -7,6 +7,155 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.37.0] — 2026-07-04
+
+> **PF6 shipped — performance-reviewer agent.** The judgment 20%
+> that deterministic tools cannot see. All five PF-row
+> prerequisites landed (PF1 query-count enforcement,
+> PF2 unbounded-query semgrep, PF3 latency budgets,
+> PF4 soak template, PF5 k6 load), so the review agent slots in as
+> a pure agent-body add — no new plumbing. **PF row COMPLETE.**
+
+### Added — `agents/performance-reviewer.md`
+
+- New gate agent (Sonnet, `effort: high`, `memory: project`).
+  Gate-agent identity: `tools: ["Read", "Grep", "Glob", "Bash"]`
+  — no Write / Edit (findings feed back to the worker tier,
+  the reviewer never modifies code it judges).
+- Envelope contract shared with the other five gates (see
+  `agents/_gate-contract.md`). Emits `gate_name = "performance-reviewer"`.
+  Consumed by `hooks/perf-gate.sh` via the existing envelope
+  resolution (`.claude/gates/perf.json` → `last-gate.json`).
+- **Seven judgment surfaces** — the review focuses on what
+  mechanical tools miss:
+  1. **Blocking / expensive work in request path** — sync LLM
+     calls, transcode, `requests.get()` without timeout, image
+     resize inside a view handler. Rule: >100ms median or
+     unbounded p99 = FAIL if not queued/async.
+  2. **Cache-invalidation correctness** — new cache write with
+     no invalidation on UPDATE/DELETE, cache key missing
+     dependency dimensions, missing TTL as belt-and-suspenders.
+  3. **Memory-accumulation patterns** — module-level containers
+     appended to per request, `lru_cache(maxsize=None)` on
+     unbounded input, per-request `redis.Redis()` instead of
+     pool, `logging.FileHandler` per handler.
+  4. **Algorithmic complexity in hot loops** — `list.index(x)`
+     inside `for x in list`, `x in list` in hot path where
+     `list` is not a set/dict, sorting inside a static-outer
+     loop, `time.sleep()` / `retry()` multiplied by N.
+  5. **Over-eager serialization** — list endpoint returning
+     detail shape, serializer schema with unbounded relationship
+     fields, GraphQL-style over REST.
+  6. **Missing pagination** — "all X for this user" without
+     bound, uncapped `?limit=` parameter, `OFFSET N` for large N
+     on unbounded lists.
+  7. **EXPLAIN ANALYZE interpretation** — `Seq Scan` on large
+     table, external merge sort, row estimates off by 10×,
+     nested loop with filter rows removed in millions.
+- Explicitly does NOT re-run the mechanical 80%. Findings that
+  a runtime test would catch (query count, RSS slope, k6 p95)
+  are cited in the summary as "PF1/PF4/PF5 mechanical layer
+  would also catch" — the agent's judgment adds the root-cause
+  reasoning, not duplicate detection.
+
+### Added — `schemas/gate-envelope.schema.json`
+
+- `gate_name` enum admits `"performance-reviewer"` (was 7
+  values, now 8).
+
+### Added — `evals/fixtures/performance-reviewer/` (4 fixtures)
+
+Per the plan's requirement: "**A2's eval harness** must include
+perf fixtures (a seeded N+1, an unbounded query, a blocking call)
+so we can prove it actually catches them."
+
+- **`fail-escalate-blocking-in-request-path`** — Flask view
+  with sync `anthropic.messages.create` under `--workers 4
+  --threads 2` gunicorn. Expected verdict FAIL, finding rule
+  `blocking-in-request-path`.
+- **`fail-escalate-unbounded-list-endpoint`** — `/messages`
+  endpoint with `.all()` on 40-60k-row filter + `m.sender.name`
+  lazy access. Expected findings: `missing-pagination` +
+  `over-eager-serialization`. Note that PF1 would ALSO catch
+  the N+1 at runtime; the judgment layer flags the schema-shape
+  root cause.
+- **`fail-escalate-nplusone-in-serializer`** — Marshmallow
+  `OrderSchema` with `attribute="product.sku"` and
+  `attribute="customer.email"` patterns that guarantee ~301
+  queries for 50 orders × 4 lines. Judgment surface: the SCHEMA
+  SHAPE is the root cause, not the ORM.
+- **`pass-clean-refactor`** — same orders endpoint after
+  keyset pagination + capped limit + explicit `selectinload`
+  chain. Verdict PASS, no findings, summary points at PF1 as
+  the mechanical follow-up.
+
+### Updated
+
+- `plugin.json`: `agents: 20 → 21` in the description count.
+- `.claude-plugin/plugin.json`: `capabilities.agents: 20 → 21`.
+- `README.md` badge → 0.37.0.
+- `.claude-plugin/plugin.json` version → 0.37.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` PF6 marker: MISSING → SHIPPED v0.37.0.
+- `docs/HANDOFF.md` — v0.37.0 header, PF6 row added, resume
+  notes reorder (design ceiling wave is next per operator's
+  pickup list; A4 loop + TOK3 still queued).
+- `MANIFEST.sha256` regenerated.
+
+### Reviewer fixes (applied pre-commit)
+
+- **CRITICAL — agent count drift in `.claude-plugin/plugin.json`.**
+  Description text said "20 agents" while `capabilities.agents`
+  said 21. Reviewer caught the natural-language field lagging the
+  structured field. **Fix:** description bumped 20 → 21 to match
+  both root `plugin.json` (also 21) and the capabilities count.
+- **MEDIUM — judgment/mechanical overlap policy sharpened.** The
+  agent spec said "do NOT re-flag findings the mechanical layer
+  catches" but the fixtures included findings whose SYMPTOM was
+  caught mechanically. Added an explicit "overlap rule" section
+  distinguishing symptom overlap (cite in summary, no separate
+  finding) from root-cause overlap (emit finding + cite mechanical
+  layer as convergent evidence). Fixture behavior unchanged; spec
+  now names the criterion adopters should apply.
+- (Reviewer's HIGH re fixture prompt shape was a false positive —
+  audited peer fixtures for security-reviewer / design-critic /
+  tdd-guide, all use the same `## Prompt` + `You are the <gate>
+  gate.` shape performance-reviewer follows.)
+
+### Alignment
+
+- All 23 test scripts + `pe docs check` green at v0.37.0.
+- `test_gate_efficacy.sh` grew 17 → 21 shape checks (three
+  FAIL + one PASS fixture).
+- **Eighteen V2 items shipped, one PARTIAL (A4 loop).**
+- **PF row COMPLETE** — PF1 (v0.34.0) + PF2 (v0.18.1) + PF3
+  (v0.18.0) + PF4 + PF5 (v0.35.0) + PF6 (v0.37.0) all landed.
+
+### Notes — deliberately out of scope
+
+- **Automatic re-invocation on commit.** perf-gate.sh accepts a
+  `Perf-tested: <envelope-sha>` trailer; the adopter still runs
+  the reviewer manually (`pe agent run performance-reviewer
+  --brief <diff-path> --out <transcript>`) and captures the
+  envelope via `pe gate parse --record .claude/gates/perf.json`.
+  Auto-invocation belongs to A4's escalation loop (still
+  PARTIAL).
+- **Live-mode fixture validation.** The shape mode (`--live=0`)
+  validates fixture structure only. Live-mode validation
+  (`pe agent run` against each brief, compare emitted envelope
+  to expected) works today via `test_gate_efficacy.sh --live`
+  but requires `claude` CLI + `ANTHROPIC_API_KEY` — same
+  gating as the existing five gates.
+
+### Migration
+
+- No breaking changes. Adopters upgrade via `pe install`; the
+  new agent shows up in `.claude/agents/`. The `perf-gate.sh`
+  hook wiring is unchanged from v0.34.0 — this release adds the
+  agent that CAN produce the envelope the hook was already
+  ready to accept.
+
+---
+
 ## [0.36.0] — 2026-07-04
 
 > **Quality close-out release — three fixes from the v0.34.0

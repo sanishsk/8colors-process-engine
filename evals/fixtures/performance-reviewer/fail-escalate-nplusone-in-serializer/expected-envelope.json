@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "performance-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.9,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T12:10:00Z",
+  "summary": "OrderSchema.attribute='customer.email' + OrderLineSchema.attribute='product.sku' patterns guarantee a per-row lazy load — ~301 queries for 50 orders×4 lines where 4 would suffice. PF1 query-count would catch at runtime; the reviewable issue is the schema shape itself.",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "rule": "over-eager-serialization",
+      "file": "modules/orders/schema.py",
+      "line": 6,
+      "message": "OrderLineSchema.sku / .name use `attribute='product.sku'` which triggers getattr(line, 'product') per row → lazy SELECT per line. 200 queries for 50×4 lines. Same pattern on OrderSchema for customer / shipping = another 100 queries. Total ~301 for what should be 4.",
+      "suggestion": "In the view, add `selectinload(Order.customer), selectinload(Order.shipping), selectinload(Order.lines).selectinload(OrderLine.product)` on the query. Alternative: redesign the schema to nest `customer` / `shipping` / `lines` as sub-schemas and let the ORM's normal relationship load fire once per relationship."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "over-eager-serialization",
+      "file": "modules/orders/schema.py",
+      "line": 15,
+      "message": "customer_email + customer_name both dot-access the same lazy relationship (order.customer). Even with an eager-load fix, referencing the same attribute twice is redundant; the fix should collapse them into a single nested customer sub-schema.",
+      "suggestion": "customer = fields.Nested(CustomerSchema, only=('email','full_name'))."
+    }
+  ],
+  "scope": {
+    "branch": "feat/orders-list-schema",
+    "commit": "c3d4e5f",
+    "files_reviewed": ["modules/orders/schema.py", "modules/orders/views.py"],
+    "lines_reviewed": 35
+  }
+}

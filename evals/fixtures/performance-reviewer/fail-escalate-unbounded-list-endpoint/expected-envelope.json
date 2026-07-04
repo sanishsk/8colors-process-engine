@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "performance-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.9,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T12:05:00Z",
+  "summary": "/messages endpoint returns every message for the user with .all() + lazy sender.name access — unbounded scan (40-60k rows for power users) with per-row relationship load. PF1 query-count test would catch the N+1 at runtime; the shape itself is the reviewable issue.",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "rule": "missing-pagination",
+      "file": "app/views/messages.py",
+      "line": 13,
+      "message": "list_all() calls .all() on a filter that scales with user history (40-60k rows for power users). Response serialization holds the whole result set + JSON tree in memory per request; multi-hundred-MB RSS and multi-second serialize time per hit.",
+      "suggestion": "Introduce keyset pagination: accept `?cursor=<created_at,id>` + `?limit=<50, capped at 200>`; query with `WHERE (created_at, id) < (:cursor_ts, :cursor_id) LIMIT :capped_limit`. Return cursor for next page in the payload."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "over-eager-serialization",
+      "file": "app/views/messages.py",
+      "line": 20,
+      "message": "Response comprehension touches `m.sender.name` per row — SQLAlchemy will issue a lazy SELECT on senders for each message unless a joinedload/selectinload is added. Also flagged by PF1 mechanical layer (query-count would fail), but the ROOT CAUSE is the serializer shape, not the ORM.",
+      "suggestion": "Either (a) selectinload(Message.sender) in the query for the paginated result, or (b) return sender_id only and let the client fetch sender details in a batch endpoint."
+    }
+  ],
+  "scope": {
+    "branch": "feat/messages-list",
+    "commit": "b2c3d4e",
+    "files_reviewed": ["app/views/messages.py"],
+    "lines_reviewed": 24
+  }
+}

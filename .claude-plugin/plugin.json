@@ -1,8 +1,8 @@
 {
   "name": "8colors-process-engine",
   "displayName": "8colors Process Engine",
-  "version": "0.36.0",
-  "description": "Portable Claude Code process engine — 20 agents, 9 commands, 2 session skills, cross-platform schedulers, multi-provider RAG with FTS5 hybrid retrieval, deterministic quality/security gates, and A6 SaaS domain modules (auth + tenancy + api-credentials + billing). Enforcement is deterministic, not prompt-hope.",
+  "version": "0.37.0",
+  "description": "Portable Claude Code process engine — 21 agents, 9 commands, 2 session skills, cross-platform schedulers, multi-provider RAG with FTS5 hybrid retrieval, deterministic quality/security gates, and A6 SaaS domain modules (auth + tenancy + api-credentials + billing). Enforcement is deterministic, not prompt-hope.",
   "author": "8Colors",
   "license": "MIT",
   "homepage": "https://github.com/sanishsk/8colors-process-engine",
@@ -17,7 +17,7 @@
     "hooks": "hooks/hooks.json"
   },
   "capabilities": {
-    "agents": 20,
+    "agents": 21,
     "commands": 9,
     "skills": 2,
     "hooks": {

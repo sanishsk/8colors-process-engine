@@ -46,6 +46,7 @@
         "e2e-runner",
         "database-reviewer",
         "design-critic",
+        "performance-reviewer",
         "merge-gate"
       ]
     },

@@ -3,17 +3,19 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.36.0 shipped — quality
-> close-out: sast-scan fail-visibly on no-tool state,
-> `_trailer-contract.sh` shared helper deduplicates envelope
-> logic across four hooks, and A4 status reclassified SHIPPED →
-> PARTIAL for audit honesty. No new features. Seventeen V2
-> items shipped, one PARTIAL (A4 loop). PF6 is the natural next
-> build per operator's updated pickup list.)
+> **Last updated:** 2026-07-04 (v0.37.0 shipped — PF6
+> performance-reviewer agent lands. Judgment-20% gate covering
+> blocking-in-request-path, cache-invalidation, memory-accumulation,
+> algorithmic complexity, over-eager serialization, missing
+> pagination, EXPLAIN ANALYZE. PF row COMPLETE (PF1+PF2+PF3+PF4+PF5+PF6
+> all shipped). Eighteen V2 items shipped, one PARTIAL (A4 loop).
+> Design ceiling wave is the natural next per operator's pickup
+> list — needs a target screen (backlog #237 gallery) to score
+> against.)
 
 ---
 
-## Current state — v0.36.0 (`a7c3039` → `<v0.36.0 sha>` this session)
+## Current state — v0.37.0 (`83794b7` → `<v0.37.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -47,22 +49,23 @@
 | PF1 perf-gate commit-msg trailer (query-count enforcement) | ✅ SHIPPED | v0.34.0 |
 | PF4 soak template (RSS-slope + gc-reclaim + tracemalloc) | ✅ SHIPPED | v0.35.0 |
 | PF5 k6 load template + workflow_dispatch CI job | ✅ SHIPPED | v0.35.0 |
+| PF6 performance-reviewer agent (judgment 20% gate) | ✅ SHIPPED | v0.37.0 |
 
 **PARTIAL count: 1** — A4's auto-escalation loop.
 Every other V2 item is either SHIPPED, GATED with a named
 prerequisite, on a specific release queue, or explicitly not yet
 started.
 
-**Not started yet:** A9 higher tiers, PF6 (perf-reviewer agent),
-D3 (visual-regression).
+**Not started yet:** A9 higher tiers, D3 (visual-regression), and
+the design ceiling wave (D5→D7→D6→D8→A9.3).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.36.0** — sast-scan
-   no-tool state now BLOCKS instead of silently passing. If an
-   adopter had been riding the silent-pass mode, their next commit
-   touching source will surface the BLOCK message; either install
-   a SAST tool or set `PE_SKIP_SAST=1` per the guidance.
+1. **Adopters need to be re-installed at v0.37.0** — new
+   `performance-reviewer` agent lands. `pe install` symlinks it
+   into `.claude/agents/`. Adopters can invoke it via
+   `pe agent run performance-reviewer --brief <path>` or via the
+   `hooks/perf-gate.sh` commit-msg trailer path.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -72,18 +75,16 @@ D3 (visual-regression).
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **PF6** — perf-reviewer agent that consumes the query-count
-     + latency + soak + k6 envelopes and returns a scored perf
-     verdict. All prerequisite templates now ship (PF1 shipped
-     v0.34.0, PF4/PF5 shipped v0.35.0). **Cleanest next build —
-     pure agent-body add, no new plumbing.**
    - **Design ceiling wave** — D5 → D7 → D3 → D6 → D8 → A9.3 per
      `DESIGN_EXCELLENCE.md`. Award-grade layer, all spec-only
-     today. **Caveat:** needs a real target screen (8CStudio
-     Delivery gallery, backlog #237) to score against, or
-     "award-grade" stays theoretical.
+     today. **Natural next build** now that PF row is complete.
+     **Caveat:** needs a real target screen (8CStudio Delivery
+     gallery, backlog #237) to score against, or "award-grade"
+     stays theoretical.
    - **A4 auto-escalation loop** — the loop itself (status
      honesty landed v0.36.0; implementation is a future release).
+   - **TOK3** — terse-output mode for mechanical agents (real
+     token win, deferred).
    - **A9 higher tiers** — extend the shadow-decide primitive
      with more test-generation + eval tiers.
    - **D3** — visual-regression (Percy / Chromatic wired into
