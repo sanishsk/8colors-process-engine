@@ -308,6 +308,69 @@ def verify_crosscheck(envelope: dict, crosscheck: dict) -> list[str]:
     return errors
 
 
+def validate_awwwards_consistency(envelope: dict) -> list[str]:
+    """D5 v0.38.0 — post-schema semantic checks on awwwards_score.
+
+    The JSON Schema can only validate structure. Two semantic invariants
+    must hold across dimension scores + verdict + surface class:
+
+    1. `total` must match the weighted sum
+       `design*0.4 + usability*0.3 + creativity*0.2 + content*0.1`
+       within a tolerance (agents can round to 2 decimals). Reviewer
+       HIGH v0.38.0: without this check, an agent could emit
+       (10,10,10,10, total=6.5) and it would pass schema validation.
+    2. `surface_class + total` must be consistent with `verdict`.
+       client_facing surfaces with total < 8.0 MUST verdict=FAIL;
+       internal surfaces with total < 7.0 MUST verdict=FAIL. Reviewer
+       HIGH v0.38.0: without this check, an agent could claim PASS on
+       a below-bar total and the schema would accept.
+
+    Returns a list of error messages (empty if all checks pass). Only
+    fires when `awwwards_score` is present — the field is optional and
+    absence is fine (floor-only mode).
+    """
+    score = envelope.get("awwwards_score")
+    if not isinstance(score, dict):
+        return []
+    errs: list[str] = []
+    try:
+        d = float(score["design"])
+        u = float(score["usability"])
+        c = float(score["creativity"])
+        con = float(score["content"])
+        total = float(score["total"])
+    except (KeyError, TypeError, ValueError):
+        return []  # schema layer will have already errored.
+
+    expected = d * 0.4 + u * 0.3 + c * 0.2 + con * 0.1
+    if abs(total - expected) > 0.05:
+        errs.append(
+            f"$.awwwards_score.total: {total} does not match weighted sum "
+            f"(design*0.4 + usability*0.3 + creativity*0.2 + content*0.1 "
+            f"= {expected:.3f}). Difference {abs(total - expected):.3f} "
+            f"exceeds ±0.05 tolerance."
+        )
+
+    surface = score.get("surface_class")
+    verdict = envelope.get("verdict")
+    bar = 8.0 if surface == "client_facing" else 7.0 if surface == "internal" else None
+    if bar is not None and verdict is not None:
+        if total < bar and verdict != "FAIL":
+            errs.append(
+                f"$.awwwards_score: total {total} is below the {surface} "
+                f"pass bar ({bar}); verdict must be FAIL but is {verdict!r}. "
+                f"The pass-bar contract is agent-enforced and parser-verified."
+            )
+        if total >= bar and verdict == "FAIL":
+            # Above the bar with FAIL is legal only if the fail was
+            # driven by a per-dimension floor (archetype-specific).
+            # We don't have the archetype floors in-parser, so warn
+            # softly via the message — this is not a schema breach,
+            # just an audit surface.
+            pass
+    return errs
+
+
 def classify_exit(envelope: dict) -> int:
     verdict = envelope.get("verdict")
     if verdict == "PASS":
@@ -423,6 +486,10 @@ def main(argv: list[str]) -> int:
             f"$.failure_class: must be 'none' when verdict={verdict} "
             f"(got {failure_class!r})"
         )
+
+    # D5 (v0.38.0) — awwwards_score semantic checks. See
+    # validate_awwwards_consistency docstring for the two invariants.
+    validation_errors.extend(validate_awwwards_consistency(envelope))
 
     # Major version gate — pinned to ENGINE_SCHEMA_MAJOR const (P2.11).
     # Previously read schema.properties.schema_version.examples[0]

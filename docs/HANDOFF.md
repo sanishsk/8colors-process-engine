@@ -3,19 +3,18 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.37.0 shipped — PF6
-> performance-reviewer agent lands. Judgment-20% gate covering
-> blocking-in-request-path, cache-invalidation, memory-accumulation,
-> algorithmic complexity, over-eager serialization, missing
-> pagination, EXPLAIN ANALYZE. PF row COMPLETE (PF1+PF2+PF3+PF4+PF5+PF6
-> all shipped). Eighteen V2 items shipped, one PARTIAL (A4 loop).
-> Design ceiling wave is the natural next per operator's pickup
-> list — needs a target screen (backlog #237 gallery) to score
-> against.)
+> **Last updated:** 2026-07-04 (v0.38.0 shipped — D5
+> design-critic ceiling mode against STUB aspirational references.
+> Awwwards 4-dimension scoring, surface-differentiated pass bars,
+> pull-up top-3-changes principle. Nineteen V2 items shipped, one
+> PARTIAL (A4 loop). D-row progress: D1+D2+D4 (floor) + D5
+> (ceiling scoring) shipped; D3+D6+D7+D8+A9.3 still pending.
+> D7 upgrade path swaps stub references for real visuals when
+> the 8CStudio Delivery gallery lands.)
 
 ---
 
-## Current state — v0.37.0 (`83794b7` → `<v0.37.0 sha>` this session)
+## Current state — v0.38.0 (`bb26760` → `<v0.38.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -50,22 +49,25 @@
 | PF4 soak template (RSS-slope + gc-reclaim + tracemalloc) | ✅ SHIPPED | v0.35.0 |
 | PF5 k6 load template + workflow_dispatch CI job | ✅ SHIPPED | v0.35.0 |
 | PF6 performance-reviewer agent (judgment 20% gate) | ✅ SHIPPED | v0.37.0 |
+| D5 design-critic ceiling mode (Awwwards scoring, stub refs) | ✅ SHIPPED | v0.38.0 |
 
 **PARTIAL count: 1** — A4's auto-escalation loop.
 Every other V2 item is either SHIPPED, GATED with a named
 prerequisite, on a specific release queue, or explicitly not yet
 started.
 
-**Not started yet:** A9 higher tiers, D3 (visual-regression), and
-the design ceiling wave (D5→D7→D6→D8→A9.3).
+**Not started yet:** A9 higher tiers, D3 (visual-regression), D6
+(motion-craft gate), D7 (curated visual reference library — upgrades
+D5's stubs), D8 (signature-system gate), A9.3 (visual-regression
+tool wiring).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.37.0** — new
-   `performance-reviewer` agent lands. `pe install` symlinks it
-   into `.claude/agents/`. Adopters can invoke it via
-   `pe agent run performance-reviewer --brief <path>` or via the
-   `hooks/perf-gate.sh` commit-msg trailer path.
+1. **Adopters need to be re-installed at v0.38.0** — the
+   design-critic agent gains D5 ceiling mode and 4 aspirational
+   reference stubs land in `docs/design/aspirational/`. Adopters
+   can override the archetype files with project-local versions
+   (edit in-place; `pe install` doesn't overwrite existing files).
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -75,12 +77,19 @@ the design ceiling wave (D5→D7→D6→D8→A9.3).
      Requires `--auto-execute` flag gated by `--enforce` (still
      `tested = false` per §9 watchpoint). Ship AFTER first-fire
      evidence on enforce-mode.
-   - **Design ceiling wave** — D5 → D7 → D3 → D6 → D8 → A9.3 per
-     `DESIGN_EXCELLENCE.md`. Award-grade layer, all spec-only
-     today. **Natural next build** now that PF row is complete.
-     **Caveat:** needs a real target screen (8CStudio Delivery
-     gallery, backlog #237) to score against, or "award-grade"
-     stays theoretical.
+   - **D7 curated reference library** — swaps the D5 stubs for
+     real visual references (screenshot swatches, motion clips,
+     token snapshots). Naturally follows once the 8CStudio
+     Delivery gallery (backlog #237) provides live target
+     screens. Until then, D5's stub-mode holds.
+   - **D6 motion-craft gate** — `prefers-reduced-motion` +
+     Core-Web-Vitals-under-motion + motion-has-purpose judgment.
+     Can proceed independently of D7.
+   - **D8 signature-system gate** — codifies "every product has
+     ≥1 signature element" as a FAIL condition on flagship
+     screens.
+   - **D3 + A9.3** — visual-regression baselines + wiring the
+     orphaned `run_visual_regression` MCP tool into the critic.
    - **A4 auto-escalation loop** — the loop itself (status
      honesty landed v0.36.0; implementation is a future release).
    - **TOK3** — terse-output mode for mechanical agents (real

@@ -7,6 +7,192 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.38.0] — 2026-07-04
+
+> **D5 shipped — design-critic ceiling mode.** The floor gate (D1)
+> holds "not-bad"; the ceiling gate pulls toward award-grade. Four
+> Awwwards dimensions (Design 40 / Usability 30 / Creativity 20 /
+> Content 10), surface-differentiated pass bars
+> (client-facing ≥ 8.0, internal ≥ 7.0), and the pull-up
+> principle: every ceiling verdict emits top-3 concrete changes
+> to reach the next point. **Shipped against STUB aspirational
+> references** per operator direction — D7's visual reference
+> library upgrades these narrative anchors when the 8CStudio
+> Delivery gallery (backlog #237) arrives as the live testbed.
+
+### Added — `docs/design/aspirational/` (4 stub archetype files)
+
+- **`marketing-site.md`** — landing / pricing / about / docs-home.
+  `client_facing`, pass bar ≥ 8.0. Cites Linear.app / Vercel /
+  Stripe as real-world exemplars.
+- **`client-gallery.md`** — Delivery gallery archetype.
+  `client_facing`, pass bar ≥ 8.0. Cites Pixieset (baseline to
+  beat), Squarespace showcase, Prophoto.
+- **`internal-dashboard.md`** — Linear/Stripe "quiet excellence"
+  target. `internal`, pass bar ≥ 7.0. Names the 100-row test +
+  3am-operator test.
+- **`form-flow.md`** — checkout / signup / onboarding.
+  `client_facing`, pass bar ≥ 8.0. Names the 10-second panic test
+  and payment-fields-must-never-look-decorative.
+- Each file carries six mandatory sections in a fixed order
+  (Surface class / Pass bar / Real-world exemplars / What earns
+  9.0 / What earns 6.0 / Signature signals unique to this
+  archetype). The critic reads by heading match.
+- **`README.md`** documents the placeholder shape, upgrade path
+  to D7 visual references, and the archetype-add contract.
+
+### Added — `agents/design-critic.md` D5 ceiling-mode section
+
+- New "D5 ceiling mode" section between the floor rubric and the
+  CRITICAL OUTPUT CONTRACT. Two-mode gate: floor mode is always
+  on; ceiling mode fires additionally on client-facing surfaces
+  or when opted in via `# Design-scored: true` in the brief.
+- Ceiling workflow: Step 0 classify archetype → Step 1 read the
+  archetype file's four core sections → Step 2 score each of the
+  four Awwwards dimensions 0–10 → Step 3 apply the pass bar
+  (client-facing ≥ 8.0 total; internal ≥ 7.0; per-dimension
+  minimums from the archetype cap total) → Step 4 emit top-3
+  concrete changes.
+- **Pull-up principle** codified: even a PASS verdict emits
+  top-3 changes ordered by expected point gain. The review's
+  whole point is to PULL UP, not just hold the line.
+- v0.38.0 caveat block: aspirational references are stubs, so
+  scoring is against textual anchors; vision-reading is not
+  required by this release but not forbidden. `reference_used`
+  field marks stub status so downstream audits see the honest
+  scope.
+
+### Added — `schemas/gate-envelope.schema.json` `awwwards_score`
+
+- New optional top-level object with strict `additionalProperties: false`.
+- Required fields: `surface_class` (enum `client_facing` /
+  `internal`), `design`, `usability`, `creativity`, `content`,
+  `total` (all 0–10).
+- Optional `reference_used` (path to archetype file) and
+  `top_changes` (array, maxItems 3). Each `top_changes` item is
+  strict-shape: `dimension` (enum: design / usability /
+  creativity / content), `current`, `expected`, `change`.
+
+### Added — 2 new fixtures under `evals/fixtures/design-critic/`
+
+- **`fail-escalate-client-below-bar`** — marketing landing with
+  the full AI-aesthetic stack (`bg-gradient-to-br
+  from-slate-900 via-cyan-900`, manifesto verbs "Imagine./Unleash/
+  Empower/Boundless", emoji-in-button, card-grid-of-three). Scores
+  Design 6.0 / Usability 7.5 / Creativity 5.0 / Content 4.0 →
+  total 6.05 → below the 8.0 client bar → FAIL. Top-3 name the
+  content fix (kill manifesto), design fix (signature type +
+  palette), creativity fix (one hero interaction).
+- **`pass-internal-quiet-excellence`** — orders dashboard with
+  density + tabular-nums + keyboard-first affordances + shaped
+  empty state. Scores Design 7.5 / Usability 9.0 / Creativity 5.5
+  / Content 7.5 → total 7.55 → above the 7.0 internal bar → PASS.
+  Still emits three top-changes (pull-up principle).
+
+### Added — `tests/test_d5_ceiling.sh` (18 cases)
+
+- Aspirational dir + README present.
+- All 4 archetype files present.
+- Each archetype carries the 6 required section headings.
+- Schema admits `awwwards_score` with required fields + surface
+  enum.
+- Schema `top_changes` is array (maxItems 3) with 4-dimension
+  enum.
+- design-critic body advertises D5 ceiling mode + names all 4
+  archetype file paths.
+- New fixtures parse to expected exit codes via `pe gate parse
+  --bare`.
+- Fixture envelope invariants: FAIL total < 8.0 for client_facing;
+  PASS total ≥ 7.0 for internal + top_changes still emitted
+  (pull-up rule).
+- Archetype files' declared surface classes match the schema enum.
+
+### Updated
+
+- `plugin.json.description` unchanged (D5 is an agent-body + schema
+  add; the description is at its length ceiling).
+- `README.md` badge → 0.38.0.
+- `.claude-plugin/plugin.json` version → 0.38.0.
+- `docs/ENHANCEMENT_PLAN_V2.md` D5 marker: MISSING → **SHIPPED
+  v0.38.0 against STUB aspirational references**.
+- `docs/HANDOFF.md` — v0.38.0 header, D5 row added, resume notes
+  reorder (D7 upgrade path names real references; D6/D8/A9.3 are
+  the next design-ceiling wave items).
+- `MANIFEST.sha256` regenerated.
+
+### Reviewer fixes (applied pre-commit)
+
+- **HIGH — arithmetic drift risk in `awwwards_score.total`.** Schema
+  couldn't enforce `total = design*0.4 + usability*0.3 +
+  creativity*0.2 + content*0.1`. Agent could emit
+  `(10,10,10,10, total=6.5)` and pass. **Fix:** new
+  `validate_awwwards_consistency()` in `scripts/pe_gate.py` runs
+  post-schema. Rejects any drift > 0.05. Regression test seeds an
+  inconsistent envelope and asserts exit 4.
+- **HIGH — pass-bar not parser-enforced.** Agent could emit
+  `verdict=PASS, surface_class=client_facing, total=7.9` and pass
+  schema. **Fix:** the same validator now enforces
+  "client_facing total < 8.0 → verdict must be FAIL" and the
+  internal 7.0 bar. Regression test seeds a below-bar PASS and
+  asserts exit 4.
+- **HIGH — archetype tiebreaker missing.** Surfaces spanning
+  multiple archetypes (landing + embedded signup form) had no rule.
+  **Fix:** agent body §Step 0 now names the tiebreaker: "score
+  against the archetype with the strictest Usability bar" —
+  usability regressions cost the most on the mixed surface. Documented
+  requirement to note the tiebreaker choice in the summary.
+- **MEDIUM — per-dimension floor override made explicit.** Agent
+  body §Step 3 now states: "if ANY dimension falls below its
+  archetype's stated floor, verdict = FAIL regardless of total ≥
+  8.0. Include the specific floor breach in the summary."
+- **LOW — pull-up noise-floor carve-out.** Agent body §Step 4 now
+  targets top_changes at dimensions within 1.0 of their archetype
+  bar. Well-clear PASS can emit fewer than 3 changes; empty array
+  is legal. The pull-up principle is about direction, not padding.
+- Also verified: an envelope WITHOUT `awwwards_score` (floor-only
+  mode) still parses cleanly — new validator is opt-in when the
+  field is present.
+
+### Alignment
+
+- All 24 test scripts + `pe docs check` green at v0.38.0.
+- test_d5_ceiling.sh grew 18 → 21 cases (three reviewer-fix
+  regressions: arithmetic reject, pass-bar reject, floor-only
+  legal).
+- Gate-efficacy grew 21 → 23 (two new design-critic fixtures).
+- **Nineteen V2 items shipped, one PARTIAL (A4 loop).** D-row
+  progress: D1 + D2 + D4 shipped (floor); D5 shipped (ceiling
+  scoring); D3 + D6 + D7 + D8 + A9.3 still pending.
+
+### Notes — deliberately out of scope
+
+- **Vision-model scoring against real screenshots.** D7 territory
+  — when the aspirational-reference library upgrades from
+  narrative stubs to actual visual references (screenshot
+  swatches, motion clips), the critic can read images. The
+  `awwwards_score.reference_used` field already advertises stub
+  status so the audit trail is honest.
+- **Live target testbed.** Per operator direction, D5 landed
+  against stubs so the scoring shape is real before the 8CStudio
+  Delivery gallery (backlog #237) arrives. When #237 lands, D7
+  swaps the reference bodies without touching the critic.
+- **Motion-craft dimension (D6).** The Creativity dimension in
+  D5's scoring includes motion signals from the floor rubric,
+  but D6's dedicated motion-craft gate (`prefers-reduced-motion`
+  + CWV-under-motion + motion-has-purpose judgment) is a
+  separate release.
+
+### Migration
+
+- No breaking changes. The `awwwards_score` field is OPTIONAL —
+  existing design-critic envelopes without it still validate
+  cleanly against the schema. Adopters running only floor mode
+  see no behavior change. Adopters running ceiling mode (client-
+  facing surfaces or opt-in briefs) get the scored envelope +
+  top-3 changes; the trailer hook accepts either shape.
+
+---
+
 ## [0.37.0] — 2026-07-04
 
 > **PF6 shipped — performance-reviewer agent.** The judgment 20%

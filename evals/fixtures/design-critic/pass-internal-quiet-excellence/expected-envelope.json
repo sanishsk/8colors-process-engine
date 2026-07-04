@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "design-critic",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.85,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T13:05:00Z",
+  "summary": "Internal orders dashboard scores 7.55 total — above the 7.0 internal bar. Density is a feature (50+ rows above fold, tabular-nums, tight row height), keyboard-first affordances present, empty state has shape. Top-3 changes still emitted per pull-up principle.",
+  "findings": [],
+  "scope": {
+    "branch": "refactor/orders-dashboard-density",
+    "commit": "e6f7a8b",
+    "files_reviewed": ["templates/admin/orders_table.html"],
+    "lines_reviewed": 55
+  },
+  "awwwards_score": {
+    "surface_class": "internal",
+    "design": 7.5,
+    "usability": 9.0,
+    "creativity": 5.5,
+    "content": 7.5,
+    "total": 7.55,
+    "reference_used": "docs/design/aspirational/internal-dashboard.md (stub, D7 will add visual references)",
+    "top_changes": [
+      {
+        "dimension": "usability",
+        "current": 9.0,
+        "expected": 9.5,
+        "change": "Add a visible keyboard-shortcut hint near the filter input (a `Kbd` element showing `/`) — currently discoverable only via placeholder text. Small but compounds over 4h/day usage."
+      },
+      {
+        "dimension": "design",
+        "current": 7.5,
+        "expected": 8.0,
+        "change": "Tighten type hierarchy — h1 at text-xl reads flat against the row text-sm. Consider text-base for h1 with a stronger weight (semibold → bold) OR text-2xl to establish scan-level anchor."
+      },
+      {
+        "dimension": "usability",
+        "current": 9.0,
+        "expected": 9.5,
+        "change": "Add a subtle skeleton loader on data refresh (Alpine `x-transition` on the tbody) — currently a page-refresh feels like nothing changed until the new rows appear. Perceived latency win."
+      }
+    ]
+  }
+}

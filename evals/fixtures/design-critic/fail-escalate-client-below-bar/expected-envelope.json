@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "design-critic",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.9,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T13:00:00Z",
+  "summary": "Client-facing marketing landing scores 6.05 total — below the 8.0 client-facing bar. Stock dark-cyan-gradient palette + manifesto verbs + emoji-in-button + card-grid-of-three composition = AI-aesthetic template. Needs signature type, palette identity, and one hero interaction.",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "rule": "ai-aesthetic-stack",
+      "file": "templates/marketing/landing.html",
+      "line": 4,
+      "message": "Hero uses bg-gradient-to-br from-slate-900 via-cyan-900 — the exact stock dark-cyan-gradient template that reads as 'AI SaaS landing.' Tells 1 + 5 + 7 fire together with default type + card-grid + emoji icons. Under marketing-site archetype 'what earns 6.0' floor.",
+      "suggestion": "Kill the gradient hero — replace with a signature background (single-color with a distinctive type moment, or a hero device that couldn't be another SaaS's landing)."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "manifesto-copy",
+      "file": "templates/marketing/landing.html",
+      "line": 7,
+      "message": "'Imagine your studio. Unleashed.' + 'Empower your creative workflow' + 'Boundless possibilities' — four manifesto verbs in the same view. Also caught by copy-lint regex. Content dimension caps at 4.0.",
+      "suggestion": "Replace with a specific proof: '700 studios cut export time 4x' or the actual outcome. Manifesto verbs are the tell of writing before deciding what to say."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "no-signature",
+      "file": "templates/marketing/landing.html",
+      "line": 4,
+      "message": "Zero signature interaction on the hero. Three-card feature grid with emoji icons IS the default AI SaaS composition. Under marketing-site archetype 'signature signals' section: 'A perfect marketing site can be recognized by ONE image or motion moment even without the logo.'",
+      "suggestion": "Invest one hero interaction — a scroll-driven type transformation, an interactive product moment, a signature device from the operator's own product (film-slate/timecode motif per DESIGN_EXCELLENCE §3)."
+    }
+  ],
+  "scope": {
+    "branch": "feat/marketing-landing",
+    "commit": "d5f5e5e",
+    "files_reviewed": ["templates/marketing/landing.html"],
+    "lines_reviewed": 42
+  },
+  "awwwards_score": {
+    "surface_class": "client_facing",
+    "design": 6.0,
+    "usability": 7.5,
+    "creativity": 5.0,
+    "content": 4.0,
+    "total": 6.05,
+    "reference_used": "docs/design/aspirational/marketing-site.md (stub, D7 will add visual references)",
+    "top_changes": [
+      {
+        "dimension": "content",
+        "current": 4.0,
+        "expected": 7.5,
+        "change": "Replace manifesto verbs ('Imagine.', 'Unleash', 'Empower', 'Boundless') with a specific proof headline and a concrete CTA label. Kill the rocket-emoji-in-button."
+      },
+      {
+        "dimension": "design",
+        "current": 6.0,
+        "expected": 8.0,
+        "change": "Kill the stock dark-cyan-gradient hero + adopt a signature typographic pairing (not Space Grotesk + Inter). One distinctive display face on hero, a considered mono variant for any numeric proof."
+      },
+      {
+        "dimension": "creativity",
+        "current": 5.0,
+        "expected": 7.5,
+        "change": "Add one signature hero interaction that communicates the product's core value (a scroll-choreographed type moment, an interactive product device). Not decoration — one memorable moment executed with restraint."
+      }
+    ]
+  }
+}

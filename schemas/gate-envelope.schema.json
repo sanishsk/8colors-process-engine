@@ -123,6 +123,75 @@
         "cache_read_tokens": { "type": "integer", "minimum": 0 },
         "wall_seconds": { "type": "number", "minimum": 0 }
       }
+    },
+    "awwwards_score": {
+      "type": "object",
+      "description": "D5 (v0.38.0) — optional Awwwards-style scoring emitted by design-critic in ceiling mode. Present when the reviewer scored the change against docs/design/aspirational/<archetype>.md references. `surface_class` determines the pass bar (client-facing ≥ 8.0, internal ≥ 7.0). `total` is computed as design*0.4 + usability*0.3 + creativity*0.2 + content*0.1.",
+      "additionalProperties": false,
+      "required": ["surface_class", "design", "usability", "creativity", "content", "total"],
+      "properties": {
+        "surface_class": {
+          "type": "string",
+          "enum": ["client_facing", "internal"],
+          "description": "client_facing — marketing/gallery/tenant/customer-visible; internal — dashboard/admin/tools. Different pass bars per DESIGN_EXCELLENCE §5."
+        },
+        "design": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Design dimension (weight 40%). Typography hierarchy, layout composition, palette identity, signature element presence."
+        },
+        "usability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Usability dimension (weight 30%). Accessibility, information scent, purpose-driven UX (2026 named trend)."
+        },
+        "creativity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Creativity dimension (weight 20%). Motion craft, one memorable idea executed with restraint, effect-stacking penalty."
+        },
+        "content": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Content dimension (weight 10%). Copy voice, information density, no manifesto verbs, no emoji-in-buttons."
+        },
+        "total": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "design*0.4 + usability*0.3 + creativity*0.2 + content*0.1. Compared against the surface_class pass bar."
+        },
+        "reference_used": {
+          "type": "string",
+          "description": "Path to the docs/design/aspirational/<archetype>.md that was used as the scoring anchor."
+        },
+        "top_changes": {
+          "type": "array",
+          "maxItems": 3,
+          "description": "Up to 3 concrete changes ordered by expected point gain. Each names the dimension it lifts, the current score, and the expected score after applying.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dimension", "current", "expected", "change"],
+            "properties": {
+              "dimension": {
+                "type": "string",
+                "enum": ["design", "usability", "creativity", "content"]
+              },
+              "current": { "type": "number", "minimum": 0, "maximum": 10 },
+              "expected": { "type": "number", "minimum": 0, "maximum": 10 },
+              "change": {
+                "type": "string",
+                "description": "One-sentence description of the change. Concrete: what to add/remove, not 'make it better'."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {
