@@ -1,6 +1,6 @@
 ---
 name: design-critic
-description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references; surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially) and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
+description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references; surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: medium
@@ -263,6 +263,73 @@ archetype's anchors:
   toggles on form-flows).
 
 **Compute:** `total = design*0.4 + usability*0.3 + creativity*0.2 + content*0.1`.
+
+### Motion-craft dimension (D6, v0.39.0)
+
+Motion is scored inside **Creativity 20%** but has its own rubric
+because effect-stacking is the #1 amateur design tell and CWV
+regressions under motion are a table-stakes failure. `hooks/motion-lint.sh`
+already catches the mechanical layer (motion added without a
+`prefers-reduced-motion` guard = BLOCK; effect-stacking > cap = WARN).
+This agent's job is the JUDGMENT motion-lint can't emit.
+
+Three motion-craft questions per animated diff:
+
+1. **Does the motion communicate?** Motion that shows state change
+   (opening a modal, activating a selection) or spatial relationship
+   (an element flying from where it CAME FROM to where it LANDS) is
+   award-grade. Motion that just "adds polish" without carrying
+   meaning is decoration. Decoration caps Creativity at 6.0.
+
+2. **Is CWV budget preserved?** Lighthouse LCP/CLS/TBT budgets from
+   D2/PF3 must hold WITH motion, not just without it. If the diff
+   adds a hero animation and the last CI Lighthouse report shows LCP
+   climb from 1.4s → 2.6s, that's a Creativity + Design double-cap:
+   - Creativity caps at 5.0 (motion isn't earning its cost)
+   - Design caps at 7.0 (performance IS part of the aesthetic — the
+     archetypes' "What earns 9.0" all name perceived-instant loading)
+   Cite the specific delta from the Lighthouse report; if none is
+   attached, mark the finding as `blocked` (need CWV evidence).
+
+3. **Is `prefers-reduced-motion` respected?** motion-lint blocks
+   commits that don't have a guard, so the FILE-LEVEL check is
+   already deterministic. This agent adds the semantic layer: does
+   the reduced-motion path DEGRADE gracefully (motion becomes
+   instant-state-change, not silently-broken layout), OR does it
+   just disable animation and leave the user staring at a static
+   final state with no signal that the state changed? The latter
+   is a partial guard — still fails Usability at 7.0.
+
+**Motion-craft signals that RAISE the Creativity score:**
+
+- One signature motion moment (a single considered choreograph, not
+  ten flourishes). Aligns with archetype `Signature signals` sections.
+- Motion timing curves that match the interaction (e.g. a fast
+  spring for a modal open — the modal is snappy and confident; a
+  slower ease-out for a scroll reveal — the reader controls the
+  pace).
+- Motion honors the user's cursor / scroll / touch position (reads
+  as responsive, not staged).
+
+**Motion-craft signals that LOWER the Creativity score:**
+
+- Effect stacking — the same page has a fade-in, a slide, a
+  spring, a parallax, and a hover glow. Each was probably fine on
+  its own; together they read as "trying to impress." motion-lint
+  will WARN via its cap; this agent should call out which effects
+  to KEEP (the one that communicates) and which to KILL.
+- Motion that fights the primary content — a decorative background
+  animation that pulls the eye away from the CTA (marketing) or
+  from a table row (dashboard).
+- Motion that regresses CWV (LCP/CLS/TBT) — expensive on capability
+  and on trust.
+- Silent-disabled motion under `prefers-reduced-motion` — the guard
+  is present but the reduced path is just "nothing happens," leaving
+  the user unsure whether the click worked.
+
+Emit motion-craft findings in `findings[]` with `rule` values like
+`motion-decoration-not-communication`, `motion-effect-stacking`,
+`motion-cwv-regression`, `motion-reduced-path-silent`.
 
 ## Step 3 — apply the pass bar
 

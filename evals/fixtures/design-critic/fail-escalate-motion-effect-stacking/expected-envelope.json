@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "design-critic",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.9,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-04T14:00:00Z",
+  "summary": "Hero scores 5.4 — below 8.0 client bar. motion-lint BLOCKS (10+ signals, no reduced-motion guard). Effect stacking + motion-decoration + CWV regression LCP 1.4s→2.61s + stock palette + manifesto verbs.",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "rule": "motion-effect-stacking",
+      "file": "templates/marketing/hero_with_motion.html",
+      "line": 6,
+      "message": "10+ motion effects on ONE hero (parallax + fade + slide + hover scale + 3 orb pulses/ping/bounce + button bounce + gsap timeline + framer-motion component + motion-blur). This is the #1 amateur design tell — each effect was probably fine on its own; stacked they read as 'trying to impress.' motion-lint.sh WARN cap would fire at 10; strict mode would BLOCK.",
+      "suggestion": "Keep ONE signature moment (a considered scroll-tied hero reveal) and DELETE the rest. Marketing-site archetype: 'A perfect marketing site can be recognized by ONE image or motion moment even without the logo.'"
+    },
+    {
+      "severity": "CRITICAL",
+      "rule": "motion-reduced-path-silent",
+      "file": "templates/marketing/hero_with_motion.html",
+      "line": 6,
+      "message": "Zero prefers-reduced-motion guards anywhere in this file. motion-lint.sh BLOCKS commits in this state (WCAG 2.3.3 + real ADA lawsuit surface). No global guard file declared either (.process-engine.yaml motion_gate.global_guard_file is empty).",
+      "suggestion": "Either wrap every animation in `@media (prefers-reduced-motion: reduce) { … }` OR use Tailwind's motion-safe: / motion-reduce: prefixes OR declare a project-global guard file in .process-engine.yaml pointing at static/css/reduced-motion.css."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "motion-cwv-regression",
+      "file": "templates/marketing/hero_with_motion.html",
+      "line": 40,
+      "message": "Lighthouse CI attached to the brief shows LCP 1.4s → 2.61s and CLS 0.14 (up from 0.02). External GSAP + ScrollTrigger scripts loaded from cdn.jsdelivr (render-blocking), plus multiple always-running animate-pulse elements above the fold. Marketing-site archetype 'What earns 9.0' names perceived-instant loading as required; over 2s LCP caps Design at 7.0 AND caps Creativity at 5.0 (motion isn't earning its cost).",
+      "suggestion": "Self-host GSAP + defer/async the scripts. Kill the always-on orb animations (they're purely decorative). If a signature scroll moment stays, gate it behind IntersectionObserver so it only runs when the section is in view."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "motion-decoration-not-communication",
+      "file": "templates/marketing/hero_with_motion.html",
+      "line": 30,
+      "message": "The three floating orbs (animate-ping / animate-pulse / animate-bounce) communicate nothing — they don't show state change, don't map to a spatial relationship, don't respond to user input. The bounce button confuses the CTA affordance with decoration. Motion-craft rubric §1: decoration caps Creativity at 6.0.",
+      "suggestion": "Delete the orbs. Replace the button's animate-bounce with a static shadow that lifts on hover (a considered rest-state that responds to intent, not a constant attention-grab)."
+    }
+  ],
+  "scope": {
+    "branch": "feat/marketing-hero-motion",
+    "commit": "f7g8h9i",
+    "files_reviewed": ["templates/marketing/hero_with_motion.html"],
+    "lines_reviewed": 42
+  },
+  "awwwards_score": {
+    "surface_class": "client_facing",
+    "design": 6.0,
+    "usability": 6.0,
+    "creativity": 4.0,
+    "content": 4.0,
+    "total": 5.4,
+    "reference_used": "docs/design/aspirational/marketing-site.md (stub, D7 will add visual references)",
+    "top_changes": [
+      {
+        "dimension": "creativity",
+        "current": 4.0,
+        "expected": 7.0,
+        "change": "Keep ONE signature scroll-tied hero moment (typography-driven, not decoration); delete parallax + orb animations + button bounce + hero pulse. Reduces motion signals from 10+ to 1 — clears motion-lint effect-stacking cap AND removes the decoration-not-communication cap on Creativity."
+      },
+      {
+        "dimension": "usability",
+        "current": 6.0,
+        "expected": 8.5,
+        "change": "Add prefers-reduced-motion guards (motion-safe: prefix on Tailwind animated classes + @media guard on the CSS @keyframes). motion-lint.sh will unblock, and the reduced path should degrade to instant final state (typography visible, CTA responsive to hover — not a static screen)."
+      },
+      {
+        "dimension": "design",
+        "current": 6.0,
+        "expected": 8.0,
+        "change": "Self-host GSAP (drop the cdn.jsdelivr script tags) + defer non-critical JS + kill always-on animations above the fold to recover LCP under 1.6s. Under marketing-site archetype, perceived-instant loading is 'What earns 9.0.'"
+      }
+    ]
+  }
+}

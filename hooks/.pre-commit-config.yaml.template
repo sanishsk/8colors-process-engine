@@ -114,6 +114,13 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: motion-lint
+        name: Motion-craft gate (prefers-reduced-motion + effect-stacking)
+        entry: hooks/motion-lint.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: copy-lint
         name: In-app copy lint (AI-manifesto phrases, emoji-icons)
         entry: hooks/copy-lint.sh
@@ -161,6 +168,7 @@ repos:
 #   PE_SKIP_DUPLICATION=1          # bypass duplication-gate for one commit
 #   PE_SKIP_MIGRATION_LINT=1       # bypass migration-lint for one commit
 #   PE_SKIP_DESIGN_LINT=1          # bypass design-lint for one commit
+#   PE_SKIP_MOTION_LINT=1          # bypass motion-lint for one commit (D6)
 #   PE_SKIP_COPY_LINT=1            # bypass copy-lint for one commit
 #   PE_SKIP_BOOT_SMOKE=1           # bypass boot-smoke (used by pe doctor + CI)
 #   PE_SKIP_SAST=1                 # bypass sast-scan for one commit

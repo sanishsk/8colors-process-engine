@@ -3,18 +3,19 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-04 (v0.38.0 shipped — D5
-> design-critic ceiling mode against STUB aspirational references.
-> Awwwards 4-dimension scoring, surface-differentiated pass bars,
-> pull-up top-3-changes principle. Nineteen V2 items shipped, one
-> PARTIAL (A4 loop). D-row progress: D1+D2+D4 (floor) + D5
-> (ceiling scoring) shipped; D3+D6+D7+D8+A9.3 still pending.
-> D7 upgrade path swaps stub references for real visuals when
-> the 8CStudio Delivery gallery lands.)
+> **Last updated:** 2026-07-04 (v0.39.0 shipped — D6 motion-craft
+> gate. Deterministic hooks/motion-lint.sh + design-critic
+> motion-craft rubric. WCAG-hard prefers-reduced-motion enforcement
+> + effect-stacking heuristic + CWV-under-motion judgment.
+> Twenty V2 items shipped, one PARTIAL (A4 loop). D-row progress:
+> D1+D2+D4 (floor) + D5 (ceiling scoring) + D6 (motion) shipped;
+> D3+D7+D8+A9.3 still pending. D7 upgrade path swaps stub
+> references for real visuals when the 8CStudio Delivery gallery
+> lands.)
 
 ---
 
-## Current state — v0.38.0 (`bb26760` → `<v0.38.0 sha>` this session)
+## Current state — v0.39.0 (`ce6d5b9` → `<v0.39.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -50,24 +51,27 @@
 | PF5 k6 load template + workflow_dispatch CI job | ✅ SHIPPED | v0.35.0 |
 | PF6 performance-reviewer agent (judgment 20% gate) | ✅ SHIPPED | v0.37.0 |
 | D5 design-critic ceiling mode (Awwwards scoring, stub refs) | ✅ SHIPPED | v0.38.0 |
+| D6 motion-craft gate (motion-lint + prefers-reduced-motion + effect-stacking + critic rubric) | ✅ SHIPPED | v0.39.0 |
 
 **PARTIAL count: 1** — A4's auto-escalation loop.
 Every other V2 item is either SHIPPED, GATED with a named
 prerequisite, on a specific release queue, or explicitly not yet
 started.
 
-**Not started yet:** A9 higher tiers, D3 (visual-regression), D6
-(motion-craft gate), D7 (curated visual reference library — upgrades
-D5's stubs), D8 (signature-system gate), A9.3 (visual-regression
-tool wiring).
+**Not started yet:** A9 higher tiers, D3 (visual-regression), D7
+(curated visual reference library — upgrades D5's stubs), D8
+(signature-system gate), A9.3 (visual-regression tool wiring).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.38.0** — the
-   design-critic agent gains D5 ceiling mode and 4 aspirational
-   reference stubs land in `docs/design/aspirational/`. Adopters
-   can override the archetype files with project-local versions
-   (edit in-place; `pe install` doesn't overwrite existing files).
+1. **Adopters need to be re-installed at v0.39.0** —
+   `hooks/motion-lint.sh` lands + gets wired into their
+   `.claude/settings.json` PostToolUse and
+   `.pre-commit-config.yaml`. Adopters with existing motion in
+   their UI will see the BLOCK on next commit unless a
+   prefers-reduced-motion guard is present (per-file or global via
+   `motion_gate.global_guard_file` in `.process-engine.yaml`).
+   Bypass: `PE_SKIP_MOTION_LINT=1`.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
@@ -82,12 +86,9 @@ tool wiring).
      token snapshots). Naturally follows once the 8CStudio
      Delivery gallery (backlog #237) provides live target
      screens. Until then, D5's stub-mode holds.
-   - **D6 motion-craft gate** — `prefers-reduced-motion` +
-     Core-Web-Vitals-under-motion + motion-has-purpose judgment.
-     Can proceed independently of D7.
    - **D8 signature-system gate** — codifies "every product has
      ≥1 signature element" as a FAIL condition on flagship
-     screens.
+     screens. D6 shipped v0.39.0.
    - **D3 + A9.3** — visual-regression baselines + wiring the
      orphaned `run_visual_regression` MCP tool into the critic.
    - **A4 auto-escalation loop** — the loop itself (status

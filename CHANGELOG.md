@@ -7,6 +7,164 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.39.0] — 2026-07-04
+
+> **D6 shipped — motion-craft gate.** Motion is the #1 amateur
+> design tell: effect stacking without purpose, no
+> `prefers-reduced-motion` guard, CWV regression under animation.
+> D6 splits the catch into two layers — a deterministic
+> `hooks/motion-lint.sh` that BLOCKS commits adding motion signals
+> without a reduced-motion guard (and WARNs on effect stacking),
+> plus a design-critic Motion-craft dimension that judges the
+> question deterministic tools cannot — "does the motion
+> communicate?"
+
+### Added — `hooks/motion-lint.sh` (deterministic gate)
+
+- Detects 13 motion signal families across CSS, Tailwind, and JS:
+  `@keyframes`, `animation:`, `transition:` (non-`none`),
+  `animate-*`, `transition-*` (excluding `transition-colors` +
+  `transition-none`), `motion-*` (excluding `motion-safe:` +
+  `motion-reduce:`), `gsap.to/from/fromTo/timeline`,
+  `ScrollTrigger`, `framer-motion` import + `AnimatePresence` +
+  `motion.*` component, `motion` import, `Lenis(` init.
+- **BLOCKS** when motion is added without any reduced-motion
+  guard (per-file `@media (prefers-reduced-motion:` or
+  `matchMedia('prefers-reduced-motion')` or Tailwind
+  `motion-safe:` / `motion-reduce:` OR a project-declared
+  `motion_gate.global_guard_file` present in the tree).
+- **WARNs** on effect stacking (signals > cap, default 10) — the
+  amateur tell. Warn-only because guarded effect stacks are
+  legal but usually smell.
+- Runs both pre-commit (`pe_prehook`, git-staged diff) and
+  PostToolUse (`--post` mode, single file arg) so it catches
+  human commits AND agent edits.
+- Config in `.process-engine.yaml`:
+  `motion_gate.enabled|strict|global_guard_file|effect_stack_cap`.
+  `strict: false` (default) → warn-only; `strict: true` → BLOCK.
+- Bypass via `PE_SKIP_MOTION_LINT=1` — documented in
+  `hooks/.pre-commit-config.yaml.template`.
+- False-positive avoidance: `transition-colors` alone does NOT
+  fire (color changes are not WCAG 2.3.3 motion). Non-UI file
+  extensions silent (`.py`, `.sh`, `.md` etc.). Static UI
+  without motion signals silent.
+
+### Added — `agents/design-critic.md` Motion-craft dimension
+
+- New "Motion-craft dimension (D6, v0.39.0)" subsection under
+  Step 2 of the floor rubric with three judgment questions:
+  "Does the motion communicate?" / "Is CWV budget preserved?"
+  / "Is `prefers-reduced-motion` respected?"
+- Explicit signals that RAISE Creativity: one signature moment,
+  purposeful timing, motion responds to user intent.
+- Explicit signals that LOWER Creativity: effect stacking,
+  motion fights content, CWV regression under motion,
+  silent-disabled state (reduced-motion path leaves user
+  confused about what changed).
+- Four new finding rule names the critic can emit:
+  `motion-decoration-not-communication`,
+  `motion-effect-stacking`, `motion-cwv-regression`,
+  `motion-reduced-path-silent`.
+- Agent description updated to advertise D6 + link to
+  `hooks/motion-lint.sh` so operators know the split — the hook
+  catches the 80% mechanical layer, the critic catches the 20%
+  judgment layer.
+
+### Added — `evals/fixtures/design-critic/fail-escalate-motion-effect-stacking/`
+
+- Hero template stacks 10+ motion effects (parallax + fade +
+  slide + orb pulses + button bounce + gsap timeline +
+  framer-motion + motion-blur) with NO
+  `prefers-reduced-motion` guard AND a documented CWV
+  regression (LCP 1.4s → 2.61s).
+- Expected envelope: Design 6.0 / Usability 6.0 / Creativity 4.0
+  / Content 4.0 → total 5.4 → FAIL (below 8.0 client bar). All
+  four motion-craft finding rules represented.
+- Demonstrates the two layers together: `motion-lint` would
+  BLOCK the commit before the critic runs, AND if the guard
+  were added but the effects stayed, the critic still catches
+  effect-stacking + motion-decoration-not-communication +
+  cwv-regression as judgment findings.
+
+### Added — 2 new test scripts (26 total green)
+
+- **`tests/test_motion_lint.sh`** (16 cases) — non-UI silent,
+  static UI silent, Tailwind `animate-*` no-guard BLOCK,
+  `motion-safe:` guard OK, `@keyframes` no-guard BLOCK,
+  `@keyframes` + same-file `@media` guard OK, GSAP no-guard
+  BLOCK, `matchMedia` guard OK, framer-motion + guard OK,
+  `transition-colors` alone silent, `global_guard_file` honored,
+  effect-stacking WARN (guarded, many effects), `PE_SKIP` bypass,
+  `motion_gate.enabled=false` silent, PostToolUse Write triggers,
+  PostToolUse Bash silent.
+- **`tests/test_d6_motion_craft.sh`** (14 cases) — hook exists
+  + executable, `hooks.json` wires PostToolUse, pre-commit
+  template registers, bypass hint documented, agent body
+  advertises D6 + `motion-lint`, three motion questions named
+  (case-insensitive grep), four finding rules named in agent
+  body, fixture landed, fixture parses to exit 1, fixture
+  carries all four rules, fixture `awwwards_score` reflects
+  motion caps.
+
+### Reviewer fixes (applied pre-commit)
+
+- **HIGH — filename-with-spaces bypass in `motion-lint.sh`.**
+  Reviewer caught: file list was passed to the python delegate
+  via unquoted argv expansion, so a real UI file named e.g.
+  `my animated hero.html` word-splits into `my`, `animated`,
+  `hero.html`, none of which resolve to a real file → the guard
+  check silently skips. WCAG 2.3.3 bypass, not theoretical.
+  Fix: file list now travels via `PE_MOTION_LINT_FILES` env
+  var (newline-separated) so paths survive intact. Locked in
+  with new test case (`tests/test_motion_lint.sh` case 17,
+  17 cases total).
+
+### Alignment
+
+- All 26 test scripts + `pe docs check` green at v0.39.0
+  (test_motion_lint.sh grew 16 → 17 cases from the reviewer
+  fix regression lock).
+- Gate-efficacy fixture count grew 23 → 24 (one new
+  design-critic motion fixture).
+- **Twenty V2 items shipped, one PARTIAL (A4 loop).** D-row
+  progress: D1 + D2 + D4 shipped (floor); D5 + D6 shipped
+  (ceiling scoring + motion-craft); D3 + D7 + D8 + A9.3 still
+  pending.
+- `hooks/hooks.json` PostToolUse entry inserted between
+  `design-lint.sh` and `cache-hygiene-warn.sh` on the
+  `Edit|Write|MultiEdit` matcher.
+- `hooks/.pre-commit-config.yaml.template` adds `motion-lint`
+  id between `design-lint` and `copy-lint`.
+
+### Notes — deliberately out of scope
+
+- **Motion signature-system.** D8 territory — codifies "every
+  product has ≥1 signature element" as a FAIL condition on
+  flagship screens. D6 catches motion mechanics; D8 catches
+  motion-as-identity.
+- **Vision-model reads of motion clips.** D7 territory — when
+  the aspirational-reference library upgrades to actual motion
+  reference clips, the critic can compare timings visually. D6
+  scores against textual questions.
+- **CWV numeric budgets under motion.** Enforced separately via
+  D2's Core Web Vitals gate (LCP/CLS/TBT). D6's
+  `motion-cwv-regression` finding rule is the reviewer's
+  narrative escalation when the numeric gate is silent because
+  no measurement was captured for this changeset.
+
+### Migration
+
+- No breaking changes. `hooks/motion-lint.sh` is default-on for
+  new adopters via `install.sh`; existing adopters get it on
+  next `pe install`. Config is optional — the gate ships sane
+  defaults. Adopters with no motion in their tree see no
+  behavior change. Adopters with motion but no reduced-motion
+  guard should either add the guard, opt into
+  `motion_gate.global_guard_file`, or set
+  `motion_gate.enabled: false` and treat this as informational.
+
+---
+
 ## [0.38.0] — 2026-07-04
 
 > **D5 shipped — design-critic ceiling mode.** The floor gate (D1)
