@@ -1,6 +1,6 @@
 ---
 name: design-critic
-description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft; D7, v0.40.0 curated visual references; D8, v0.41.0 signature-system HARD FAIL on flagship) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references with per-dimension measurable visual anchors (typography scale, palette hex, focus-ring specificity, row density, motion timing); surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), hooks/signature-lint.sh (flagship-path signature-token gate, D8), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
+description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft; D7, v0.40.0 curated visual references; D8, v0.41.0 signature-system HARD FAIL on flagship; D3, v0.45.0 visual-regression reference-lock via Playwright native diff + advisory reference-must-exist hook) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references with per-dimension measurable visual anchors (typography scale, palette hex, focus-ring specificity, row density, motion timing); surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), hooks/signature-lint.sh (flagship-path signature-token gate, D8), hooks/visual-baseline-guard.sh (D3 reference-must-exist advisory), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: medium
@@ -162,15 +162,42 @@ Any dimension scoring "bad" (subjectively — you're the reviewer) is
 a **HIGH-severity finding**, not a tell count. Two "bad" dimensions
 = **FAIL**.
 
-### Reference-locking (D3-adjacent)
+### Reference-locking (D3, v0.45.0)
 
 If `docs/design/reference/<page>.png` exists for the page under
 review, you MAY use vision to compare the diff's rendered output
-against the reference. If drift exceeds your judgment threshold
-(pixel-level SSIM handled by the future ai-testing-agent
-`run_visual_regression` MCP tool per A9.3; you do composition
-comparison), FAIL with rule
-`d1.reference_drift`.
+against the reference. If drift exceeds your judgment threshold,
+FAIL with rule `d1.reference_drift`.
+
+D3 ships two mechanisms that make the reference-lock enforceable:
+
+- **`templates/e2e/visual-baseline.spec.ts.template`** — a
+  Playwright spec adopters copy into their test tree. It
+  screenshots each `PAGES_TO_LOCK` entry at 1280×800 desktop +
+  375×812 mobile, stores baselines under
+  `visual-baseline.spec.ts-snapshots/`, and asserts subsequent
+  runs match within `maxDiffPixelRatio: 0.01`. On drift, three
+  artefacts (`-expected.png` / `-actual.png` / `-diff.png`) land
+  under `test-results/` for CI upload + designer review.
+- **`hooks/visual-baseline-guard.sh`** — advisory pre-commit +
+  PostToolUse hook. When an adopter has landed
+  `docs/design/reference/README.md` (opt-in signal) AND declared
+  `visual_baseline.flagship_pages` in `.process-engine.yaml`, the
+  hook WARNs if a flagship page template is edited without a
+  matching PNG in the reference dir. Advisory only (WARN,
+  never BLOCK) because the plan calls this a designer-approval
+  loop, not automation.
+
+Pixel-level SSIM comparison (via the ai-testing-agent
+`run_visual_regression` MCP tool) is still A9.3's job — that's
+the deep-drift path that Playwright's `maxDiffPixelRatio`
+doesn't catch. D3 covers the 80% (pixel diff via Playwright
+native); A9.3 covers the 20% (perceptual similarity).
+
+**Reference-lock rule:** the locked PNG is the source of truth,
+not the current render. Drift is a signal for a designer to
+review; approve → re-run `--update-snapshots` + commit; reject →
+fix the code. Never auto-approve on CI.
 
 ## Review workflow
 

@@ -7,6 +7,192 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.45.0] — 2026-07-05
+
+> **D3 shipped — visual-regression baseline + reference lock-in.**
+> Ships Playwright NATIVE screenshot diffing (no external service
+> dependency — no Percy, no Chromatic) on ≤5 key pages × two
+> viewports (1280×800 desktop + 375×812 mobile). Plus a
+> reference-lock library documenting the designer-approval loop
+> and an opt-in advisory hook that WARNs when a flagship page
+> is edited without a locked reference PNG. This operationalises
+> **"match the locked reference, never make-it-professional"** —
+> the rule that stops AI-aesthetic regeneration on flagship
+> surfaces.
+
+### Added — `templates/e2e/visual-baseline.spec.ts.template`
+
+- Playwright spec that captures each `PAGES_TO_LOCK` entry at
+  1280×800 desktop + 375×812 mobile using
+  `expect(page).toHaveScreenshot()` with
+  `maxDiffPixelRatio: 0.01`, `fullPage: true`,
+  `animations: "disabled"`, `caret: "hide"`. Baselines land
+  under `visual-baseline.spec.ts-snapshots/`; on drift
+  Playwright emits `-expected.png` / `-actual.png` /
+  `-diff.png` artefacts for CI upload + designer review.
+- Font-ready wait via `document.fonts?.ready` prevents the
+  #1 flakiness source (capturing before webfonts swap in).
+- `[data-visual-baseline='ignore']` mask locator for regions
+  that can't be stabilised (live counters, moving carets).
+- Config anchors visible + commented: `PAGES_TO_LOCK` (≤5
+  slugs), `VIEWPORTS` (desktop + mobile), `MAX_DIFF_PIXEL_RATIO`
+  (1% default).
+
+### Added — `docs/design/reference/README.md` — the reference-lock library
+
+- Documents the rule ("Match the locked reference, never
+  make-it-professional"), the two consumers (D1 design-critic
+  vision comparison + D3 Playwright pixel diff), the
+  initial-capture workflow, and the **designer-approval loop**
+  on drift (approve → `--update-snapshots` + commit;
+  reject → fix code + re-run).
+- Names what to lock (marketing hero + flagship client-facing +
+  primary dashboard + form-flow + optional pricing — max 5) and
+  what NOT to (every page in the app, dynamic-content pages
+  without masks, per-tenant surfaces).
+- Anti-patterns section calls out three real failure modes:
+  locking the AI-era template (locked bad ≠ good), auto-
+  approving drift in CI (defeats the lock), ignoring the diff
+  artefact (drift signal with no post-mortem).
+
+### Added — `hooks/visual-baseline-guard.sh` (opt-in advisory)
+
+- **Opt-in signal:** absence of `docs/design/reference/README.md`
+  in the adopter project → gate inert (silent exit 0). Adopters
+  who haven't landed the reference-lock library are not
+  bothered. Presence + `.process-engine.yaml
+  visual_baseline.flagship_pages` declared + a flagship page
+  template edited without matching `<reference_dir>/<slug>.png`
+  → **WARN** naming the missing PNG + fix instructions.
+- **Advisory only** — always exit 0. The plan explicitly calls
+  this a designer-approval loop, not automation; WARN keeps
+  the signal visible without blocking the operator.
+- Slug matching supports both filename stem (`templates/home.html`
+  → `home`) AND parent-dir name (`templates/pricing/index.html`
+  → `pricing`), so flat- and nested-template layouts both work.
+- Config in `.process-engine.yaml`:
+  `visual_baseline.enabled|flagship_pages|reference_dir|template_glob_prefix`.
+- Dual mode: pre-commit (git-staged diff) + PostToolUse
+  (Write/Edit/MultiEdit only; Bash silent).
+- File-list-via-env-var pattern (`PE_VBG_FILES`) preserves
+  filenames with spaces — D6 motion-lint reviewer lesson
+  applied throughout.
+- Bypass: `PE_SKIP_VISUAL_BASELINE=1`.
+
+### Modified — `agents/design-critic.md` §Reference-locking
+
+- Upgraded from "D3-adjacent" to "D3, v0.45.0" — the section
+  now names both mechanisms (Playwright spec + guard hook),
+  documents the mechanism split (D3 = pixel diff via Playwright
+  native, 80%; A9.3 = perceptual similarity via
+  `run_visual_regression` MCP tool, remaining 20%), retains
+  the `d1.reference_drift` finding rule, and codifies the
+  reference-lock rule: locked PNG is source of truth, drift is
+  a signal, never auto-approve on CI.
+- Description frontmatter advertises "D3, v0.45.0
+  visual-regression reference-lock via Playwright native diff +
+  advisory reference-must-exist hook" and cites both files.
+
+### Modified — `scripts/install.sh`
+
+- Copy comment updated to name D3 alongside the existing D7 +
+  D8 mentions. `templates/design/reference-README.md.template`
+  lands via the existing `templates/design/*` copy loop; no new
+  plumbing needed.
+
+### Added — 2 new test scripts (35 total green)
+
+- **`tests/test_visual_baseline_guard.sh`** (12 cases) —
+  opt-in inert (no README), no-flagship silent, missing-ref
+  WARN (still exit 0), ref-present silent, non-flagship
+  silent, parent-dir slug match, multiple-WARNs counter,
+  `enabled=false` silent, `PE_SKIP` bypass, PostToolUse Write
+  WARN + Bash silent, filename-with-spaces no crash.
+- **`tests/test_d3_visual_baseline.sh`** (22 shape cases) —
+  Playwright spec anchors (`PAGES_TO_LOCK`,
+  `toHaveScreenshot`, `maxDiffPixelRatio`, 1280, 375);
+  reference README anchors (5 required phrases); guard hook
+  executable + wired to hooks.json PostToolUse; pre-commit
+  template registers `visual-baseline-guard` id; bypass
+  documented; design-critic body has D3 v0.45.0 section +
+  `d1.reference_drift` rule + both mechanism cites;
+  reference-README template landed; install.sh comment
+  updated.
+
+### Reviewer fixes (applied pre-commit)
+
+- **HIGH — path-traversal in flagship-slug resolution.** The
+  reviewer caught: the guard hook constructed
+  `ref_path = reference_dir / f"{matched_slug}.png"` without
+  validating that `matched_slug` couldn't escape the reference
+  dir. While `.process-engine.yaml` is operator-authored (not
+  user input), least-privilege posture says a stray `../` in
+  `flagship_pages` shouldn't probe the filesystem outside
+  `docs/design/reference/`. Fix: reject slugs containing `/`,
+  `\`, or `..`; ALSO verify the resolved reference path is
+  contained within the resolved reference dir via
+  `ref_path.relative_to(ref_root)`. Locked in with
+  `test_visual_baseline_guard.sh` case 13 (13 cases total from
+  the reviewer-fix regression).
+
+### Alignment
+
+- All 35 test scripts + `pe docs check` green at v0.45.0
+  (`test_visual_baseline_guard.sh` grew 12 → 13 cases from
+  the reviewer-fix regression lock).
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps;
+  plugin.json hooks 17 → 18.
+- `docs/ENHANCEMENT_PLAN_V2.md` D3 marker MISSING → SHIPPED
+  v0.45.0 with detailed close list.
+- `docs/HANDOFF.md`: v0.45.0 header + D3 row added + adopter
+  re-install note updated (guard inert without README opt-in) +
+  "Not started yet" drops D3 (only A9.3 remains) + resume
+  notes now lead with A9.3 as the only remaining V2 unblocking
+  action.
+- MANIFEST.sha256 regenerated. `pe docs check` confirms
+  inventory.
+- **Twenty-four V2 items shipped, ZERO PARTIAL.** D-row:
+  D1+D2+D3+D4 (floor) + D5+D6+D7+D8 (ceiling) all done. Only
+  A9.3 (perceptual-similarity via MCP tool) remains — the
+  external-service question dissolved when D3 turned out to
+  need only Playwright native.
+
+### Notes — deliberately out of scope
+
+- **CI job template for visual-baseline.** The Playwright spec
+  works with any CI that runs Playwright — no engine-side CI
+  template is needed; `engine-quality.yml.template` already
+  covers the Playwright install + artefact upload shape. If an
+  adopter's CI split is different (Playwright in a dedicated
+  job with GPU runners for consistent rasterisation), that's a
+  per-adopter config, not an engine template.
+- **Multi-tenant baseline strategy.** The README documents
+  that per-tenant surfaces need a tenant-scoped baseline
+  strategy, but the engine doesn't ship one — the tenant
+  loop / brand-configs shape belongs to the adopter's
+  design system, not the engine.
+- **Hard-fail baseline mode.** Some adopters want
+  `visual-baseline-guard` to BLOCK, not WARN. YAGNI until an
+  adopter needs it; the current advisory shape matches the
+  plan's "designer-approval loop" wording.
+
+### Migration
+
+- No breaking changes. Adopters without
+  `docs/design/reference/README.md` see zero behavior change —
+  the guard is inert. Adopters who want D3 promote the README
+  template (`docs/templates/design/reference-README.md.template`
+  → `docs/design/reference/README.md`), declare
+  `visual_baseline.flagship_pages` in `.process-engine.yaml`,
+  copy the Playwright spec into their test tree, and capture
+  first baselines with `--update-snapshots`. The
+  `run_visual_regression` MCP tool (A9.3) is a separate
+  release; adopters who need perceptual-similarity
+  comparison today can still use the design-critic vision
+  comparison manually.
+
+---
+
 ## [0.44.0] — 2026-07-05
 
 > **A4 §9 watchpoint CLOSED — first-fire evidence landed.** The

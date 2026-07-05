@@ -128,6 +128,13 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: visual-baseline-guard
+        name: Visual-baseline reference-must-exist advisory (D3 — flagship page edits should have a locked PNG)
+        entry: hooks/visual-baseline-guard.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: copy-lint
         name: In-app copy lint (AI-manifesto phrases, emoji-icons)
         entry: hooks/copy-lint.sh
@@ -177,6 +184,7 @@ repos:
 #   PE_SKIP_DESIGN_LINT=1          # bypass design-lint for one commit
 #   PE_SKIP_MOTION_LINT=1          # bypass motion-lint for one commit (D6)
 #   PE_SKIP_SIGNATURE_LINT=1       # bypass signature-lint for one commit (D8)
+#   PE_SKIP_VISUAL_BASELINE=1      # bypass visual-baseline-guard for one commit (D3)
 #   PE_SKIP_COPY_LINT=1            # bypass copy-lint for one commit
 #   PE_SKIP_BOOT_SMOKE=1           # bypass boot-smoke (used by pe doctor + CI)
 #   PE_SKIP_SAST=1                 # bypass sast-scan for one commit

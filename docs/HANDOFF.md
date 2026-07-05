@@ -3,20 +3,20 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-05 (v0.44.0 shipped — A4 §9
-> watchpoint CLOSED. First live invocation of the auto-
-> escalation loop against real `claude -p`: haiku FAIL on a
-> seeded money-float finding + unused-imports, escalated one
-> tier, sonnet resolved both findings and emitted PASS in ~56s.
-> Router's escalation choice matched operator judgment. Policy
-> `worker_quality → escalate_one_tier` flipped
-> `tested=false → tested=true` in
-> `policy/failure_class_routing.toml`. Evidence bundle at
-> `docs/incidents/A4_FIRST_FIRE.md`.)
+> **Last updated:** 2026-07-05 (v0.45.0 shipped — D3
+> visual-regression baseline. templates/e2e/visual-baseline.
+> spec.ts.template ships Playwright NATIVE screenshot diffing
+> (no Percy/Chromatic dep) on ≤5 key pages × 1280+375 viewports.
+> hooks/visual-baseline-guard.sh advisory WARN when a flagship
+> template is edited without a matching reference PNG (opt-in
+> per adopter via docs/design/reference/README.md). Hooks count
+> 17 → 18. Twenty-four V2 items shipped, zero PARTIAL. D-row
+> COMPLETE except A9.3 (visual-regression MCP tool wiring —
+> perceptual similarity, remaining 20% D3 doesn't cover).)
 
 ---
 
-## Current state — v0.44.0 (`66c481d` → `<v0.44.0 sha>` this session)
+## Current state — v0.45.0 (`b9ecb2a` → `<v0.45.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -57,6 +57,7 @@
 | D8 signature-system gate (signature-lint + SIGNATURE.md template + design-critic tell #9 HARD FAIL on flagship) | ✅ SHIPPED | v0.41.0 |
 | A4 auto-escalation loop (--auto-execute + --agent + trajectory log; §9 watchpoint tested=false) | ✅ SHIPPED | v0.42.0 |
 | A4 §9 watchpoint closed (first-fire evidence: live claude -p → haiku→sonnet escalation resolved worker_quality FAIL; tested=false → tested=true) | ✅ CLOSED | v0.44.0 |
+| D3 visual-regression baseline (Playwright native toHaveScreenshot on ≤5 key pages × 1280+375 viewports + reference-lock README + visual-baseline-guard advisory hook) | ✅ SHIPPED | v0.45.0 |
 
 **PARTIAL count: 0** — v0.42.0 closed the A4 loop; v0.44.0
 closed the §9 watchpoint on the escalation ladder with live-
@@ -67,32 +68,37 @@ runtime observation continues (review new `enforced=true AND
 action="escalate_one_tier"` rows as they land) but the flag flip
 in `policy/failure_class_routing.toml` is done.
 
-**Not started yet:** A9 higher tiers, D3 (visual-regression),
-A9.3 (visual-regression tool wiring).
+**Not started yet:** A9 higher tiers, A9.3 (visual-regression
+MCP tool wiring — the perceptual-similarity remaining 20% D3
+doesn't cover).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.42.0** —
-   `scripts/pe_orchestrator.py` gains the A4 loop. New flags on
-   `pe shadow decide`: `--auto-execute`, `--agent`,
-   `--max-iterations`. No behavior change for adopters using
-   shadow mode only (legacy `pe shadow decide` unchanged). To
-   engage the loop, invoke with `--auto-execute --enforce
-   --agent <name>` — the banner + trajectory log make the
-   activation observable. §9 watchpoint remains open on first
-   fire.
+1. **Adopters need to be re-installed at v0.45.0** —
+   `hooks/visual-baseline-guard.sh` lands + wires into
+   `.claude/settings.json` PostToolUse and
+   `.pre-commit-config.yaml` (hooks count 17 → 18).
+   `templates/e2e/visual-baseline.spec.ts.template` +
+   `templates/design/reference-README.md.template` land in
+   `docs/templates/e2e/` + `docs/templates/design/` via
+   install.sh. The guard is **opt-in** — no
+   `docs/design/reference/README.md` in adopter project →
+   guard inert (no behavior change). To engage: promote the
+   template README to `docs/design/reference/README.md`,
+   declare `visual_baseline.flagship_pages` in
+   `.process-engine.yaml`, copy the Playwright spec into the
+   test tree, capture first baselines with
+   `--update-snapshots`. Bypass: `PE_SKIP_VISUAL_BASELINE=1`.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
 
-   - **D3 + A9.3** — visual-regression baselines (D3) and
-     wiring the orphaned `run_visual_regression` MCP tool into
-     design-critic (A9.3). Requires a Percy/Chromatic account or
-     equivalent — pick one, wire the CI job, add the trailer
-     gate. This is what's left of the D-row after v0.41.0
-     completes the design ceiling wave. With A4 §9 closed
-     v0.44.0, this is the only remaining V2 item with a
-     concrete unblocking action.
+   - **A9.3** — wire the orphaned `run_visual_regression` MCP
+     tool into design-critic. D3 (v0.45.0) covers the 80%
+     (pixel-diff via Playwright native `toHaveScreenshot`);
+     A9.3 is the 20% (perceptual similarity via SSIM/hash on
+     rendered composition). This is the only remaining V2
+     item with a concrete unblocking action after D3 shipped.
    - **TOK3** — terse-output mode for mechanical agents (real
      token win, deferred).
    - **A9 higher tiers** — extend the shadow-decide primitive

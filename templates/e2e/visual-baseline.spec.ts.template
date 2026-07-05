@@ -1,0 +1,116 @@
+// visual-baseline.spec.ts — D3 visual-regression baseline (v0.45.0).
+//
+// Playwright NATIVE screenshot diffing on key pages at two viewports.
+// No external service dependency (Percy/Chromatic not required).
+// Playwright's toHaveScreenshot() compares the live render against a
+// baseline PNG stored alongside the spec; on drift it emits three
+// artefacts (`-expected.png`, `-actual.png`, `-diff.png`) that a human
+// designer reviews. The rule (per D1 tell #9 + D5 pull-up principle):
+// drift is a SIGNAL, not automatic failure — the designer approves or
+// rejects the drift and the codebase moves.
+//
+// This operationalises "match the locked reference, never make-it-
+// professional" — the rule that stops AI-aesthetic regeneration. A
+// diff that regenerates a button style at random will show up here as
+// pixel drift, even if the new style is on-token and passes design-
+// lint.
+//
+// ---
+// Setup (one-time in adopter project):
+//   npm install --save-dev @playwright/test
+//   npx playwright install --with-deps chromium
+//
+// First-time baseline capture:
+//   E2E_BASE_URL=http://127.0.0.1:5000 npx playwright test visual-baseline.spec.ts --update-snapshots
+//   Then commit the emitted `visual-baseline.spec.ts-snapshots/*.png` files.
+//
+// Regression check (CI / pre-push):
+//   E2E_BASE_URL=http://127.0.0.1:5000 npx playwright test visual-baseline.spec.ts
+//
+// On drift (designer loop):
+//   1. Playwright emits `-expected.png` / `-actual.png` / `-diff.png`
+//      under `test-results/`. Upload as CI artefacts.
+//   2. Designer inspects the diff. Two verdicts possible:
+//      a) DRIFT INTENDED — designer approves. Re-run with
+//         `--update-snapshots`, commit the updated baseline.
+//      b) DRIFT REGRESSION — code needs to match the baseline.
+//         Fix the diff and re-run.
+// ---
+//
+// Config:
+//   PAGES_TO_LOCK — the ≤5 key pages under baseline. Keep the list
+//   small; each page × viewport is one snapshot to maintain. Start
+//   with your marketing hero + one flagship gallery + one dashboard.
+//
+//   VIEWPORTS — the plan's "1280px + 375px" pair (desktop + mobile).
+//   Add more only if the design system has explicit tablet variants.
+//
+//   THRESHOLD — max fraction of pixels allowed to differ before
+//   drift triggers. 0.01 (1%) is Playwright's default, tuned to
+//   ignore font-rendering + anti-alias jitter. Tune per project;
+//   lower is stricter.
+
+import { expect, test } from "@playwright/test";
+
+const BASE_URL = process.env.E2E_BASE_URL || "http://127.0.0.1:5000";
+
+// D3 keeps the reference list intentionally SHORT. The rule from the
+// enhancement plan: "≤5 key pages" (marketing hero, flagship
+// gallery, dashboard, one form-flow). If you need more, split into a
+// separate spec so a failing hero doesn't blur signal from a failing
+// dashboard.
+const PAGES_TO_LOCK: Array<{ slug: string; path: string }> = [
+  { slug: "home", path: "/" },
+  { slug: "pricing", path: "/pricing" },
+  { slug: "dashboard", path: "/dashboard" },
+];
+
+// Desktop + mobile per the plan. Height is chosen for above-the-
+// fold + one-scroll capture; Playwright's fullPage is toggled below.
+const VIEWPORTS = [
+  { name: "desktop", width: 1280, height: 800 },
+  { name: "mobile", width: 375, height: 812 },
+];
+
+// Fraction of pixels allowed to differ. 0.01 = 1%. Playwright will
+// generate a `-diff.png` regardless; this threshold only controls the
+// PASS/FAIL verdict.
+const MAX_DIFF_PIXEL_RATIO = 0.01;
+
+for (const viewport of VIEWPORTS) {
+  test.describe(`visual baseline @ ${viewport.name}`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    for (const page of PAGES_TO_LOCK) {
+      test(`${page.slug} matches locked reference`, async ({ page: pw }) => {
+        await pw.goto(`${BASE_URL}${page.path}`, { waitUntil: "networkidle" });
+
+        // Wait for fonts + late-loading images before capturing — one of
+        // the top causes of noisy diffs is capturing before webfonts
+        // swap in.
+        await pw.evaluate(() => (document as any).fonts?.ready);
+
+        // Full-page capture keeps below-the-fold content in the
+        // baseline. If your page has infinite scroll, cap the viewport
+        // scroll or capture only the visible viewport (fullPage: false).
+        await expect(pw).toHaveScreenshot(
+          `${page.slug}-${viewport.name}.png`,
+          {
+            fullPage: true,
+            maxDiffPixelRatio: MAX_DIFF_PIXEL_RATIO,
+            // Small anti-aliasing tolerance so a font-hinting shift
+            // on OS updates doesn't flag a false positive.
+            threshold: 0.15,
+            // Ignore the moving pixels behind an interactive element
+            // that Playwright can't stabilise — the plan says drift is
+            // a signal, not automation, so ignoring cursor blink is
+            // fine.
+            mask: [pw.locator("[data-visual-baseline='ignore']")],
+            animations: "disabled",
+            caret: "hide",
+          }
+        );
+      });
+    }
+  });
+}

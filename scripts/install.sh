@@ -288,11 +288,14 @@ if [ -d "$ENGINE_DIR/templates/tests" ]; then
 fi
 
 # Copy design templates (v0.40.0 — D7 Style Dictionary + tokens seed;
-# v0.41.0 — D8 SIGNATURE.md template). These land in docs/templates/design/
-# as `.template` files; adopter renames (drops the .template suffix) and
-# moves into the correct project path when ready to opt in.
-# SIGNATURE.md remains .template so the D8 gate is inert until the adopter
-# explicitly authors + moves the file to docs/design/SIGNATURE.md.
+# v0.41.0 — D8 SIGNATURE.md template; v0.45.0 — D3 reference-lock
+# README template). These land in docs/templates/design/ as `.template`
+# files; adopter renames (drops the .template suffix) and moves into
+# the correct project path when ready to opt in. SIGNATURE.md remains
+# .template so the D8 gate is inert until the adopter explicitly
+# authors + moves the file to docs/design/SIGNATURE.md. Same for the
+# D3 reference-README — the adopter promotes it to
+# docs/design/reference/README.md to activate the visual-baseline-guard.
 if [ -d "$ENGINE_DIR/templates/design" ]; then
     mkdir -p "$TARGET/docs/templates/design"
     for f in "$ENGINE_DIR"/templates/design/*; do
