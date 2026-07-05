@@ -93,10 +93,10 @@ else
     record_fail "design-critic missing D3 v0.45.0 section"
 fi
 
-if grep -q "d1.reference_drift" "$critic"; then
-    record_pass "design-critic names the d1.reference_drift finding rule"
+if grep -q "d1-reference-drift" "$critic"; then
+    record_pass "design-critic names the d1-reference-drift finding rule"
 else
-    record_fail "design-critic missing d1.reference_drift"
+    record_fail "design-critic missing d1-reference-drift"
 fi
 
 if grep -q "hooks/visual-baseline-guard.sh" "$critic"; then

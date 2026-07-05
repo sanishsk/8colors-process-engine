@@ -23,7 +23,7 @@ signal.
 If `docs/design/reference/<page>.png` exists for the page under
 review, the critic MAY compare the diff's rendered output against
 the reference. Substantial drift → FAIL with rule
-`d1.reference_drift` (documented in `agents/design-critic.md`
+`d1-reference-drift` (documented in `agents/design-critic.md`
 §Reference-locking).
 
 ### D3 — Playwright visual-baseline spec

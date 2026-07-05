@@ -203,6 +203,21 @@ design_gate:
   ui_threshold: 2                  # files >= this count → envelope-sha trailer required
   # UI regex — override ENGINE_UI_FILES if your project uses non-standard paths.
 
+# ─── design-critic tuning (v0.40.0 — D5 ceiling; v0.46.0 — A9.3) ──────
+# design-critic reads these when scoring in ceiling mode and when calling
+# the run_visual_regression MCP tool. Absence → engine defaults.
+design_critic:
+  # A9.3 (v0.46.0): perceptual-similarity threshold ladder used when the
+  # critic calls mcp__ai-testing-agent__run_visual_regression against a
+  # flagship page + reference PNG.
+  # - similarity ≥ perceptual_similarity_threshold        → PASS  (a9-3-perceptual-pass)
+  # - perceptual_regression_threshold ≤ sim < threshold   → WARN  (a9-3-perceptual-drift)
+  # - similarity < perceptual_regression_threshold        → FAIL  (a9-3-perceptual-regression)
+  # Set both loose for design-in-motion products (dashboards with live
+  # counters); set both strict for a locked marketing surface.
+  perceptual_similarity_threshold: 0.95
+  perceptual_regression_threshold: 0.90
+
 # ─── Accessibility gate (v0.18.0 — D2) ────────────────────────────────
 # axe-core Playwright spec (templates/e2e/a11y-audit.spec.ts.template)
 # + Lighthouse CI (templates/ci/lighthouse-ci.yml.template) budgets.

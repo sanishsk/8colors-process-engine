@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "design-critic",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.94,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-05T14:00:00Z",
+  "summary": "Marketing hero scores 5.6 — below 8.0 client bar. a9-3-perceptual-regression FAIL: SSIM 0.72 vs docs/design/reference/home.png; diff_regions = hero-typography, palette-inversion, hero-copy.",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "rule": "a9-3-perceptual-regression",
+      "file": "templates/marketing/home.html",
+      "line": 1,
+      "message": "run_visual_regression via mcp__ai-testing-agent returned similarity 0.72 (SSIM) against docs/design/reference/home.png — below the 0.90 FAIL floor. diff_regions: hero-headline-typography (Freight Text Pro → Space Grotesk + Inter), palette-inversion (warm cream + dark green → dark cyan gradient), hero-copy-block (concrete proof lines → manifesto verbs). The perceptual shift is beyond OS font-hinting jitter; this is a design change, not a render artefact.",
+      "suggestion": "Restore the display serif and warm palette OR run the designer-approval loop against the reference: if the redesign is intended, capture a new reference (`npx playwright test visual-baseline.spec.ts --update-snapshots`), commit the new PNG, and re-run. The reference lock is the source of truth; drift is the signal."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "d1-reference-drift",
+      "file": "templates/marketing/home.html",
+      "line": 1,
+      "message": "Composition-level comparison against docs/design/reference/home.png shows the hero has been recomposed — display face, palette, and copy voice all shifted. Together these three anchor the marketing-site archetype's 9.0 bar; losing all three drops the whole surface below the 6.0 anti-exemplar row of the archetype's Curated visual references table.",
+      "suggestion": "Match the locked reference. If the redesign is intended, follow the reference-lock update process (approve → --update-snapshots + commit); never auto-approve on CI."
+    },
+    {
+      "severity": "MEDIUM",
+      "rule": "d1-ai-aesthetic-tells-exceeded",
+      "file": "templates/marketing/home.html",
+      "line": 1,
+      "message": "3 tells detected on this diff: (1) stock-token palette — dark cyan gradient hero is the AI-era 'SaaS landing #3007' signal; (2) default font pairing — Space Grotesk + Inter is the AI-era smell called out in the marketing-site archetype anti-exemplar row; (3) manifesto verb copy — 'Empower your creative workflow' replaced concrete proof lines. ≥3 tells on a new/reworked screen = FAIL per the floor rubric.",
+      "suggestion": "Restore the distinctive display face (Freight Text Pro), the signature palette (warm cream + dark green + vermilion accent), and the concrete proof copy ('700 studios cut export time 4x'). Each move lifts one tell."
+    }
+  ],
+  "scope": {
+    "files_reviewed": [
+      "templates/marketing/home.html",
+      "static/css/hero.css"
+    ]
+  },
+  "awwwards_score": {
+    "surface_class": "client_facing",
+    "design": 5.5,
+    "usability": 7.0,
+    "creativity": 4.0,
+    "content": 5.0,
+    "total": 5.6,
+    "reference_used": "docs/design/aspirational/marketing-site.md#curated-visual-references linear.app hero (9.0 anchor)",
+    "top_changes": [
+      {
+        "dimension": "design",
+        "current": 5.5,
+        "expected": 7.5,
+        "change": "Restore the display face (Freight Text Pro at 72px) and the warm cream + dark green palette. Both anchor the marketing-site archetype's 9.0 Design row; either alone lifts Design by ~1 point."
+      },
+      {
+        "dimension": "creativity",
+        "current": 4.0,
+        "expected": 6.5,
+        "change": "Restore the hero's signature scroll interaction. One signature moment beats the current unbranded static hero."
+      },
+      {
+        "dimension": "content",
+        "current": 5.0,
+        "expected": 8.0,
+        "change": "Replace 'Empower your creative workflow' with the previous proof line ('700 studios cut export time 4x') — measurable content beats manifesto verbs per the marketing-site archetype's 6.0 anti-exemplar row."
+      }
+    ]
+  }
+}

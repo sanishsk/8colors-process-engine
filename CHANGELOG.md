@@ -7,6 +7,190 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.46.0] — 2026-07-05
+
+> **A9.3 shipped — perceptual-similarity wiring.** D3 (v0.45.0)
+> covered the pixel-exact 80% via Playwright native
+> `toHaveScreenshot`. A9.3 covers the remaining 20%: perceptual
+> similarity via SSIM / perceptual-hash on the rendered
+> composition, delivered by the ai-testing-agent's
+> `run_visual_regression` MCP tool (registered in
+> `templates/mcp/ai-testing-agent.mcp.json.template` since
+> v0.17). The engine-side wiring was the last missing piece —
+> this release documents when the design-critic should call
+> the tool, how to interpret the similarity score, and what to
+> emit in the envelope.
+
+### Added — `agents/design-critic.md` §A9.3 workflow
+
+- **When to call:** flagship template diff + locked reference
+  PNG exists at `docs/design/reference/<page>.png` + MCP tool
+  available. Feature-detect gracefully — tool unavailable
+  emits `a9-3-perceptual-check-skipped` (LOW), never FAIL.
+- **Tool signature** documented with the concrete JSON call
+  shape: `url` + `baseline_path` + `viewport` (desktop-first
+  1280×800) + `similarity_algorithm` (`ssim` default; `phash`
+  for structural) + `threshold`.
+- **Three-band threshold ladder** the critic maps returned
+  similarity to:
+  - `similarity ≥ 0.95` → **PASS**, emit
+    `a9-3-perceptual-pass` (LOW, informational — audit trail,
+    silence isn't the goal).
+  - `0.90 ≤ similarity < 0.95` → **WARN**, emit
+    `a9-3-perceptual-drift` (MEDIUM). SSIM tolerates OS
+    font-hinting jitter; not a BLOCK by default.
+  - `similarity < 0.90` → **FAIL**, emit
+    `a9-3-perceptual-regression` (HIGH) with
+    `failure_class = worker_quality`. Design has shifted
+    perceptually beyond what OS jitter explains.
+- **Diff regions cited** in the finding message. The tool
+  returns `diff_regions[]` naming which composition anchors
+  moved (hero-typography / palette-inversion / hero-copy-block
+  in the fixture). Those regions ARE the D5 pull-up principle's
+  top-3 changes — the actionable half.
+- **Split with D3** codified explicitly: D3 fires in the
+  Playwright suite (pixel diff); A9.3 fires in the design-
+  critic gate at commit time (perceptual similarity). Both
+  consult the same locked reference PNG. Both can fire for
+  the same diff — they answer different questions.
+
+### Added — `templates/process-engine.yaml.template` design_critic block
+
+- New `design_critic:` config block declares the two threshold
+  knobs adopters can override:
+  - `perceptual_similarity_threshold: 0.95` — the PASS floor.
+  - `perceptual_regression_threshold: 0.90` — the FAIL floor.
+- Config guidance in the template: loosen both for
+  design-in-motion products (dashboards with live counters);
+  tighten both for locked marketing surfaces.
+
+### Modified — `templates/mcp/README.md`
+
+- The `run_visual_regression` blockquote note updated. Was:
+  "the remaining A9.3 work is engine-side only". Now: names the
+  v0.46.0 wiring, the three-band threshold ladder, the four
+  finding rules, and the config knob for overrides.
+
+### Added — `evals/fixtures/design-critic/fail-escalate-perceptual-regression/`
+
+- Demonstrates the A9.3 FAIL path. Marketing hero recomposed:
+  display face (Freight Text Pro → Space Grotesk + Inter),
+  palette (warm cream + dark green → dark cyan gradient), copy
+  voice (proof lines → manifesto verbs). All new colors are
+  on-token; `design-lint` passes. Signature-lint passes due to
+  a phantom `slate-headline` class. D3 pixel-diff would
+  succeed if `--update-snapshots` were run.
+- The A9.3 tool returns SSIM 0.72 with diff_regions naming
+  the three shifts. Critic emits:
+  - `a9-3-perceptual-regression` HIGH (SSIM below 0.90 floor,
+    diff_regions cited).
+  - `d1-reference-drift` HIGH (composition comparison against
+    the reference PNG).
+  - `palette-drift` MEDIUM (three-tell floor rubric).
+- `awwwards_score.total = 5.6` — below 8.0 client-facing bar.
+  Three `top_changes` name the display face restoration, the
+  signature scroll interaction, and the concrete proof copy.
+- Fixture envelope validates against the schema; `pe gate
+  parse` exit 1 (worker_quality escalation).
+
+### Fixed — rule naming consistency
+
+- `agents/design-critic.md` referenced rules using
+  dotted-underscore form (`d1.ai_aesthetic_rubric.tells_exceeded`,
+  `d1.reference_drift`) that violate the schema's `rule`
+  pattern `^[a-z0-9][a-z0-9-]*$`. All four A9.3 rules AND the
+  reference-drift rule renamed to dashed form
+  (`a9-3-*`, `d1-reference-drift`) so envelopes carrying them
+  validate cleanly. Existing rules that already used
+  dashed-only names (motion-effect-stacking, palette-drift,
+  etc.) unchanged.
+
+### Reviewer fixes (applied pre-commit)
+
+- **CRITICAL — dotted rule name unrenamed in agent docs.** The
+  reviewer caught: `agents/design-critic.md` still advertised
+  `d1.ai_aesthetic_rubric.tells_exceeded` in three places
+  (verdict rule note, findings-shape example, and the WARN
+  example envelope) after the CHANGELOG claimed the dotted →
+  dashed rename was complete. Any envelope carrying that
+  rule name would fail schema validation. Fix: renamed to
+  `d1-ai-aesthetic-tells-exceeded` throughout, including the
+  earlier `d1.dimension.hierarchy` in the example envelope
+  (now `d1-dimension-hierarchy`).
+- **HIGH — dotted names in template comments.**
+  `templates/process-engine.yaml.template` config-block
+  comments referenced `a9.3.perceptual_pass` etc. Fixed to
+  match the dashed forms. Also swept
+  `docs/design/reference/README.md`,
+  `templates/design/reference-README.md.template`,
+  `templates/mcp/README.md`, and the fixture's `input.md` —
+  all four carried dotted names in prose. All renamed.
+- **Fixture rule name aligned.** The middle finding was named
+  `palette-drift` as a proxy for the tell-count rule. Renamed
+  to the actual rule `d1-ai-aesthetic-tells-exceeded` so the
+  fixture matches the agent's advertised rule set.
+- **Regression lock:** `tests/test_a9_3_perceptual_regression.sh`
+  case 9a greps for dotted rule names across agents/,
+  templates/, evals/, and docs/design/. Zero matches required
+  to pass. Prevents dotted names from silently returning.
+
+### Alignment
+
+- All 36 test scripts + `pe docs check` green at v0.46.0
+  (`test_a9_3_perceptual_regression.sh` grew 22 → 23 cases from
+  the reviewer-fix dotted-name sweep).
+- New: `tests/test_a9_3_perceptual_regression.sh` (22 shape
+  cases): description advertises A9.3, workflow section present,
+  4 rules named + all pattern-conformant, threshold ladder
+  documented (0.95 + 0.90 anchors), MCP tool cited with
+  `mcp__ai-testing-agent__` prefix, MCP README updated,
+  process-engine.yaml has design_critic block + both knobs,
+  fixture landed + validates + carries the rule + cites the
+  reference PNG.
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps;
+  README badge synced.
+- `docs/ENHANCEMENT_PLAN_V2.md` A9.3 detail block added under
+  the existing A9 STATUS entry.
+- `docs/HANDOFF.md`: v0.46.0 header + A9.3 row + adopter
+  re-install note updated (no new hooks — wiring is
+  contract/documentation) + resume notes now lead with
+  A9.4/A9.5 + Loose-ends as the remaining V2 items.
+- MANIFEST.sha256 regenerated. Twenty-five V2 items shipped,
+  ZERO PARTIAL. D-row complete; A-row complete except A9.4
+  and A9.5.
+
+### Notes — deliberately out of scope
+
+- **MCP tool availability probe.** The critic is instructed to
+  feature-detect the tool at invocation time; the engine
+  doesn't ship a preflight probe of the MCP registry. If the
+  tool is unavailable, the critic emits the LOW-severity
+  skipped rule and the audit trail records the gap. Adding a
+  runtime probe (`pe recall` for the last N envelopes' skipped
+  rate) would be a follow-on if adopters need it.
+- **CI regression job.** A9.3 currently fires in the
+  design-critic gate at commit time; not run separately by CI.
+  Adopters running Playwright + the ai-testing-agent MCP
+  server in CI can call the tool directly, but the engine
+  doesn't ship a dedicated CI template — the design-critic
+  envelope carries the finding.
+- **Cost surfacing.** Each `run_visual_regression` call
+  consumes model + Playwright time on the MCP server side; the
+  design-critic envelope's `cost` object surfaces the tool's
+  own cost fields when returned. Aggregate per-gate cost
+  reporting is TOK3-adjacent, deferred.
+
+### Migration
+
+- No breaking CLI changes. Adopters not using design-critic's
+  ceiling mode see zero behavior change. Adopters running the
+  ai-testing-agent MCP server can now consult the A9.3 workflow
+  section immediately. Threshold defaults (0.95 / 0.90) are
+  sensible for most projects; override in `.process-engine.yaml`
+  if the surface has deliberate variance.
+
+---
+
 ## [0.45.0] — 2026-07-05
 
 > **D3 shipped — visual-regression baseline + reference lock-in.**

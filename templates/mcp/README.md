@@ -58,10 +58,15 @@ Tools then appear to agents as `mcp__ai-testing-agent__*`.
 | `extract_apis` / `list_modules` / `test_intent` | planner / e2e-runner | endpoint + module discovery for scoping |
 | `get_test_history` | retrospective-agent | flaky-test + perf-regression trends |
 
-> **D3 (visual regression)** is now surfaced as the `run_visual_regression`
-> MCP tool (built on `visual_tester` + `advanced_comparison`). The remaining
-> A9.3 work is engine-side only: wire the design-critic gate to call it with
-> the app's key pages and fail on a below-threshold similarity.
+> **D3 (visual regression)** is surfaced as the `run_visual_regression`
+> MCP tool (built on `visual_tester` + `advanced_comparison`). The engine-
+> side wiring shipped v0.46.0: `agents/design-critic.md` §A9.3 workflow
+> documents when to call the tool, the SSIM/phash threshold ladder
+> (≥0.95 PASS, 0.90–0.95 WARN, <0.90 FAIL), and the four finding rules
+> (`a9-3-perceptual-pass` / `a9-3-perceptual-drift` /
+> `a9-3-perceptual-regression` / `a9-3-perceptual-check-skipped`).
+> Adopters override via
+> `design_critic.perceptual_similarity_threshold` in `.process-engine.yaml`.
 
 ### Secrets
 

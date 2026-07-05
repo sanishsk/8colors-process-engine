@@ -751,9 +751,29 @@ agent gates actually catch anything.
 - **STATUS (2026-07-03, round 2) — hardening + future-proofing DONE:**
   - **`run_visual_regression` is now the 9th MCP tool** (new `integrations/visual_scan.py` over
     `visual_tester`, sync Playwright run in a worker thread, graceful degradation if the `[visual]`
-    extra is absent). **This lifts A9.3 to a near-complete state:** the visual capability is callable;
-    the only remaining A9.3 work is engine-side — wire the **design-critic** gate to call it on key
-    pages and fail below the similarity threshold. Registered in `templates/mcp/README.md`.
+    extra is absent). Registered in `templates/mcp/README.md`.
+  - **A9.3 engine-side wiring SHIPPED v0.46.0.** `agents/design-critic.md` §A9.3 workflow documents
+    the tool signature (url + baseline_path + viewport + similarity_algorithm + threshold), the
+    three-band threshold ladder (≥0.95 PASS with `a9-3-perceptual-pass` LOW; 0.90–0.95 WARN with
+    `a9-3-perceptual-drift` MEDIUM; <0.90 FAIL with `a9-3-perceptual-regression` HIGH +
+    `failure_class = worker_quality`), the tool-unavailable path (`a9-3-perceptual-check-skipped`
+    LOW never FAIL), and the config-driven threshold override via
+    `design_critic.perceptual_similarity_threshold` + `perceptual_regression_threshold` in
+    `.process-engine.yaml`. Cites `diff_regions` returned by the tool as concrete evidence (D5
+    pull-up principle — every verdict emits actionable changes). `templates/process-engine.yaml.template`
+    documents both threshold knobs with defaults 0.95 / 0.90. `templates/mcp/README.md` updated
+    to note the v0.46.0 wiring landed. New eval fixture
+    `evals/fixtures/design-critic/fail-escalate-perceptual-regression/` demonstrates the FAIL path
+    (SSIM 0.72 on a marketing hero recomposition — display face + palette + copy voice all
+    shifted; three findings: `a9-3-perceptual-regression` HIGH + `d1-reference-drift` HIGH +
+    `palette-drift` MEDIUM; Awwwards total 5.6 below 8.0 client bar; top-3 changes name the
+    display face + signature scroll + concrete proof copy). Rule names in `agents/design-critic.md`
+    reformatted from dotted-underscore (`a9.3.perceptual_regression`, `d1.reference_drift`) to
+    dashed (`a9-3-perceptual-regression`, `d1-reference-drift`) to satisfy the schema's rule pattern
+    `^[a-z0-9][a-z0-9-]*$`. Test coverage: `tests/test_a9_3_perceptual_regression.sh` (22 wiring
+    cases: description advertises A9.3, workflow section present, 4 rules named + pattern-conformant,
+    threshold ladder documented, MCP tool cite + prefix, MCP README updated, process-engine.yaml
+    knobs, fixture landed + validates + carries the rule + cites reference PNG).
   - **Future-proofing:** migrated `config.py` off the deprecated Pydantic `Field(env=...)` to
     `validation_alias` / `AliasChoices` + `populate_by_name` (removes ~19 deprecation warnings; safe
     for Pydantic v3). Suite warnings 40 → 21.

@@ -3,20 +3,22 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-05 (v0.45.0 shipped — D3
-> visual-regression baseline. templates/e2e/visual-baseline.
-> spec.ts.template ships Playwright NATIVE screenshot diffing
-> (no Percy/Chromatic dep) on ≤5 key pages × 1280+375 viewports.
-> hooks/visual-baseline-guard.sh advisory WARN when a flagship
-> template is edited without a matching reference PNG (opt-in
-> per adopter via docs/design/reference/README.md). Hooks count
-> 17 → 18. Twenty-four V2 items shipped, zero PARTIAL. D-row
-> COMPLETE except A9.3 (visual-regression MCP tool wiring —
-> perceptual similarity, remaining 20% D3 doesn't cover).)
+> **Last updated:** 2026-07-05 (v0.46.0 shipped — A9.3
+> engine-side wiring. design-critic §A9.3 workflow documents
+> when + how to call mcp__ai-testing-agent__run_visual_regression,
+> the three-band threshold ladder (≥0.95 PASS / 0.90–0.95 WARN /
+> <0.90 FAIL), four finding rules, config-driven threshold
+> override, and the diff_regions-as-actionable-evidence
+> contract. process-engine.yaml.template documents both
+> knobs; MCP README updated to note wiring landed; new
+> fixture demonstrates the FAIL path (SSIM 0.72 on marketing
+> hero recomposition). Twenty-five V2 items shipped, zero
+> PARTIAL. D-row + A-row wave COMPLETE — only A9 higher tiers
+> and Loose-ends items remain.)
 
 ---
 
-## Current state — v0.45.0 (`b9ecb2a` → `<v0.45.0 sha>` this session)
+## Current state — v0.46.0 (`ae40f4d` → `<v0.46.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -58,6 +60,7 @@
 | A4 auto-escalation loop (--auto-execute + --agent + trajectory log; §9 watchpoint tested=false) | ✅ SHIPPED | v0.42.0 |
 | A4 §9 watchpoint closed (first-fire evidence: live claude -p → haiku→sonnet escalation resolved worker_quality FAIL; tested=false → tested=true) | ✅ CLOSED | v0.44.0 |
 | D3 visual-regression baseline (Playwright native toHaveScreenshot on ≤5 key pages × 1280+375 viewports + reference-lock README + visual-baseline-guard advisory hook) | ✅ SHIPPED | v0.45.0 |
+| A9.3 perceptual-similarity wiring (design-critic §A9.3 workflow + 3-band threshold ladder + 4 finding rules + process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.46.0 |
 
 **PARTIAL count: 0** — v0.42.0 closed the A4 loop; v0.44.0
 closed the §9 watchpoint on the escalation ladder with live-
@@ -68,37 +71,39 @@ runtime observation continues (review new `enforced=true AND
 action="escalate_one_tier"` rows as they land) but the flag flip
 in `policy/failure_class_routing.toml` is done.
 
-**Not started yet:** A9 higher tiers, A9.3 (visual-regression
-MCP tool wiring — the perceptual-similarity remaining 20% D3
-doesn't cover).
+**Not started yet:** A9 higher tiers (A9.4 PF1 query-count
+hook to chaos runner; A9.5 pull OWASP payloads into S3
+templates) and Loose-ends items from the plan (e2e-runner
+self-grade split; tdd-guide hybrid identity; non-standard
+frontmatter fields).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.45.0** —
-   `hooks/visual-baseline-guard.sh` lands + wires into
-   `.claude/settings.json` PostToolUse and
-   `.pre-commit-config.yaml` (hooks count 17 → 18).
-   `templates/e2e/visual-baseline.spec.ts.template` +
-   `templates/design/reference-README.md.template` land in
-   `docs/templates/e2e/` + `docs/templates/design/` via
-   install.sh. The guard is **opt-in** — no
-   `docs/design/reference/README.md` in adopter project →
-   guard inert (no behavior change). To engage: promote the
-   template README to `docs/design/reference/README.md`,
-   declare `visual_baseline.flagship_pages` in
-   `.process-engine.yaml`, copy the Playwright spec into the
-   test tree, capture first baselines with
-   `--update-snapshots`. Bypass: `PE_SKIP_VISUAL_BASELINE=1`.
+1. **Adopters need to be re-installed at v0.46.0** —
+   `agents/design-critic.md` gains the A9.3 workflow section;
+   `templates/process-engine.yaml.template` documents the
+   `design_critic.perceptual_similarity_threshold` +
+   `perceptual_regression_threshold` knobs. No new hooks or
+   runtime binaries — the wiring is entirely documentation +
+   contract. Adopters using design-critic ceiling mode with the
+   ai-testing-agent MCP server registered can invoke the A9.3
+   workflow immediately. Adopters without the MCP server see
+   `a9-3-perceptual-check-skipped` findings (LOW, informational),
+   never FAIL for tool unavailability.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
 
-   - **A9.3** — wire the orphaned `run_visual_regression` MCP
-     tool into design-critic. D3 (v0.45.0) covers the 80%
-     (pixel-diff via Playwright native `toHaveScreenshot`);
-     A9.3 is the 20% (perceptual similarity via SSIM/hash on
-     rendered composition). This is the only remaining V2
-     item with a concrete unblocking action after D3 shipped.
+   - **A9.4 + A9.5** — extend the ai-testing-agent MCP
+     integration further. A9.4 adds the PF1 query-count hook to
+     the chaos runner; A9.5 pulls the OWASP payload constants
+     into the S3 security templates. Both are small, both
+     depend on the shipped MCP tool surface. Natural next.
+   - **Loose ends** (from the plan's §"Loose ends" list) —
+     e2e-runner self-grade split into worker + gate;
+     tdd-guide hybrid-identity resolution; unused frontmatter
+     fields (effort:/memory:) documented or removed. Each is
+     small; batch as a quality close-out.
    - **TOK3** — terse-output mode for mechanical agents (real
      token win, deferred).
    - **A9 higher tiers** — extend the shadow-decide primitive
