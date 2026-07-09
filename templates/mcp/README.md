@@ -68,6 +68,16 @@ Tools then appear to agents as `mcp__ai-testing-agent__*`.
 > Adopters override via
 > `design_critic.perceptual_similarity_threshold` in `.process-engine.yaml`.
 
+> **A9.5 (v0.48.0)** — OWASP payload catalogue landed in the
+> engine at `templates/security/owasp-payloads.py.template`
+> (13 payload lists mapped to OWASP API Security Top 10 2023).
+> `security-reviewer.md` §Step 2 documents when to emit the
+> `a9-5-owasp-payload-coverage-missing` MEDIUM finding.
+> `templates/tests/auth-robustness.test.py.template` gains
+> commented parametrised cases showing how adopters wire in
+> `BROKEN_AUTH_PAYLOADS` / `INJECTION_SQL_PAYLOADS` /
+> `INJECTION_XSS_PAYLOADS` against the login path.
+
 > **A9.4 (v0.47.0)** — the performance-reviewer wiring for
 > `run_resilience_tests` also landed. `agents/performance-reviewer.md`
 > §A9.4 workflow documents the tool signature (with `measure_queries: true`

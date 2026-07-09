@@ -3,22 +3,23 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-05 (v0.47.0 shipped — A9.4
-> engine-side wiring. performance-reviewer §A9.4 workflow
-> documents when + how to call
-> mcp__ai-testing-agent__run_resilience_tests with the PF1
-> query-count hook wired onto its chaos runner (measure_queries:
-> true), four verdict bands catching N+1 that only fires under
-> concurrency + query-scale-under-load vs PF1 ceiling +
-> latency + error rate. process-engine.yaml.template documents
-> five threshold knobs; new fixture demonstrates FAIL on
-> per-tenant Redis cache with 3.66× query scale under 50VU.
-> Twenty-six V2 items shipped, zero PARTIAL. Only A9.5 (OWASP
-> payloads into S3 templates) + Loose-ends remain.)
+> **Last updated:** 2026-07-09 (v0.48.0 shipped — A9.5 OWASP
+> payload catalogue. templates/security/owasp-payloads.py.template
+> ships 13 payload lists mapped to OWASP API Top 10 (2023):
+> BOLA / BROKEN_AUTH / MASS_ASSIGNMENT / RESOURCE_EXHAUSTION /
+> BFLA / MISCONFIG_HEADER / SQL / NoSQL / LDAP / XSS / CMD /
+> XXE / SSRF / PATH_TRAVERSAL / DESERIALIZATION. auth-robustness
+> template demonstrates parametrization; security-reviewer §Step 2
+> emits a9-5-owasp-payload-coverage-missing MEDIUM when a new
+> user-input endpoint lacks catalogue coverage. Split with
+> hooks/sast-scan.sh (S1): SAST catches write-time patterns;
+> payload catalogue catches runtime shapes. Twenty-seven V2
+> items shipped, zero PARTIAL. **A-row COMPLETE.** Only
+> Loose-ends items remain.)
 
 ---
 
-## Current state — v0.47.0 (`6d461c5` → `<v0.47.0 sha>` this session)
+## Current state — v0.48.0 (`d73d66b` → `<v0.48.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -62,6 +63,7 @@
 | D3 visual-regression baseline (Playwright native toHaveScreenshot on ≤5 key pages × 1280+375 viewports + reference-lock README + visual-baseline-guard advisory hook) | ✅ SHIPPED | v0.45.0 |
 | A9.3 perceptual-similarity wiring (design-critic §A9.3 workflow + 3-band threshold ladder + 4 finding rules + process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.46.0 |
 | A9.4 resilience-under-load wiring (performance-reviewer §A9.4 workflow + 4-band verdict ladder + 6 finding rules + PF1-hook-on-chaos-runner via measure_queries + 5 process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.47.0 |
+| A9.5 OWASP payload catalogue (13 payload lists mapped to OWASP API Top 10 2023 + security-reviewer §Step 2 coverage rule + auth-robustness template demo + README documents split with SAST) | ✅ SHIPPED | v0.48.0 |
 
 **PARTIAL count: 0** — v0.42.0 closed the A4 loop; v0.44.0
 closed the §9 watchpoint on the escalation ladder with live-
@@ -72,36 +74,25 @@ runtime observation continues (review new `enforced=true AND
 action="escalate_one_tier"` rows as they land) but the flag flip
 in `policy/failure_class_routing.toml` is done.
 
-**Not started yet:** A9.5 (OWASP payload constants into S3
-templates) and Loose-ends items from the plan (e2e-runner
+**Not started yet:** Loose-ends items from the plan (e2e-runner
 self-grade split; tdd-guide hybrid identity; non-standard
-frontmatter fields).
+frontmatter fields). **A-row COMPLETE at v0.48.0.**
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.47.0** —
-   `agents/performance-reviewer.md` gains the A9.4 workflow
-   section; `templates/process-engine.yaml.template` documents
-   the five `performance_reviewer.resilience_*` knobs
-   (concurrent_users, duration_seconds,
-   query_scale_factor_threshold, p95_ms_threshold,
-   error_rate_threshold). No new hooks or runtime binaries —
-   contract/documentation only, same shape as v0.46.0's A9.3
-   release. Adopters using performance-reviewer with the
-   ai-testing-agent MCP server registered can invoke the A9.4
-   workflow immediately. Adopters without the MCP server see
-   `a9-4-resilience-check-skipped` LOW findings, never FAIL for
-   tool unavailability — the mechanical PF1 + PF5 templates still
-   cover the floor.
+1. **Adopters need to be re-installed at v0.48.0** —
+   `templates/security/owasp-payloads.py.template` (~250 lines)
+   lands in `docs/templates/security/` via install.sh (existing
+   loop). No new hooks or runtime binaries. Adopters who want
+   A9.5 coverage copy the template to `tests/owasp_payloads.py`,
+   then parametrise their endpoint tests against the relevant
+   payload lists. security-reviewer §Step 2 now flags missing
+   catalogue coverage on new user-input endpoints with a MEDIUM
+   finding (`a9-5-owasp-payload-coverage-missing`).
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
 
-   - **A9.5** — pull OWASP payload constants from ai-testing-agent
-     into the S3 security templates (payloads only — the SAST
-     scanner stays S1/semgrep). Small; the templates already
-     exist at `docs/templates/security/` and just need the
-     payload catalogue enriched. Natural next.
    - **Loose ends** (from the plan's §"Loose ends" list) —
      e2e-runner self-grade split into worker + gate;
      tdd-guide hybrid-identity resolution; unused frontmatter

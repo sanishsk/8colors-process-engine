@@ -7,6 +7,169 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.48.0] — 2026-07-09
+
+> **A9.5 shipped — OWASP payload catalogue.** The last A-row
+> item. `templates/security/owasp-payloads.py.template` ships
+> 13 curated payload lists mapped to the OWASP API Security Top
+> 10 (2023), pulled from the ai-testing-agent's `security_scan`
+> integration + community-standard OWASP corpus. Split with
+> `hooks/sast-scan.sh` (S1) is explicit: SAST catches the
+> pattern at write time; the payload catalogue catches the
+> runtime shape. Both fire; no overlap. **A-row COMPLETE.**
+
+### Added — `templates/security/owasp-payloads.py.template`
+
+13 payload lists + 1 aggregated alias, mapped to OWASP API
+Security Top 10 (2023):
+
+- **API1 BOLA** — `BOLA_PAYLOADS` (cross-tenant / cross-user
+  object references — numeric enumeration, path traversal,
+  SQL injection in IDs, UUID prefix flips).
+- **API2 Broken Auth** — `BROKEN_AUTH_PAYLOADS` (empty /
+  whitespace tokens; JWT `alg=none`; JWT `kid` path traversal;
+  Basic auth `admin:admin`; session ID SQL injection;
+  oversized tokens for DoS).
+- **API3 Mass Assignment** — `MASS_ASSIGNMENT_PAYLOADS` (extra
+  fields: `is_admin`, `role`, `balance`, `quota_bytes`,
+  un-delete, backdate).
+- **API4 Resource Exhaustion** — `RESOURCE_EXHAUSTION_PAYLOADS`
+  (deeply nested JSON, wide JSON, ReDoS bait, ZIP-bomb
+  filename patterns, oversized fields).
+- **API5 BFLA** — `BFLA_METHOD_PAYLOADS` (admin-endpoint access
+  from non-admin session; HTTP verb tunneling via
+  `X-HTTP-Method-Override`).
+- **API8 Security Misconfiguration (headers)** —
+  `MISCONFIG_HEADER_PAYLOADS` (`X-Forwarded-For`, `Host`,
+  `X-Real-IP`, `X-Forwarded-Proto` spoofing).
+- **Injection classes** — `INJECTION_SQL_PAYLOADS`,
+  `INJECTION_NOSQL_PAYLOADS`, `INJECTION_LDAP_PAYLOADS`,
+  `INJECTION_XSS_PAYLOADS`, `INJECTION_CMD_PAYLOADS`. Includes
+  encoded variants (double URL-encoded, hex, decimal IP), DOM
+  XSS via URL fragment, template injection (Jinja / Handlebars).
+- **XXE** — `XXE_PAYLOADS` (file-read via SYSTEM entity,
+  SSRF-via-XXE to cloud metadata, blind XXE via external DTD,
+  billion-laughs DoS).
+- **SSRF** — `SSRF_PAYLOADS` (cloud metadata targets:
+  `169.254.169.254`, `metadata.google.internal`, Azure IMDS;
+  localhost variants including decimal IP `2130706433` and
+  hex; redirect-chain bypass; `file://` / `gopher://` /
+  `dict://` schemes).
+- **Path traversal** — `PATH_TRAVERSAL_PAYLOADS` (URL-encoded,
+  double-encoded, UTF-8 tricks, null-byte truncation).
+- **Deserialization** — `DESERIALIZATION_PAYLOADS` (Python
+  pickle baseline, Java serialized object, PHP serialized
+  object).
+- **Aggregated** — `INJECTION_PAYLOADS` alias combining the
+  SQL/XSS/CMD/LDAP/PATH_TRAVERSAL lists for "throw the whole
+  book" endpoint testing.
+
+### Modified — `templates/security/README.md`
+
+- New A9.5 v0.48.0 section documents the 13 categories,
+  adopter usage pattern (`@pytest.mark.parametrize`), the
+  4xx-not-5xx contract, and the split with `hooks/sast-scan.sh`
+  (S1). File table updated to name the new template.
+
+### Modified — `templates/tests/auth-robustness.test.py.template`
+
+- New commented section at the end demonstrates the A9.5
+  parametrization pattern. Three commented test cases show
+  how adopters wire in `BROKEN_AUTH_PAYLOADS`,
+  `INJECTION_SQL_PAYLOADS`, and `INJECTION_XSS_PAYLOADS`
+  against the login path — copy-paste to activate.
+
+### Modified — `agents/security-reviewer.md` §Step 2
+
+- New blockquote in Step 2 (OWASP Top 10 check) documents the
+  A9.5 catalogue availability + all 13 payload list names +
+  the finding rule `a9-5-owasp-payload-coverage-missing`
+  (MEDIUM). When the diff adds a user-input endpoint but the
+  adopter hasn't parametrised its tests against the relevant
+  category, reviewer emits the finding naming the specific
+  payload list that should cover the endpoint (auth path →
+  `BROKEN_AUTH_PAYLOADS`; search endpoint →
+  `INJECTION_SQL_PAYLOADS`; URL-taking endpoint →
+  `SSRF_PAYLOADS`).
+- Description frontmatter advertises A9.5 with the 13-list
+  catalogue overview.
+
+### Modified — `templates/mcp/README.md`
+
+- New A9.5 v0.48.0 blockquote (before the A9.4 note) names
+  the catalogue location and the adopter-side demo in
+  auth-robustness template.
+
+### Added — `tests/test_a9_5_owasp_payloads.sh` (32 wiring cases)
+
+- Catalogue file landed + Python parses cleanly.
+- All 15 payload list constants defined (13 categories +
+  aggregated + INJECTION_PAYLOADS alias).
+- Security README documents A9.5 with all four required
+  anchors (OWASP API Top 10, parametrize, 4xx not 5xx, Split
+  with hooks/sast-scan).
+- auth-robustness template names A9.5 section + all three
+  demonstrated payload lists.
+- security-reviewer body advertises A9.5 + names the finding
+  rule + rule pattern-conforms to schema
+  `^[a-z0-9][a-z0-9-]*$`.
+- MCP README blockquote landed.
+- Dotted A9.5 rule-name regression sweep (mirrors v0.46.0 /
+  v0.47.0 sweeps).
+
+### Alignment
+
+- All 38 test scripts + `pe docs check` green at v0.48.0.
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps;
+  README badge synced.
+- `docs/ENHANCEMENT_PLAN_V2.md` A9.5 detail block added
+  alongside A9.3 + A9.4 blocks under the A9 STATUS entry.
+- `docs/HANDOFF.md`: v0.48.0 header + A9.5 row + adopter
+  re-install note updated (catalogue lands via existing
+  install.sh loop into `docs/templates/security/`) + "Not
+  started yet" now names only Loose-ends items + A-row
+  COMPLETE.
+- MANIFEST.sha256 regenerated. **Twenty-seven V2 items
+  shipped, ZERO PARTIAL. A-row COMPLETE.** Only remaining V2
+  work: the Loose-ends bundle (e2e-runner self-grade split,
+  tdd-guide hybrid identity, unused frontmatter fields
+  documented or removed).
+
+### Notes — deliberately out of scope
+
+- **New payload additions from future OWASP revisions.** The
+  catalogue is versioned to OWASP API Top 10 (2023). When
+  OWASP publishes a new revision, adopters can either update
+  the catalogue in their tree or wait for a future engine
+  release to update the template. The engine doesn't ship a
+  runtime probe against upstream OWASP.
+- **CI integration test running the full catalogue.** The
+  catalogue is a set of constants imported by adopter tests;
+  the engine doesn't ship a runner. Adopters choose their
+  own test-suite integration (pytest / hypothesis /
+  standalone script).
+- **Payload deduplication across categories.** Some payloads
+  legitimately appear in multiple lists (e.g., `1' OR '1'='1`
+  in both `BOLA_PAYLOADS` and `INJECTION_SQL_PAYLOADS`).
+  Aggregated `INJECTION_PAYLOADS` alias doesn't deduplicate
+  either. This is deliberate — categorised lists let adopters
+  target specific endpoint shapes without the noise of
+  irrelevant categories.
+
+### Migration
+
+- No breaking CLI changes. Adopters not opting into A9.5 see
+  zero behavior change. Adopters who want the coverage copy
+  `docs/templates/security/owasp-payloads.py.template` to
+  `tests/owasp_payloads.py`, then wire the payload lists into
+  their existing test suite. The security-reviewer starts
+  emitting the coverage-missing finding immediately on new
+  user-input endpoints — set the finding severity via
+  `.process-engine.yaml` if the default MEDIUM is too aggressive
+  during initial adoption.
+
+---
+
 ## [0.47.0] — 2026-07-05
 
 > **A9.4 shipped — resilience-under-load wiring.** A9.3

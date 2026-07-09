@@ -93,3 +93,41 @@ def test_login_response_does_not_leak_user_existence():
     wrong_user = _call_login("nobody@example.invalid", "x")
     # Requires an existing user for comparison — skip if fixture absent.
     # Adopter: implement or delete.
+
+
+# ─── A9.5 (v0.48.0) — OWASP payload catalogue parametrization ────────
+# The cases above are the specific 8CStudio-audit + published post-
+# mortem catalogue. The A9.5 payload lists in tests/owasp_payloads.py
+# add broader OWASP API Top 10 coverage — parametrize the login path
+# against every category and assert 4xx (rejected), NEVER 5xx.
+#
+# Uncomment the imports + tests below after copying
+# `docs/templates/security/owasp-payloads.py.template` to
+# `tests/owasp_payloads.py`.
+
+# from tests.owasp_payloads import (
+#     BROKEN_AUTH_PAYLOADS,
+#     INJECTION_SQL_PAYLOADS,
+#     INJECTION_XSS_PAYLOADS,
+# )
+#
+# @pytest.mark.parametrize("payload", BROKEN_AUTH_PAYLOADS)
+# def test_login_rejects_broken_auth_payload(payload, existing_user):
+#     """A9.5 — every broken-auth payload rejected with 4xx (not 5xx)."""
+#     resp = _call_login(existing_user.email, payload)
+#     assert resp.status_code < 500, \
+#         f"5xx on broken-auth payload {payload!r}: {resp.status_code}"
+#
+# @pytest.mark.parametrize("payload", INJECTION_SQL_PAYLOADS)
+# def test_login_rejects_sql_injection_in_email(payload):
+#     """A9.5 — every SQL payload rejected with 4xx (not 5xx)."""
+#     resp = _call_login(payload, "any-password")
+#     assert resp.status_code < 500, \
+#         f"5xx on SQL payload {payload!r}: {resp.status_code}"
+#
+# @pytest.mark.parametrize("payload", INJECTION_XSS_PAYLOADS)
+# def test_login_rejects_xss_in_email(payload):
+#     """A9.5 — XSS payloads in identifier fields rejected with 4xx."""
+#     resp = _call_login(payload, "any-password")
+#     assert resp.status_code < 500, \
+#         f"5xx on XSS payload {payload!r}: {resp.status_code}"

@@ -752,6 +752,35 @@ agent gates actually catch anything.
   - **`run_visual_regression` is now the 9th MCP tool** (new `integrations/visual_scan.py` over
     `visual_tester`, sync Playwright run in a worker thread, graceful degradation if the `[visual]`
     extra is absent). Registered in `templates/mcp/README.md`.
+  - **A9.5 SHIPPED v0.48.0.** OWASP payload catalogue at
+    `templates/security/owasp-payloads.py.template` with 13 payload lists mapped to OWASP API
+    Security Top 10 (2023): BOLA (API1 cross-tenant/cross-user object refs), BROKEN_AUTH (API2 —
+    JWT alg=none, kid-path-traversal, empty/whitespace tokens, oversized tokens),
+    MASS_ASSIGNMENT (API3 — is_admin/role/balance/quota bypass), RESOURCE_EXHAUSTION (API4 —
+    deeply-nested JSON, ReDoS bait, oversized fields), BFLA (API5 — admin endpoint access from
+    non-admin session including HTTP verb tunneling), MISCONFIG_HEADER (API8 — X-Forwarded-For
+    / Host / Real-IP spoofing), INJECTION_SQL / INJECTION_NOSQL / INJECTION_LDAP / INJECTION_XSS
+    / INJECTION_CMD (classics + encoded variants), XXE / SSRF (cloud metadata targets
+    169.254.169.254 etc.) / PATH_TRAVERSAL (URL-encoded + null-byte + double-encoding) /
+    DESERIALIZATION (pickle / Java / PHP). Aggregated `INJECTION_PAYLOADS` convenience alias.
+    Adopter usage pattern documented in `templates/security/README.md` §A9.5 —
+    `@pytest.mark.parametrize("payload", INJECTION_SQL_PAYLOADS)` against endpoint, assert
+    `resp.status_code < 500` (4xx expected — validation caught; 5xx is the finding).
+    `templates/tests/auth-robustness.test.py.template` demonstrates the pattern with commented
+    parametrised cases for `BROKEN_AUTH_PAYLOADS` + `INJECTION_SQL_PAYLOADS` +
+    `INJECTION_XSS_PAYLOADS` on the login path. `agents/security-reviewer.md` §Step 2 documents
+    the A9.5 catalogue availability + emits `a9-5-owasp-payload-coverage-missing` MEDIUM
+    finding when a diff adds a user-input endpoint but corresponding tests aren't parametrised
+    against the relevant category. Description frontmatter advertises A9.5. `templates/mcp/README.md`
+    updated with A9.5 v0.48.0 blockquote. Split with `hooks/sast-scan.sh` (S1) codified: SAST
+    catches the pattern at write time (this f-string looks like a SQL query); payload catalogue
+    catches the runtime shape (this endpoint 500s on `1' OR '1'='1`). Both fire; no overlap.
+    Test coverage: `tests/test_a9_5_owasp_payloads.sh` (15 wiring cases: catalogue file landed,
+    all 13 payload list constants defined, README documents categories + adopter usage +
+    SAST split, auth-robustness.test template names A9.5 parametrization pattern,
+    security-reviewer body advertises A9.5 + names the `a9-5-owasp-payload-coverage-missing`
+    rule + rule pattern-conforms to schema, MCP README blockquote landed, ENHANCEMENT_PLAN
+    marker landed, install.sh existing loop covers the new template).
   - **A9.4 engine-side wiring SHIPPED v0.47.0.** `agents/performance-reviewer.md` §A9.4 workflow
     documents when to invoke `mcp__ai-testing-agent__run_resilience_tests` (perf-sensitive diff +
     non-trivial change + adopter has MCP server + perf_gate enabled), the tool signature (target_url +
