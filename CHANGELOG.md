@@ -7,6 +7,178 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.47.0] — 2026-07-05
+
+> **A9.4 shipped — resilience-under-load wiring.** A9.3
+> (v0.46.0) wired `run_visual_regression` into design-critic
+> for perceptual similarity. A9.4 does the same shape for
+> `run_resilience_tests` in performance-reviewer, with one
+> critical addition: the **PF1 query-count hook wired onto the
+> chaos runner**. When called with `measure_queries: true`, the
+> tool reports queries-per-request under concurrent load, not
+> just at rest. That's the class the mechanical PF-row tools
+> alone can't see — a page that's fine at rest (PF1 passes)
+> but fires N+1 under 50VU concurrency because a per-tenant
+> cache misses under load.
+
+### Added — `agents/performance-reviewer.md` §A9.4 workflow
+
+- **When to call:** perf-sensitive diff + non-trivial change
+  (new list endpoint / rewritten serializer / new cache layer
+  / new external call / migration touching an indexed
+  relationship) + MCP server available + `perf_gate.enabled`.
+  Not a call for one-line copy fixes.
+- **Tool signature** documented with the concrete JSON call
+  shape: `target_url` + `method` + `concurrent_users` +
+  `duration_seconds` + `measure_queries: true` (the PF1-hook
+  engagement) + `auth`.
+- **Four verdict bands** the critic maps returned metrics to:
+  - `queries_per_request_scale_factor > 1.2` → **FAIL**,
+    `a9-4-n-plus-one-under-load` (HIGH) — highest-signal
+    finding: something scales with concurrency (per-request
+    cache miss, per-request connection, lazy relationship).
+  - `queries_per_request_p95 > 2 × PF1_ceiling` (from
+    `.claude/gates/perf.json`) → **FAIL**,
+    `a9-4-query-scale-under-load` (HIGH). Cross-references
+    the mechanical PF1 baseline.
+  - `p95_latency_ms > threshold` → **FAIL**,
+    `a9-4-latency-regression-under-load` (HIGH). Cites the
+    delta from configured threshold.
+  - `error_rate > threshold` → **FAIL**,
+    `a9-4-error-rate-under-load` (HIGH). Distinguishes 5xx
+    (server) from 4xx (rate limiter — could be a valid
+    signal).
+- **Pass bands:**
+  - All four metrics within thresholds →
+    `a9-4-resilience-pass` (LOW) — audit-trail finding with
+    observed p95 / RPS / query count in message.
+  - Tool unavailable → `a9-4-resilience-check-skipped`
+    (LOW). **Never FAIL** for unavailability; PF1 + PF5 still
+    cover the floor.
+- **Split with PF1 / PF5 codified** explicitly: PF1 =
+  single-request at rest catches N+1; PF5 = single-endpoint in
+  CI catches latency-under-load; A9.4 = performance-reviewer at
+  commit cross-references PF1 ceiling against concurrent load.
+  The three complement; A9.4 is not a replacement.
+
+### Added — `templates/process-engine.yaml.template` performance_reviewer block
+
+- New `performance_reviewer:` config block declares five
+  threshold knobs:
+  - `resilience_concurrent_users: 50`
+  - `resilience_duration_seconds: 60`
+  - `resilience_query_scale_factor_threshold: 1.2` (the
+    PF1-hook signal)
+  - `resilience_p95_ms_threshold: 500`
+  - `resilience_error_rate_threshold: 0.01`
+- Config guidance in the template: conservative SaaS baseline
+  by default; loosen for constrained infrastructure, tighten
+  for premium products.
+
+### Modified — `templates/mcp/README.md`
+
+- `run_visual_regression` blockquote extended with a v0.47.0
+  A9.4 companion block naming the six finding rules, the
+  four verdict bands, and the config knobs.
+- Tool-consumer table row for `run_resilience_tests` updated:
+  "PF6 resilience/load foundation" now reads "PF6
+  resilience/load foundation + A9.4 (v0.47.0) query-scale-
+  under-load via PF1 query-count hook on chaos runner".
+
+### Added — `evals/fixtures/performance-reviewer/fail-escalate-query-scale-under-load/`
+
+- Demonstrates the A9.4 FAIL path: `/api/v1/invoices` list
+  endpoint with a new per-tenant Redis cache layer (60s TTL).
+  Single-request PF1 test PASSES (6 queries at rest,
+  ceiling 8). Under 50VU load with 40 rotating tenants,
+  cache-miss window fires ~30% of the time, each miss adding
+  3 queries → resilience run reports:
+  - `queries_per_request_p95: 22` (vs PF1 ceiling 8)
+  - `queries_per_request_scale_factor: 3.66` (vs 1.2
+    threshold)
+  - `p95_latency_ms: 620` (vs 500ms threshold)
+- Critic emits three findings:
+  - `a9-4-n-plus-one-under-load` HIGH with scale factor and
+    diff_regions named.
+  - `a9-4-latency-regression-under-load` HIGH with the +120ms
+    delta attributed to the query-scale finding.
+  - `over-eager-serialization` MEDIUM (floor finding — audit
+    log write in the serializer, an anti-pattern independent
+    of the A9.4 signal).
+- Suggestions name concrete fixes: hoist tenant metadata
+  cache warm-up to app boot AND move audit log write to a
+  background queue.
+
+### Added — `tests/test_a9_4_resilience_wiring.sh` (31 wiring cases)
+
+- Description advertises A9.4, workflow section present, 6
+  rules named + all pattern-conformant against schema
+  `^[a-z0-9][a-z0-9-]*$`.
+- Threshold ladder documented (1.2 / 500ms / 0.01) +
+  `measure_queries` PF1-hook flag documented.
+- MCP tool cited with `mcp__ai-testing-agent__` prefix.
+- MCP README updated with the PF1-hook-on-chaos-runner
+  language.
+- process-engine.yaml has `performance_reviewer` block +
+  all five knobs.
+- Fixture landed + validates (exit 1 worker_quality escalation)
+  + carries both scale + latency findings.
+- Dotted A9.4 rule-name regression sweep (mirrors v0.46.0's
+  dotted-name cleanup — case 9a of the A9.3 test).
+
+### Alignment
+
+- All 37 test scripts + `pe docs check` green at v0.47.0.
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps;
+  README badge synced.
+- `docs/ENHANCEMENT_PLAN_V2.md` A9.4 detail block added
+  alongside the existing A9.3 block under the A9 STATUS entry.
+- `docs/HANDOFF.md`: v0.47.0 header + A9.4 row + adopter
+  re-install note updated (no new hooks — wiring is
+  contract/documentation) + resume notes now lead with A9.5 +
+  Loose-ends as the remaining V2 items.
+- MANIFEST.sha256 regenerated. **Twenty-six V2 items shipped,
+  ZERO PARTIAL.** Only remaining V2 work: A9.5 (OWASP payloads
+  into S3 templates) + Loose-ends items (e2e-runner self-grade
+  split; tdd-guide hybrid identity; unused frontmatter fields).
+
+### Notes — deliberately out of scope
+
+- **PF1-hook implementation inside the ai-testing-agent.**
+  The plan says "add the PF1 query-count hook onto its chaos
+  runner." The engine wires the CONTRACT — when
+  performance-reviewer calls the tool with
+  `measure_queries: true`, the tool is expected to return
+  `queries_per_request_p95` + `queries_per_request_scale_factor`.
+  The corresponding implementation lives in the ai-testing-agent
+  repo. If the tool doesn't currently expose those fields,
+  the reviewer emits `a9-4-resilience-check-skipped` (LOW,
+  informational — never FAIL). Enriching the tool's return
+  shape is a follow-on in the ai-testing-agent, not the
+  engine.
+- **CI regression job for A9.4.** Same rationale as A9.3 —
+  the reviewer fires at commit time; not run separately by
+  CI. Adopters running the resilience test in CI directly
+  can, but the engine doesn't ship a dedicated template.
+- **Cost surfacing.** Resilience test runs are more expensive
+  than visual comparisons (load generation + concurrent
+  requests). Aggregate per-gate cost reporting deferred to
+  TOK3 territory.
+
+### Migration
+
+- No breaking CLI changes. Adopters not using
+  performance-reviewer's A9.4 workflow see zero behavior
+  change (the mechanical PF-row tools continue to enforce the
+  floor). Adopters running the ai-testing-agent MCP server can
+  now consult the A9.4 workflow immediately. Threshold defaults
+  (1.2 scale factor / 500ms p95 / 0.01 error rate / 50VU / 60s)
+  are sensible for most SaaS surfaces; override in
+  `.process-engine.yaml` if the endpoint has explicit
+  higher-load requirements.
+
+---
+
 ## [0.46.0] — 2026-07-05
 
 > **A9.3 shipped — perceptual-similarity wiring.** D3 (v0.45.0)

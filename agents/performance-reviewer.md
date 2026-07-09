@@ -1,6 +1,6 @@
 ---
 name: performance-reviewer
-description: MANDATORY performance-review gate before committing changes to routes / models / queries / serializers / hot loops. The judgment 20% that deterministic tools can't see — blocking work in the request path (LLM calls, transcode, sync HTTP), cache-invalidation correctness, memory-accumulation patterns, algorithmic complexity in hot loops, over-eager serialization, missing pagination, and EXPLAIN ANALYZE interpretation. Complements the 80% that the PF-row templates DO see: `templates/tests/query-count.test.py.template` (PF1 runtime N+1) + `templates/tests/soak.test.py.template` (PF4 memory leak) + `templates/perf/load-test.k6.js.template` (PF5 load ceiling) + `hooks/perf-gate.sh` (PF1 trailer enforcement) + PF2's `hooks/sast-scan.sh` unbounded-query semgrep rules. Use PROACTIVELY on any commit touching routes / views / serializers / models / repository / query paths.
+description: MANDATORY performance-review gate before committing changes to routes / models / queries / serializers / hot loops. The judgment 20% that deterministic tools can't see — blocking work in the request path (LLM calls, transcode, sync HTTP), cache-invalidation correctness, memory-accumulation patterns, algorithmic complexity in hot loops, over-eager serialization, missing pagination, and EXPLAIN ANALYZE interpretation. A9.4 (v0.47.0) — perceptual-resilience via mcp__ai-testing-agent__run_resilience_tests with the PF1 query-count hook wired onto the chaos runner; four verdict bands (query-scale-factor > 1.2 → n-plus-one-under-load HIGH; queries_p95 > 2×PF1_ceiling → query-scale-under-load HIGH; p95_latency breach → latency-regression-under-load HIGH; error_rate breach → error-rate-under-load HIGH). Config knobs perf_reviewer.resilience_p95_ms_threshold + resilience_error_rate_threshold + resilience_query_scale_factor_threshold + resilience_concurrent_users + resilience_duration_seconds. Complements the 80% that the PF-row templates DO see: `templates/tests/query-count.test.py.template` (PF1 runtime N+1) + `templates/tests/soak.test.py.template` (PF4 memory leak) + `templates/perf/load-test.k6.js.template` (PF5 load ceiling) + `hooks/perf-gate.sh` (PF1 trailer enforcement) + PF2's `hooks/sast-scan.sh` unbounded-query semgrep rules. Use PROACTIVELY on any commit touching routes / views / serializers / models / repository / query paths.
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: high
@@ -236,6 +236,140 @@ Rule: EXPLAIN ANALYZE findings are usually WARN (index
 suggestions), unless the plan clearly shows an O(N²) join on a
 tenant-scoped table (that's FAIL — indexes are cheap; a
 tenant-cross join burns compute AND leaks isolation).
+
+## A9.4 workflow — resilience under load via MCP (v0.47.0)
+
+The ai-testing-agent exposes `run_resilience_tests` as MCP tool
+`mcp__ai-testing-agent__run_resilience_tests`. It runs a Locust /
+concurrent-load campaign against a live endpoint AND — via the
+PF1 query-count hook wired onto its chaos runner — reports the
+query count per request under load, not just at rest.
+
+This is the escalation surface for the class the mechanical PF-row
+tools alone cannot see: **scaling behavior**. A single-request
+PF1 test asserts `assert_max_queries(10)`; the endpoint might be
+FINE at rest but fire a per-user cache miss under 50VU load that
+adds 20 queries per request. That's a scaling regression PF1
+alone doesn't catch — you need the query counter running WHILE
+the load is applied. A9.4 is the reviewer's window into that.
+
+**When to call:**
+
+- The diff touches a performance-sensitive path (routes / views /
+  models / queries / serializers / hot loops) AND
+- The change is non-trivial — a NEW list endpoint, a rewritten
+  serializer, a new cache layer, a new external call, a
+  migration that changes an indexed relationship. Not: a
+  one-line copy fix, a typo, or a docstring change.
+- The adopter has the ai-testing-agent MCP server registered
+  (feature-detect; tool unavailable → LOW skipped finding, never
+  FAIL for unavailability).
+- The adopter has declared `perf_gate.enabled: true` — this is
+  a ceiling-mode check that complements the mechanical floor;
+  don't fire it if the operator has explicitly disabled perf
+  gating.
+
+**How to call (tool signature — adopter's MCP server):**
+
+```jsonc
+mcp__ai-testing-agent__run_resilience_tests({
+  "target_url": "http://127.0.0.1:5000/<endpoint>",
+  "method": "GET",                    // or POST/PUT/DELETE
+  "concurrent_users": 50,             // config knob — default 50
+  "duration_seconds": 60,             // config knob — default 60
+  "measure_queries": true,            // PF1 query-count hook on chaos runner
+  "auth": { ... }                     // if the endpoint requires it
+})
+// returns → {
+//   p95_latency_ms: <float>,
+//   p99_latency_ms: <float>,
+//   error_rate: 0.0..1.0,
+//   requests_per_second: <float>,
+//   queries_per_request_p95: <int>,          // ← PF1 hook signal
+//   queries_per_request_scale_factor: <float>, // ratio: p95 under load / rest
+//   diff_regions: [...]
+// }
+```
+
+**How to interpret the result (four verdict bands):**
+
+- **`queries_per_request_scale_factor > 1.2`** — the query
+  count grew >20% under load. This is an N+1-under-load —
+  something in the request path (a cache miss, a per-request
+  connection creation, a lazy relationship) fires MORE queries
+  when concurrency rises. Emit `a9-4-n-plus-one-under-load`
+  as **HIGH** severity with `failure_class = worker_quality`.
+  Cite the specific scale factor. This is the highest-signal
+  finding A9.4 produces.
+- **`queries_per_request_p95 > 2 × perf_gate.query_count_ceiling`**
+  — the query count under load exceeds twice the mechanical
+  PF1 ceiling from `.claude/gates/perf.json`. If PF1 says the
+  endpoint should fire ≤10 queries and the resilience run shows
+  p95 of 25, something is emitting bulk queries that PF1's
+  single-request test didn't. Emit
+  `a9-4-query-scale-under-load` as **HIGH**.
+- **`p95_latency_ms > perf_gate.p95_latency_threshold_ms`** —
+  latency ceiling breach under load. This complements PF5 (k6
+  load template) which the adopter runs in CI; A9.4 catches
+  the pre-CI drift. Emit `a9-4-latency-regression-under-load`
+  as **HIGH** with the specific delta in ms + baseline.
+- **`error_rate > perf_gate.resilience_error_rate_threshold`**
+  — the endpoint drops requests under load. Emit
+  `a9-4-error-rate-under-load` as **HIGH**. Note if the errors
+  are 5xx (server) or 4xx (rate limiter / auth failure — could
+  be a valid signal).
+
+**Pass bands:**
+
+- All four metrics within thresholds → emit
+  `a9-4-resilience-pass` as **LOW** severity with the
+  observed p95 / RPS / query count in the message. Audit-trail
+  finding, not a silence.
+- Tool unavailable OR the adopter isn't running the MCP server
+  → emit `a9-4-resilience-check-skipped` as **LOW** with a
+  note. Do NOT FAIL — the mechanical PF1 + PF5 templates still
+  cover the floor.
+
+**Threshold override:** `.process-engine.yaml` block
+`performance_reviewer:` supports:
+
+```yaml
+performance_reviewer:
+  # A9.4 (v0.47.0) — resilience + query-scale ladder.
+  resilience_concurrent_users: 50
+  resilience_duration_seconds: 60
+  resilience_p95_ms_threshold: 500
+  resilience_error_rate_threshold: 0.01
+  resilience_query_scale_factor_threshold: 1.2
+```
+
+Defaults are conservative — SaaS-baseline p95 of 500ms and a
+1% error rate under 50VU are the floor most real apps clear
+without effort. Tune lower for premium products, higher for
+adopters running on constrained infrastructure.
+
+**Cite the mechanical baseline when emitting:** if
+`.claude/gates/perf.json` carries a prior PF1 query-count
+record for the endpoint (`endpoint → max_queries: N`), name it
+in the A9.4 finding message. The reviewer's job on A9.4 is to
+frame the load-run signal against the mechanical baseline —
+"PF1 says ≤10; resilience run shows 25 → scale factor 2.5."
+This is the D5 pull-up principle applied to perf: the finding
+names the delta, so the fix is directional not vague.
+
+**Split with the PF-row templates:**
+
+- **PF1 query-count** = single-request, runs in adopter test
+  suite, catches N+1 at rest.
+- **PF5 k6 load** = single-endpoint, runs in CI, catches
+  latency-under-load.
+- **A9.4 resilience** = performance-reviewer at commit time,
+  runs on-demand, cross-references PF1's ceiling against
+  concurrent load — the only window into
+  QUERIES-scale-under-load specifically.
+
+The three complement; A9.4 is not a replacement for any of
+them.
 
 ## When you fire
 

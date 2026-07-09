@@ -3,22 +3,22 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-05 (v0.46.0 shipped — A9.3
-> engine-side wiring. design-critic §A9.3 workflow documents
-> when + how to call mcp__ai-testing-agent__run_visual_regression,
-> the three-band threshold ladder (≥0.95 PASS / 0.90–0.95 WARN /
-> <0.90 FAIL), four finding rules, config-driven threshold
-> override, and the diff_regions-as-actionable-evidence
-> contract. process-engine.yaml.template documents both
-> knobs; MCP README updated to note wiring landed; new
-> fixture demonstrates the FAIL path (SSIM 0.72 on marketing
-> hero recomposition). Twenty-five V2 items shipped, zero
-> PARTIAL. D-row + A-row wave COMPLETE — only A9 higher tiers
-> and Loose-ends items remain.)
+> **Last updated:** 2026-07-05 (v0.47.0 shipped — A9.4
+> engine-side wiring. performance-reviewer §A9.4 workflow
+> documents when + how to call
+> mcp__ai-testing-agent__run_resilience_tests with the PF1
+> query-count hook wired onto its chaos runner (measure_queries:
+> true), four verdict bands catching N+1 that only fires under
+> concurrency + query-scale-under-load vs PF1 ceiling +
+> latency + error rate. process-engine.yaml.template documents
+> five threshold knobs; new fixture demonstrates FAIL on
+> per-tenant Redis cache with 3.66× query scale under 50VU.
+> Twenty-six V2 items shipped, zero PARTIAL. Only A9.5 (OWASP
+> payloads into S3 templates) + Loose-ends remain.)
 
 ---
 
-## Current state — v0.46.0 (`ae40f4d` → `<v0.46.0 sha>` this session)
+## Current state — v0.47.0 (`6d461c5` → `<v0.47.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -61,6 +61,7 @@
 | A4 §9 watchpoint closed (first-fire evidence: live claude -p → haiku→sonnet escalation resolved worker_quality FAIL; tested=false → tested=true) | ✅ CLOSED | v0.44.0 |
 | D3 visual-regression baseline (Playwright native toHaveScreenshot on ≤5 key pages × 1280+375 viewports + reference-lock README + visual-baseline-guard advisory hook) | ✅ SHIPPED | v0.45.0 |
 | A9.3 perceptual-similarity wiring (design-critic §A9.3 workflow + 3-band threshold ladder + 4 finding rules + process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.46.0 |
+| A9.4 resilience-under-load wiring (performance-reviewer §A9.4 workflow + 4-band verdict ladder + 6 finding rules + PF1-hook-on-chaos-runner via measure_queries + 5 process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.47.0 |
 
 **PARTIAL count: 0** — v0.42.0 closed the A4 loop; v0.44.0
 closed the §9 watchpoint on the escalation ladder with live-
@@ -71,34 +72,36 @@ runtime observation continues (review new `enforced=true AND
 action="escalate_one_tier"` rows as they land) but the flag flip
 in `policy/failure_class_routing.toml` is done.
 
-**Not started yet:** A9 higher tiers (A9.4 PF1 query-count
-hook to chaos runner; A9.5 pull OWASP payloads into S3
+**Not started yet:** A9.5 (OWASP payload constants into S3
 templates) and Loose-ends items from the plan (e2e-runner
 self-grade split; tdd-guide hybrid identity; non-standard
 frontmatter fields).
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.46.0** —
-   `agents/design-critic.md` gains the A9.3 workflow section;
-   `templates/process-engine.yaml.template` documents the
-   `design_critic.perceptual_similarity_threshold` +
-   `perceptual_regression_threshold` knobs. No new hooks or
-   runtime binaries — the wiring is entirely documentation +
-   contract. Adopters using design-critic ceiling mode with the
-   ai-testing-agent MCP server registered can invoke the A9.3
+1. **Adopters need to be re-installed at v0.47.0** —
+   `agents/performance-reviewer.md` gains the A9.4 workflow
+   section; `templates/process-engine.yaml.template` documents
+   the five `performance_reviewer.resilience_*` knobs
+   (concurrent_users, duration_seconds,
+   query_scale_factor_threshold, p95_ms_threshold,
+   error_rate_threshold). No new hooks or runtime binaries —
+   contract/documentation only, same shape as v0.46.0's A9.3
+   release. Adopters using performance-reviewer with the
+   ai-testing-agent MCP server registered can invoke the A9.4
    workflow immediately. Adopters without the MCP server see
-   `a9-3-perceptual-check-skipped` findings (LOW, informational),
-   never FAIL for tool unavailability.
+   `a9-4-resilience-check-skipped` LOW findings, never FAIL for
+   tool unavailability — the mechanical PF1 + PF5 templates still
+   cover the floor.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
 
-   - **A9.4 + A9.5** — extend the ai-testing-agent MCP
-     integration further. A9.4 adds the PF1 query-count hook to
-     the chaos runner; A9.5 pulls the OWASP payload constants
-     into the S3 security templates. Both are small, both
-     depend on the shipped MCP tool surface. Natural next.
+   - **A9.5** — pull OWASP payload constants from ai-testing-agent
+     into the S3 security templates (payloads only — the SAST
+     scanner stays S1/semgrep). Small; the templates already
+     exist at `docs/templates/security/` and just need the
+     payload catalogue enriched. Natural next.
    - **Loose ends** (from the plan's §"Loose ends" list) —
      e2e-runner self-grade split into worker + gate;
      tdd-guide hybrid-identity resolution; unused frontmatter

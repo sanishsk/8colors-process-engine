@@ -218,6 +218,28 @@ design_critic:
   perceptual_similarity_threshold: 0.95
   perceptual_regression_threshold: 0.90
 
+# ─── performance-reviewer tuning (v0.47.0 — A9.4) ─────────────────────
+# performance-reviewer reads these when calling
+# mcp__ai-testing-agent__run_resilience_tests with measure_queries: true
+# on the chaos runner. Absence → engine defaults (conservative SaaS
+# baseline). Loosen for adopters on constrained infra; tighten for
+# premium products.
+performance_reviewer:
+  # A9.4: chaos-runner load-generation parameters.
+  resilience_concurrent_users: 50           # concurrent Locust users
+  resilience_duration_seconds: 60           # test run duration
+  # A9.4: verdict thresholds.
+  # - queries_per_request_scale_factor > threshold →
+  #     FAIL (a9-4-n-plus-one-under-load).  The PF1-hook-on-chaos-runner
+  #     signal — query count grew >20% under load.
+  resilience_query_scale_factor_threshold: 1.2
+  # - queries_per_request_p95 > 2 × perf_gate query-count ceiling →
+  #     FAIL (a9-4-query-scale-under-load).
+  # - p95_latency_ms > threshold → FAIL (a9-4-latency-regression-under-load).
+  resilience_p95_ms_threshold: 500
+  # - error_rate > threshold → FAIL (a9-4-error-rate-under-load).
+  resilience_error_rate_threshold: 0.01
+
 # ─── Accessibility gate (v0.18.0 — D2) ────────────────────────────────
 # axe-core Playwright spec (templates/e2e/a11y-audit.spec.ts.template)
 # + Lighthouse CI (templates/ci/lighthouse-ci.yml.template) budgets.

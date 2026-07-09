@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "performance-reviewer",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.93,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-07-05T15:00:00Z",
+  "summary": "A9.4 run_resilience_tests: query-scale 3.66× (threshold 1.2) + p95 620ms (threshold 500ms) on /api/v1/invoices. Tenant-cache-miss path fires 3 extra queries per miss; audit log write on request path.",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "rule": "a9-4-n-plus-one-under-load",
+      "file": "modules/invoices/views.py",
+      "line": 42,
+      "message": "run_resilience_tests returned queries_per_request_scale_factor 3.66 — above 1.2 threshold. PF1 baseline (.claude/gates/perf.json) says /api/v1/invoices ≤8 queries; resilience run at 50VU shows p95 = 22. diff_regions: tenant_cache_miss_path, audit_log_write_in_serializer. Cache-miss path fires 3 extra queries under 30% miss rate at 50VU.",
+      "suggestion": "Hoist the tenant metadata cache warm-up to app boot (populate all tenant rows into Redis on startup + refresh on tenant CRUD) so the request path never fires the miss branch. Alternative: move the audit log write to a background queue (Celery / RQ) — audit is a downstream signal, not a synchronous requirement."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "a9-4-latency-regression-under-load",
+      "file": "modules/invoices/views.py",
+      "line": 42,
+      "message": "resilience run p95_latency_ms = 620 exceeds the 500ms threshold configured in .process-engine.yaml. Delta of +120ms is entirely explained by the query-scale finding above (3.66× queries × ~30ms per query round-trip = ~90ms of the delta; the remaining 30ms is serialization overhead). If the query-scale fix lands, the latency finding closes automatically.",
+      "suggestion": "Fix the query-scale finding first; re-run resilience test to confirm p95 drops below 500ms threshold. If it does not, escalate to a database-reviewer pass on the tenant query itself (EXPLAIN ANALYZE to check for missing indexes)."
+    },
+    {
+      "severity": "MEDIUM",
+      "rule": "over-eager-serialization",
+      "file": "modules/invoices/serializers.py",
+      "line": 18,
+      "message": "The invoice serializer calls `_get_tenant_meta(inv.tenant_id)` per row (line 18). Even with a warm cache, this is a per-row side effect on the response render path. If a future refactor removes the cache, this pattern silently regresses to N+1. Reviewer flags for design hygiene independent of the A9.4 signal above.",
+      "suggestion": "Move tenant metadata resolution to the view (batch fetch all tenants for the response payload, pass as context to the serializer). Keep serializers pure — no I/O per row."
+    }
+  ],
+  "scope": {
+    "branch": "feat/invoices-tenant-cache",
+    "commit": "a1b2c3d",
+    "files_reviewed": [
+      "modules/invoices/views.py",
+      "modules/invoices/serializers.py"
+    ],
+    "lines_reviewed": 62
+  }
+}

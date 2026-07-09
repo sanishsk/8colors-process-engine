@@ -52,7 +52,7 @@ Tools then appear to agents as `mcp__ai-testing-agent__*`.
 | `compare_api_specs` | code-reviewer / api-diff step | **S3** API-contract breaking-change gate (replaces planned oasdiff build) |
 | `run_security_scan` | security-reviewer | **S3** OWASP API Top-10 execution (payload runner; SAST stays S1/semgrep) |
 | `run_dast_scan` | security-reviewer | deep DAST (OWASP ZAP baseline) — beyond `run_security_scan`'s targeted probes |
-| `run_resilience_tests` | performance-reviewer | **PF6** resilience/load foundation |
+| `run_resilience_tests` | performance-reviewer | **PF6** resilience/load foundation + **A9.4 (v0.47.0)** query-scale-under-load via PF1 query-count hook on chaos runner |
 | `run_visual_regression` | design-critic | **D3** visual regression (SSIM/perceptual-hash + baselines) |
 | `run_pipeline` | e2e-runner | smoke/comprehensive test execution |
 | `extract_apis` / `list_modules` / `test_intent` | planner / e2e-runner | endpoint + module discovery for scoping |
@@ -67,6 +67,16 @@ Tools then appear to agents as `mcp__ai-testing-agent__*`.
 > `a9-3-perceptual-regression` / `a9-3-perceptual-check-skipped`).
 > Adopters override via
 > `design_critic.perceptual_similarity_threshold` in `.process-engine.yaml`.
+
+> **A9.4 (v0.47.0)** — the performance-reviewer wiring for
+> `run_resilience_tests` also landed. `agents/performance-reviewer.md`
+> §A9.4 workflow documents the tool signature (with `measure_queries: true`
+> engaging the PF1 query-count hook on the chaos runner), the four
+> verdict bands (`a9-4-n-plus-one-under-load` / `a9-4-query-scale-under-load`
+> / `a9-4-latency-regression-under-load` / `a9-4-error-rate-under-load`),
+> the pass rules (`a9-4-resilience-pass` LOW +
+> `a9-4-resilience-check-skipped` LOW), and threshold overrides via
+> `performance_reviewer.resilience_*` keys in `.process-engine.yaml`.
 
 ### Secrets
 

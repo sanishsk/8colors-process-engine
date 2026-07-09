@@ -752,6 +752,40 @@ agent gates actually catch anything.
   - **`run_visual_regression` is now the 9th MCP tool** (new `integrations/visual_scan.py` over
     `visual_tester`, sync Playwright run in a worker thread, graceful degradation if the `[visual]`
     extra is absent). Registered in `templates/mcp/README.md`.
+  - **A9.4 engine-side wiring SHIPPED v0.47.0.** `agents/performance-reviewer.md` §A9.4 workflow
+    documents when to invoke `mcp__ai-testing-agent__run_resilience_tests` (perf-sensitive diff +
+    non-trivial change + adopter has MCP server + perf_gate enabled), the tool signature (target_url +
+    method + concurrent_users + duration_seconds + `measure_queries: true` engaging the PF1
+    query-count hook on the chaos runner + auth), the four verdict bands
+    (`a9-4-n-plus-one-under-load` HIGH when queries_per_request_scale_factor > 1.2 —
+    the PF1-hook-on-chaos-runner signal that catches N+1 that only fires under concurrency;
+    `a9-4-query-scale-under-load` HIGH when queries_per_request_p95 > 2×PF1_ceiling from
+    .claude/gates/perf.json; `a9-4-latency-regression-under-load` HIGH when p95_latency_ms
+    exceeds resilience_p95_ms_threshold; `a9-4-error-rate-under-load` HIGH when error_rate
+    exceeds resilience_error_rate_threshold), the pass rules (`a9-4-resilience-pass` LOW
+    with observed metrics for audit trail + `a9-4-resilience-check-skipped` LOW when tool
+    unavailable — never FAIL for MCP-unavailability, mechanical PF1 + PF5 templates still
+    cover the floor), the split with PF1/PF5 (PF1 = single-request at rest catches N+1;
+    PF5 = single-endpoint in CI catches latency-under-load; A9.4 = performance-reviewer at
+    commit cross-references PF1 ceiling against concurrent load — the only window into
+    QUERIES-scale-under-load specifically). Adopter tuning via .process-engine.yaml
+    `performance_reviewer.resilience_concurrent_users` (default 50) +
+    `resilience_duration_seconds` (60) + `resilience_query_scale_factor_threshold` (1.2) +
+    `resilience_p95_ms_threshold` (500) + `resilience_error_rate_threshold` (0.01) with
+    guidance comments on when to tune (loosen for constrained infra; tighten for premium
+    products). Description frontmatter advertises A9.4 v0.47.0. `templates/mcp/README.md`
+    tool-consumer row + new v0.47.0 blockquote note that names the PF1-hook-on-chaos-runner
+    mechanism. New eval fixture `evals/fixtures/performance-reviewer/fail-escalate-query-scale-under-load/`
+    demonstrates the FAIL path (per-tenant Redis cache with 60s TTL passes PF1 at rest
+    with 6 queries but fires 22 queries p95 under 50VU load with 40 rotating tenants;
+    scale factor 3.66, p95 620ms; two A9.4 findings + a MEDIUM `over-eager-serialization`
+    floor finding on the audit-log-in-serializer anti-pattern). Test coverage:
+    `tests/test_a9_4_resilience_wiring.sh` (31 wiring cases: description advertises A9.4,
+    workflow section present, 6 rules named + all pattern-conformant, threshold ladder
+    (1.2 / 500ms / 0.01) + measure_queries flag documented, MCP tool cite + prefix, MCP
+    README updated with PF1-hook language, process-engine.yaml has performance_reviewer
+    block + all 5 knobs, fixture landed + validates + carries scale + latency findings,
+    dotted-A9.4-name regression sweep).
   - **A9.3 engine-side wiring SHIPPED v0.46.0.** `agents/design-critic.md` §A9.3 workflow documents
     the tool signature (url + baseline_path + viewport + similarity_algorithm + threshold), the
     three-band threshold ladder (≥0.95 PASS with `a9-3-perceptual-pass` LOW; 0.90–0.95 WARN with
