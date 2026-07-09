@@ -4,7 +4,6 @@ description: PostgreSQL database specialist for query optimization, schema desig
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: high
-memory: project
 ---
 
 > **Gate-agent note (E1.1):** this agent is a quality gate for the
@@ -201,6 +200,101 @@ PF6 performance-reviewer agent (future) consumes these.
 - Isolation level: default `READ COMMITTED` unless the pattern
   requires `REPEATABLE READ` (rare); flag any raw `SET TRANSACTION
   ISOLATION LEVEL ...` for justification.
+
+## API contract (v0.49.0 — schema evolution + client compatibility)
+
+If the diff touches any file that defines an HTTP API surface (a
+Flask blueprint, a FastAPI router, a Django view returning JSON, a
+Marshmallow / Pydantic / DRF serializer, an OpenAPI spec at
+`openapi.yaml` / `openapi.json`), the reviewer checks that the
+change is contract-compatible with committed consumers.
+
+**What to check:**
+
+- **Breaking changes to committed OpenAPI/Swagger specs** are already
+  gated by `hooks/api-contract-check.sh` (S3 / A9.2) — it runs
+  `ai-test api-diff` (wraps the ai-testing-agent's `compare_api_specs`
+  MCP tool). This reviewer's job is the JUDGMENT layer on top:
+  request/response shape changes that DON'T touch a committed spec
+  (silent contract drift) OR that the diff tool flags but the operator
+  wants a second opinion on.
+- **New required field** on a request body without a default value —
+  every existing client fails their next request. Emit **HIGH** with
+  rule `api-contract-required-field-added` naming the field + the
+  endpoint.
+- **Removed field** from a response body — every existing client
+  that referenced it silently breaks. Emit **HIGH** with rule
+  `api-contract-response-field-removed`.
+- **Type narrowing** on a request field (e.g. `Optional[str]` →
+  `str`) — old requests with `null` fail. Emit **HIGH** with rule
+  `api-contract-type-narrowed`.
+- **Semantic reinterpretation** — same field name + type, different
+  meaning (e.g. `amount` in cents → `amount` in dollars). This is
+  the class the MCP tool cannot see; only a code walk catches it.
+  Emit **CRITICAL** with rule `api-contract-semantic-drift`.
+- **New endpoint without a spec entry** — the committed
+  `openapi.yaml` is the contract; endpoints existing only in code
+  are undocumented and future breaking-change gates miss them. Emit
+  **MEDIUM** with rule `api-contract-missing-spec-entry`.
+
+**Version-in-URL discipline:** if the URL carries `/api/v1/…` and the
+diff changes response shape, the reviewer flags **HIGH** with rule
+`api-contract-version-shape-drift` — version-in-URL is a promise;
+breaking it silently rots trust across every consuming team.
+
+**Complementary tools (not this reviewer's job):**
+
+- `hooks/api-contract-check.sh` — mechanical breaking-change detection
+  against a committed spec (deterministic, runs pre-commit).
+- **schemathesis** (adopter-installed; not shipped by engine) — property-based
+  API testing that fuzzes the endpoint against its own spec.
+  Recommend adopters install if the API surface is meaningful.
+
+## Seed-data convention (v0.49.0 — reproducible tenants + fixtures)
+
+If the diff adds a new tenant-scoped model, a new subscription /
+billing tier, or a new configuration table (feature flags, permission
+templates), the reviewer checks that a seed-data path exists.
+
+**What to check:**
+
+- **New tenant-scoped table without a seed script.** Every fresh
+  developer environment / staging clone needs a way to populate
+  the table with a canonical baseline (one demo tenant, one demo
+  user per role, one demo billing tier). Emit **MEDIUM** with rule
+  `seed-data-missing-for-new-table` naming the table + suggesting
+  a location (`seeds/<slug>.py` / `management/commands/seed_<slug>.py` /
+  `alembic seed …` — whatever the project already uses).
+- **Seed script that hardcodes production data** — e.g. real
+  customer emails, real API keys, real invoice numbers. Emit
+  **HIGH** with rule `seed-data-production-values`. Seeds should
+  use `example.com` emails, `sk_test_…` keys, obviously-fictional
+  invoice numbers.
+- **Seed script without deterministic ordering / idempotency** —
+  `insert` without `on conflict do nothing` or `get_or_create`
+  means running the seed twice creates duplicates. Emit **MEDIUM**
+  with rule `seed-data-non-idempotent`.
+- **Missing tenant-isolation baseline in seeds** — if the schema
+  has RLS FORCE mode, the seed script must include AT LEAST TWO
+  distinct tenants with overlapping row shapes so cross-tenant
+  isolation tests have real data to prove isolation against.
+  Emit **MEDIUM** with rule `seed-data-single-tenant-only`.
+
+**Seed convention (canonical):**
+
+```
+seeds/
+  README.md                    # explains order + how to run
+  001_owners.py                # earliest — one row per role
+  002_tenants.py               # 2+ tenants for isolation testing
+  003_billing_tiers.py         # canonical tier catalogue
+  010_demo_data.py             # tenant-scoped rows using seeds above
+```
+
+Each numbered file is idempotent (uses `get_or_create` /
+`on conflict do nothing`) and can be re-run safely. The project's
+convention wins — flag when the diff adds a table but not the
+corresponding seed file.
 
 ## Anti-patterns to flag
 

@@ -4,7 +4,6 @@ description: A3 — the self-improvement loop. Reads incidents (retro digests, .
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: opus
 effort: high
-memory: project
 ---
 
 > **Anti-abuse contract (A3).** This agent is the ONLY agent that

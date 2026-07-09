@@ -4,7 +4,6 @@ description: Software architecture specialist for system design, scalability, an
 tools: ["Read", "Grep", "Glob", "Bash", "Write"]
 model: opus
 effort: high
-memory: user
 ---
 
 You are a senior software architect specializing in scalable, maintainable system design.

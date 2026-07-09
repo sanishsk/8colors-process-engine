@@ -4,7 +4,6 @@ description: Expert planning specialist for complex features and refactoring. Us
 tools: ["Read", "Grep", "Glob", "Bash", "Write"]
 model: opus
 effort: high
-memory: project
 ---
 
 You are an expert planning specialist focused on creating comprehensive, actionable implementation plans.

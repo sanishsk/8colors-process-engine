@@ -853,15 +853,30 @@ agent gates actually catch anything.
 
 ---
 
-## Loose ends from the audits (small, do opportunistically)
+## Loose ends from the audits — **ALL SHIPPED v0.49.0**
 
-- **e2e-runner self-grades tests it wrote** — violates the reviewer/worker separation; split into
-  test-author (worker, keeps Write) + a gate that grades. (S, Sonnet)
-- **tdd-guide hybrid identity** — envelope says "reviewer", body says "author"; pick one. (S)
-- **Non-standard frontmatter fields** `effort:`/`memory:` are silently ignored — document or
-  remove (false sense of configuration). (S, Haiku)
-- **database-reviewer** missing API-contract (oasdiff/schemathesis) + seed-data convention checks
-  (P3.9 remnant). (S)
+- **e2e-runner self-grades tests it wrote** — ✅ SHIPPED v0.49.0. Prohibition strengthened in
+  frontmatter block: envelope's `findings[]` MUST NOT contain any rule scoring the tests
+  authored in-session. Two execution-specific rules introduced (`test-execution-flaky` for
+  quarantine candidates + `test-execution-regression` for tests broken by the diff).
+  Verdict-mapping table added: PASS → all green; WARN → new tests flaky; FAIL/worker_quality
+  → existing broken; FAIL/blocked → env/fixture missing.
+- **tdd-guide hybrid identity** — ✅ SHIPPED v0.49.0. Identity note added to §"Verdict + failure_class"
+  block explicitly calling tdd-guide a **state-machine gate**, not a reviewer. Verdict rows
+  now key off "state your state-machine progress detected" not "what your review found."
+- **Non-standard frontmatter fields** — ✅ SHIPPED v0.49.0. `memory:` frontmatter removed from all
+  11 agents (no consumer read it — false configuration surface). `effort:` retained (consumed
+  by `pe agent run`) and documented in new `agents/_gate-contract.md` §Section 0 with the
+  full key/consumer/behavior table. Rule for future frontmatter additions codified: only add
+  keys when a concrete consumer will read them.
+- **database-reviewer** missing API-contract + seed-data convention checks — ✅ SHIPPED v0.49.0.
+  Two new sections. **API contract** (6 rules: required-field-added, response-field-removed,
+  type-narrowed, semantic-drift CRITICAL, missing-spec-entry, version-shape-drift) — the
+  judgment layer on top of `hooks/api-contract-check.sh` (mechanical) and schemathesis
+  (adopter-installed property-based fuzzing). **Seed-data convention** (4 rules:
+  missing-for-new-table, production-values HIGH, non-idempotent, single-tenant-only) with
+  canonical seed directory shape documented. Test coverage: `tests/test_loose_ends_v0_49.sh`
+  (26 wiring cases). All 10 finding rules pattern-conform to schema.
 
 ---
 

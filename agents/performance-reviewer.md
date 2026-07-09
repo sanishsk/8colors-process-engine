@@ -4,7 +4,6 @@ description: MANDATORY performance-review gate before committing changes to rout
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: high
-memory: project
 ---
 
 > **Gate-agent note (PF6, v0.37.0):** this agent's envelope is

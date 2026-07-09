@@ -4,7 +4,6 @@ description: MANDATORY design review gate before committing UI changes. Two-mode
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: medium
-memory: project
 ---
 
 > **Gate-agent note (D1, v0.18.0):** this agent's envelope is

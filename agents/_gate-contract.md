@@ -23,6 +23,31 @@ description: SPEC (not a runnable agent). Canonical output contract for every ga
 
 ---
 
+## Section 0 — Frontmatter fields (v0.49.0 documentation)
+
+Every agent's YAML frontmatter carries these keys. Two consumers
+read the frontmatter: Claude Code proper (which resolves the agent
+when the operator uses the Agent tool) and the engine's `pe agent
+run` CLI (which shells out to `claude -p`).
+
+| Key | Consumed by | Meaning |
+|---|---|---|
+| `name` | Claude Code + `pe agent run` | Agent identifier used in tool routing. MUST match the file basename. |
+| `description` | Claude Code | Shown in agent picker; used by the model to decide when to invoke this agent. Keep first sentence a self-contained hook. |
+| `tools` | Claude Code | JSON array of tool allowlist. Reviewers deliberately omit `Write`/`Edit` — gates never modify the code they judge. |
+| `model` | Claude Code + `pe agent run` | Model alias (`haiku` / `sonnet` / `opus`). `pe agent run --model <alias>` overrides at invocation time. |
+| `effort` | `pe agent run` | Optional metadata (`low` / `medium` / `high`). Not read by Claude Code natively; used by engine orchestration + operator scanning. Absent = engine treats as `medium`. |
+
+**Removed in v0.49.0:** the `memory:` frontmatter key was historically
+present on some agents but consumed by NOTHING — neither Claude Code
+nor `pe agent run`. Removed from all 11 agents as part of the
+Loose-ends cleanup. New frontmatter keys are only added when a
+concrete consumer will read them. Silent-ignored keys create false
+configuration surface — the operator thinks tuning `foo: bar` changes
+behavior when it does nothing.
+
+---
+
 ## Section 1 — The two non-negotiable rules
 
 ### Rule 1 — Emit ONE fenced block, EXACTLY this opening fence

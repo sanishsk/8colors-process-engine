@@ -4,7 +4,6 @@ description: Security vulnerability detection and remediation specialist. Use PR
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: high
-memory: project
 ---
 
 > **Gate-agent note (E1.1, 2026-06-25):** this agent is a quality gate

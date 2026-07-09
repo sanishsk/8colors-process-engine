@@ -3,23 +3,20 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-09 (v0.48.0 shipped — A9.5 OWASP
-> payload catalogue. templates/security/owasp-payloads.py.template
-> ships 13 payload lists mapped to OWASP API Top 10 (2023):
-> BOLA / BROKEN_AUTH / MASS_ASSIGNMENT / RESOURCE_EXHAUSTION /
-> BFLA / MISCONFIG_HEADER / SQL / NoSQL / LDAP / XSS / CMD /
-> XXE / SSRF / PATH_TRAVERSAL / DESERIALIZATION. auth-robustness
-> template demonstrates parametrization; security-reviewer §Step 2
-> emits a9-5-owasp-payload-coverage-missing MEDIUM when a new
-> user-input endpoint lacks catalogue coverage. Split with
-> hooks/sast-scan.sh (S1): SAST catches write-time patterns;
-> payload catalogue catches runtime shapes. Twenty-seven V2
-> items shipped, zero PARTIAL. **A-row COMPLETE.** Only
-> Loose-ends items remain.)
+> **Last updated:** 2026-07-09 (v0.49.0 shipped — Loose-ends
+> cleanup, ALL 4 items. e2e-runner self-grade prohibition
+> hardened + 2 execution rules named + verdict mapping. tdd-guide
+> identity clarified — state-machine gate, not reviewer.
+> `memory:` frontmatter removed from 11 agents (no consumer);
+> `effort:` retained + documented in _gate-contract.md §Section 0
+> with full key/consumer table. database-reviewer gains
+> API-contract section (6 rules) + Seed-data convention section
+> (4 rules). **Twenty-eight V2 items shipped, ZERO PARTIAL,
+> ZERO Loose-ends. V2 IS COMPLETE.**)
 
 ---
 
-## Current state — v0.48.0 (`d73d66b` → `<v0.48.0 sha>` this session)
+## Current state — v0.49.0 (`2cd6cf9` → `<v0.49.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -64,6 +61,7 @@
 | A9.3 perceptual-similarity wiring (design-critic §A9.3 workflow + 3-band threshold ladder + 4 finding rules + process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.46.0 |
 | A9.4 resilience-under-load wiring (performance-reviewer §A9.4 workflow + 4-band verdict ladder + 6 finding rules + PF1-hook-on-chaos-runner via measure_queries + 5 process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.47.0 |
 | A9.5 OWASP payload catalogue (13 payload lists mapped to OWASP API Top 10 2023 + security-reviewer §Step 2 coverage rule + auth-robustness template demo + README documents split with SAST) | ✅ SHIPPED | v0.48.0 |
+| Loose-ends cleanup — e2e-runner self-grade hardened + tdd-guide identity clarified + memory: frontmatter removed from 11 agents + database-reviewer gains API-contract (6 rules) + Seed-data convention (4 rules) sections | ✅ SHIPPED | v0.49.0 |
 
 **PARTIAL count: 0** — v0.42.0 closed the A4 loop; v0.44.0
 closed the §9 watchpoint on the escalation ladder with live-
@@ -74,26 +72,27 @@ runtime observation continues (review new `enforced=true AND
 action="escalate_one_tier"` rows as they land) but the flag flip
 in `policy/failure_class_routing.toml` is done.
 
-**Not started yet:** Loose-ends items from the plan (e2e-runner
-self-grade split; tdd-guide hybrid identity; non-standard
-frontmatter fields). **A-row COMPLETE at v0.48.0.**
+**Not started yet:** none from the shipped V2 plan.
+**V2 IS COMPLETE at v0.49.0** — all 28 items shipped, zero
+PARTIAL, zero Loose-ends. Next release surface is unspec'd —
+either a v0.49.x quality close-out, or the operator opens a
+V3 plan.
 
 ## 🔴 RESUME HERE — first action next session
 
-1. **Adopters need to be re-installed at v0.48.0** —
-   `templates/security/owasp-payloads.py.template` (~250 lines)
-   lands in `docs/templates/security/` via install.sh (existing
-   loop). No new hooks or runtime binaries. Adopters who want
-   A9.5 coverage copy the template to `tests/owasp_payloads.py`,
-   then parametrise their endpoint tests against the relevant
-   payload lists. security-reviewer §Step 2 now flags missing
-   catalogue coverage on new user-input endpoints with a MEDIUM
-   finding (`a9-5-owasp-payload-coverage-missing`).
+1. **Adopters need to be re-installed at v0.49.0** —
+   contract/documentation-only release. No new hooks or runtime
+   binaries. Agents/e2e-runner, agents/tdd-guide,
+   agents/database-reviewer, agents/_gate-contract prose
+   updated. 11 agents' frontmatter cleaned of unused `memory:`
+   key. Adopters using database-reviewer immediately get the new
+   API-contract (6 rules) + Seed-data (4 rules) coverage.
 
 2. **Continue V2 per remaining priority order** (operator's call
    each release):
 
-   - **Loose ends** (from the plan's §"Loose ends" list) —
+   - **~~Loose ends~~** — all shipped v0.49.0. V2 complete.
+     Everything below is now historical context only:
      e2e-runner self-grade split into worker + gate;
      tdd-guide hybrid-identity resolution; unused frontmatter
      fields (effort:/memory:) documented or removed. Each is

@@ -4,7 +4,6 @@ description: Daily / weekly / monthly self-improvement retrospective. Reads the 
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
 model: opus
 effort: high
-memory: project
 ---
 
 You are the **Retrospective Agent** — the project's continuous-improvement brain.

@@ -11,14 +11,35 @@ model: sonnet
 > CRITICAL OUTPUT CONTRACT below is the law of its output shape — see
 > `docs/E1_GATE_ENVELOPE.md` for rationale.
 >
-> **Gate identity (P2.2, v0.10.0):** e2e-runner is a **hybrid** —
-> worker (writes + runs E2E tests, so `Write`/`Edit` are retained) AND
-> gate (emits an envelope). Its envelope reports **test execution
-> results** ("tests ran green" vs "tests failed"), NOT a review
-> verdict on the code it authored. It never self-grades the tests it
-> wrote — the code-reviewer / security-reviewer / database-reviewer
-> gates cover that. When invoking as a pure gate on someone else's
-> test suite, prefer to strip Write/Edit at the SDK layer.
+> **Gate identity (P2.2, v0.10.0; hardened v0.49.0):** e2e-runner
+> is a **hybrid** — worker (writes + runs E2E tests, so `Write`/`Edit`
+> are retained) AND gate (emits an envelope). Its envelope reports
+> **test execution results** ("tests ran green" vs "tests failed"),
+> NOT a review verdict on the code it authored.
+>
+> **Self-grade prohibition (v0.49.0).** The envelope's `findings[]`
+> array MUST NOT contain any finding whose `rule` scores the tests
+> the agent wrote in this session (e.g. "assertion could be
+> stronger", "test naming inconsistent", "fixture could be reused").
+> Those judgments belong to code-reviewer. e2e-runner's findings
+> report **execution facts**: which tests failed, which are flaky
+> (quarantine candidates), which artefacts were captured, which
+> timed out. If the agent catches itself about to emit a
+> composition-level judgment on its own tests, that's the signal
+> to STOP and defer to the reviewer chain.
+>
+> **Verdict mapping (v0.49.0):**
+>
+> - All tests pass → `PASS` with `failure_class: none`.
+> - New tests flake (pass/fail intermittently) → `WARN` with rule
+>   `test-execution-flaky` naming the specific tests + retry count.
+> - Existing tests broken by the diff → `FAIL` with
+>   `failure_class: worker_quality` and rule
+>   `test-execution-regression`.
+> - Env/fixture missing → `FAIL` with `failure_class: blocked`.
+>
+> When invoking as a pure gate on someone else's test suite,
+> prefer to strip Write/Edit at the SDK layer.
 
 
 # E2E Test Runner

@@ -288,7 +288,15 @@ not `rule`.
 
 ## Verdict + failure_class decision table
 
-Pick exactly one row based on what your review found:
+> **Identity note (v0.49.0):** tdd-guide is a **state-machine gate**,
+> not a reviewer. The verdict rows below map to the STATE of the
+> test suite you just moved through (RED written / GREEN passing /
+> REFACTOR clean / COVERAGE met), NOT to a code-review judgment of
+> the code you wrote. Code-review judgments belong to code-reviewer,
+> security-reviewer, and database-reviewer.
+
+Pick exactly one row based on what state your state-machine progress
+detected:
 
 | Findings | verdict | failure_class | Orchestrator does |
 |---|---|---|---|

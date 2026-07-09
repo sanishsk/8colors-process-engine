@@ -4,7 +4,6 @@ description: MANDATORY review stage before committing changes that introduce, mo
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: medium
-memory: project
 ---
 
 > **Gate-agent paradox note (E1, 2026-06-24):** this agent was bumped from

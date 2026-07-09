@@ -7,6 +7,187 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.49.0] — 2026-07-09
+
+> **Loose-ends bundle — V2 IS COMPLETE.** The plan's Loose-ends
+> section listed four items that should ship opportunistically.
+> This release ships all four at once as a coordinated cleanup:
+> e2e-runner self-grade prohibition strengthened, tdd-guide
+> hybrid-identity language clarified, unused `memory:` frontmatter
+> field removed from all 11 agents (+ retained `effort:` field
+> documented in the gate-contract), and database-reviewer gains
+> two new sections (API contract with 6 finding rules + Seed-data
+> convention with 4 rules). **Twenty-eight V2 items shipped, ZERO
+> PARTIAL, ZERO Loose-ends.**
+
+### Modified — `agents/e2e-runner.md` (self-grade prohibition hardened)
+
+- Frontmatter gate-identity block strengthened. Previous language
+  said "never self-grades the tests it wrote"; this release makes
+  it enforceable by naming the exact envelope shape violation
+  (`findings[]` MUST NOT contain any rule scoring the tests
+  authored in-session).
+- Two new execution-specific rule names introduced:
+  `test-execution-flaky` (for quarantine candidates that pass/fail
+  intermittently) + `test-execution-regression` (for tests broken
+  by the diff — separate from tests the agent authored).
+- Verdict mapping table added: PASS on all-green, WARN on
+  new-tests-flaky, FAIL/worker_quality on existing-regression,
+  FAIL/blocked on env/fixture missing. The agent knows exactly
+  which envelope shape to emit for each state.
+
+### Modified — `agents/tdd-guide.md` (state-machine gate identity)
+
+- Verdict-decision-table now carries a v0.49.0 identity note:
+  tdd-guide is a **state-machine gate**, not a reviewer. Verdict
+  rows key off "what state your state-machine progress
+  detected" (RED written / GREEN passing / REFACTOR clean /
+  COVERAGE met), NOT "what your review found."
+- The historical ambiguity — envelope shape says "reviewer" but
+  agent identity is worker/state-machine — is resolved. Reviewers
+  are code-reviewer / security-reviewer / database-reviewer.
+  tdd-guide sits between them at the phase-transition boundary.
+
+### Modified — 11 agents (frontmatter cleanup)
+
+- Removed the `memory:` frontmatter key from every agent that
+  carried it: `architect`, `code-reviewer`, `database-reviewer`,
+  `design-critic`, `incident-synthesizer`, `performance-reviewer`,
+  `planner`, `retrospective-agent`, `security-reviewer`,
+  `tenant-isolation-auditor`. That's 10 agents; `doc-updater`
+  had it too and was cleaned. Total: **11 agents cleaned**.
+- Reason: `memory:` was consumed by nothing. Neither Claude Code
+  natively nor `pe agent run` reads it. It created false
+  configuration surface — operators would see `memory: project`
+  in an agent frontmatter and reasonably assume tuning it changed
+  behavior; it never did.
+- The `effort:` key is **retained** because `pe agent run`
+  DOES read it (see `scripts/agent_runner.py:169`). It's used
+  for engine orchestration + operator scanning of agent
+  characteristics.
+
+### Modified — `agents/_gate-contract.md` (new §Section 0)
+
+- New "Section 0 — Frontmatter fields (v0.49.0 documentation)"
+  before Section 1. Documents every frontmatter key with a
+  **key / consumed-by / meaning** table:
+  - `name` — Claude Code + `pe agent run`.
+  - `description` — Claude Code.
+  - `tools` — Claude Code.
+  - `model` — Claude Code + `pe agent run`.
+  - `effort` — `pe agent run` only (metadata for engine
+    orchestration).
+- Codifies the rule for future frontmatter additions: only add
+  keys when a concrete consumer will read them. Silent-ignored
+  keys create false configuration surface.
+- Explicit note on the v0.49.0 `memory:` removal.
+
+### Added — `agents/database-reviewer.md` §API contract
+
+- New section between Query safety and Anti-patterns. Documents
+  the review layer on top of `hooks/api-contract-check.sh` (S3 /
+  A9.2 mechanical breaking-change detection) and schemathesis
+  (adopter-installed property-based fuzzing).
+- **Six finding rules** the reviewer emits on API-touching diffs:
+  - `api-contract-required-field-added` (HIGH) — every existing
+    client fails their next request.
+  - `api-contract-response-field-removed` (HIGH) — every client
+    that referenced the field silently breaks.
+  - `api-contract-type-narrowed` (HIGH) — old requests with
+    `null` fail after `Optional[str]` → `str`.
+  - `api-contract-semantic-drift` (**CRITICAL**) — same field
+    name + type, different meaning (e.g. `amount` in cents →
+    dollars). The class only a code walk catches.
+  - `api-contract-missing-spec-entry` (MEDIUM) — new endpoint
+    without an `openapi.yaml` entry.
+  - `api-contract-version-shape-drift` (HIGH) — `/api/v1/…` URL
+    changed response shape without a version bump.
+
+### Added — `agents/database-reviewer.md` §Seed-data convention
+
+- New section immediately after API contract. When the diff adds
+  a new tenant-scoped model or configuration table, the reviewer
+  checks that a seed-data path exists.
+- **Four finding rules:**
+  - `seed-data-missing-for-new-table` (MEDIUM) — new tenant-
+    scoped table without a seed script; developers can't
+    populate their environments.
+  - `seed-data-production-values` (HIGH) — seed script
+    hardcodes real customer emails / API keys / invoice
+    numbers; risks leaking to demo environments.
+  - `seed-data-non-idempotent` (MEDIUM) — `insert` without
+    `on conflict do nothing` or `get_or_create` — running the
+    seed twice creates duplicates.
+  - `seed-data-single-tenant-only` (MEDIUM) — schema has RLS
+    FORCE mode but the seed script only creates one tenant;
+    cross-tenant isolation tests have no data to prove
+    isolation against.
+- Canonical seed directory layout documented
+  (`seeds/00N_<slug>.py` numbered + idempotent). Reviewer flags
+  the shape delta when adopters use the pattern already but
+  drift away from it.
+
+### Added — `tests/test_loose_ends_v0_49.sh` (26 wiring cases)
+
+- e2e-runner has v0.49.0 self-grade prohibition + names two
+  execution-specific rules.
+- tdd-guide has v0.49.0 identity note + explicitly calls itself
+  state-machine gate not reviewer.
+- Zero agents carry `memory:` frontmatter.
+- `_gate-contract.md` has Section 0 + documents `memory:`
+  removal.
+- database-reviewer has API contract section + 6 rules named +
+  all schema-pattern-conformant.
+- database-reviewer has Seed-data section + 4 rules named.
+- database-reviewer cites schemathesis + `api-contract-check.sh`
+  as complementary tools.
+
+### Alignment
+
+- All 39 test scripts + `pe docs check` green at v0.49.0.
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps;
+  README badge synced.
+- `docs/ENHANCEMENT_PLAN_V2.md` Loose-ends section rewritten
+  to name each item SHIPPED with the resolution shape.
+- `docs/HANDOFF.md`: v0.49.0 header + Loose-ends row + adopter
+  re-install note (contract/docs only) + "Not started yet" now
+  says "none from the shipped V2 plan" + V2 COMPLETE marker.
+- MANIFEST.sha256 regenerated. **Twenty-eight V2 items shipped,
+  ZERO PARTIAL, ZERO Loose-ends. V2 IS COMPLETE.**
+
+### Notes — deliberately out of scope
+
+- **Envelope-shape validation for the new 10 finding rules.**
+  All 10 rules pattern-conform to `^[a-z0-9][a-z0-9-]*$`
+  (verified in the test); no schema change needed. No fixtures
+  seeded because these are shape checks, not evaluation cases —
+  the wiring test is the load-bearing check.
+- **schemathesis integration template.** `database-reviewer.md`
+  documents schemathesis as an adopter-installed complement but
+  ships no template. YAGNI until an adopter needs it; the
+  reviewer's judgment layer is sufficient without schemathesis
+  as a hard requirement.
+- **Seed template files.** The seed convention documents the
+  canonical directory shape but ships no starter seeds — every
+  project's tenant / user / billing shape is different. Deferred
+  to project scaffolding (`pe new`) if adopters need it.
+- **Historical `memory:` values were not preserved.** The
+  removed values (`memory: project` etc.) had no consumer, so
+  no restoration path is needed. Any operator relying on the
+  value in external tooling should re-source it from a
+  documented location.
+
+### Migration
+
+- No breaking CLI changes. Adopters see zero behavior change on
+  the tooling side. Agents using tdd-guide / e2e-runner / database-
+  reviewer get the clarified language + new coverage on their
+  next invocation. Frontmatter cleanup is invisible unless a
+  script was reading `memory:` from an agent file (none in the
+  engine tree).
+
+---
+
 ## [0.48.0] — 2026-07-09
 
 > **A9.5 shipped — OWASP payload catalogue.** The last A-row
