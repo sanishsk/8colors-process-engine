@@ -6,10 +6,11 @@
 set -euo pipefail
 
 ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+. "$(dirname "$0")/_py.sh"
 
 if ! command -v python3 >/dev/null 2>&1; then
     echo "SKIP: python3 not on PATH (P2.11 tests require Python 3.11+)" >&2
     exit 0
 fi
 
-python3 "$ENGINE_DIR/tests/test_p2_11_python_hygiene.py"
+"$PY" "$ENGINE_DIR/tests/test_p2_11_python_hygiene.py"

@@ -7,6 +7,139 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.50.0] — 2026-07-10
+
+> **ENGINE_360 close-out.** The v0.45.0 360° review's fix-list had
+> five actionable items (I1–I5) plus two structural gaps (G1, G2).
+> Between-sessions operator work + this release close everything
+> except the runtime BOLA gate (external ai-testing-agent slot).
+> **All engine-side ENGINE_360 items done.**
+
+### Between-sessions operator work (folded into this release)
+
+- **I1 engine self-gating** — new `.pre-commit-config.yaml` at engine
+  root wires the engine's own deterministic gates (secrets / SAST /
+  complexity / duplication / size) onto engine commits. Activation:
+  `pip install pre-commit && pre-commit install`. LLM code-review
+  stays a documented manual pre-merge step.
+- **G1 `pe audit` (lazy MVP)** — new `pe audit [--screens-only]`
+  subcommand runs every deterministic gate across the WHOLE repo via
+  `pre-commit run --all-files` (closes the forward-only gap for
+  existing code) and prints the ready `pe agent run design-critic /
+  security-reviewer` sweep commands over existing files (opt-in —
+  agent sweeps cost tokens, so printed not auto-run). New
+  `tests/test_audit.sh` covers the smoke path. Insight: full-repo
+  deterministic audit was already achievable via
+  `pre-commit run --all-files` once the repo has
+  `.pre-commit-config.yaml` — `pe audit` wraps + documents that path
+  and adds the agent-sweep guidance.
+- **I4 fixture header cleanup** — the two in-progress A9.3/A9.4
+  fixture `input.md` files (`fail-escalate-perceptual-regression`,
+  `fail-escalate-query-scale-under-load`) now use `# <slug>` H1
+  format matching `test_gate_efficacy.sh` shape rule.
+- **Python resolver harness** — new `tests/_py.sh` mirrors
+  `scripts/pe`'s Python ≥3.11 probe. `test_a4_cli.sh` and
+  `test_p2_11_python_hygiene.sh` source it, resolving the two
+  "environmental" reds on stock macOS Python 3.9.
+
+### Added — I2 gate-efficacy primary-rule assertions
+
+- **SHAPE mode** now extracts `findings[0].rule` from every
+  `expected-envelope.json` and asserts it's non-empty AND
+  pattern-conforms to `^[a-z0-9][a-z0-9-]*$` (the schema's rule
+  pattern). This catches the dotted-name class BEFORE it lands in
+  the live corpus — the class v0.46.0 (`d1.reference_drift`,
+  `d1.ai_aesthetic_rubric.tells_exceeded`, `a9.3.*`) and v0.47.0
+  (`a9.4.*` in template comments) reviewers hit. Absence of
+  `findings[]` (clean pass fixtures) is silent.
+- **LIVE mode** now compares emitted vs expected `findings[0].rule`
+  after each agent run. Mismatch surfaces as an advisory WARN to
+  stderr — does NOT fail the test (a gate can legitimately pick a
+  different primary from a ranked findings list), but the precision
+  signal is now visible for weekly review. This is the
+  precision/recall measurement path the review flagged as missing.
+- `tests/test_gate_efficacy.sh` now sources `_py.sh` for the Python
+  ≥3.11 requirement of the JSON extractors.
+
+### Added — G2 honesty statement in security-reviewer
+
+- **New coverage-boundary block** at the top of
+  `agents/security-reviewer.md` documenting what the engine's
+  static + dynamic security layers do NOT auto-verify:
+  - **BOLA / IDOR / object-ownership** — SAST can't see ownership
+    logic; needs multi-user orchestration.
+  - **Rate-limit / anti-abuse enforcement** — checklist item today,
+    no detector.
+  - **Business-logic correctness** — state machines, idempotency,
+    race conditions; human-review only.
+  - **Model-DoS via token exhaustion** — no per-org token quota
+    ledger.
+- Reviewer emits an informational LOW-severity finding with rule
+  `security-coverage-boundary` on **every** review of paths matching
+  `auth/`, `payment/`, `webhook/`, or multi-tenant modules. The
+  finding does not fail the verdict; it's the audit-trail entry
+  that says "human review REQUIRED on this path."
+- Cites `docs/ENGINE_360_REVIEW.md` §G2 for the full boundary
+  documentation.
+
+### Added — `tests/test_engine_360_closeout_v0_50.sh` (15 wiring cases)
+
+- `test_gate_efficacy.sh` sources `_py.sh` + has I2 primary-rule
+  pattern check + asserts schema pattern + has LIVE-mode drift metric.
+- Shape-mode gate-efficacy passes with all I2 checks active.
+- `security-reviewer.md` has G2 honesty statement block + names the
+  `security-coverage-boundary` rule + rule pattern-conforms.
+- G2 statement anchors present (BOLA / IDOR, rate-limit,
+  business-logic, model-DoS, review REQUIRED).
+- `ENGINE_360_REVIEW.md` notes I2 shipped + G2 honesty statement.
+
+### Modified — `docs/ENGINE_360_REVIEW.md`
+
+- New "STATUS UPDATE 2026-07-10 (v0.50.0 close-out)" block at top
+  documents I2 shipped + G2 honesty statement shipped + the
+  all-actionable-items-shipped milestone. The prior 2026-07-05 fix-
+  pass block is preserved as history.
+
+### Alignment
+
+- All 40 test scripts + `pe docs check` green at v0.50.0.
+  Gate-efficacy shape mode = 26/26 with new primary-rule
+  pattern-conformance check on every fixture.
+- `plugin.json` + `.claude-plugin/plugin.json` version bumps;
+  README badge synced.
+- `docs/HANDOFF.md`: v0.50.0 header + ENGINE_360 close-out row.
+- MANIFEST.sha256 regenerated.
+
+### Notes — deliberately out of scope
+
+- **G2 runtime BOLA gate** — the multi-user object-ownership PROOF
+  (agent journeys: user-A token vs user-B object → expect 403) needs
+  a dedicated slot in the ai-testing-agent repo. Out of engine scope
+  by design; documented in `docs/ENGINE_360_REVIEW.md` §G2 as the
+  only remaining gap.
+- **I3 (A4 → `.claude/gates/` persistence)** — DEFERRED (v0.45.0
+  status block). Low value: A4 auto-execute is rarely the commit
+  path; loop surgery isn't worth the risk.
+- **I5 (`pe verify` covers `.claude/gates/*.json`)** — WONTFIX.
+  Verdict records are per-commit runtime artefacts, not code
+  artefacts; a poisoned verdict is caught by re-running the gate,
+  not by checksum.
+- **G1 `--run-agents` polish** — auto-invoke the design-critic /
+  security-reviewer sweeps from `pe audit`. Deliberately deferred:
+  agent sweeps cost real tokens; operator opt-in should stay
+  explicit until adopter demand surfaces.
+
+### Migration
+
+- No breaking CLI changes. New `pe audit` subcommand is opt-in;
+  legacy `pe` behavior unchanged. Adopters using the security-
+  reviewer will see the new `security-coverage-boundary` LOW
+  finding on relevant paths — informational, does not fail verdict.
+  Gate-efficacy's new primary-rule assertions run automatically on
+  every fixture; existing fixtures already pass.
+
+---
+
 ## [0.49.0] — 2026-07-09
 
 > **Loose-ends bundle — V2 IS COMPLETE.** The plan's Loose-ends

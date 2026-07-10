@@ -1,5 +1,59 @@
 # Engine 360° Review — v0.45.0 (2026-07-05)
 
+> **STATUS UPDATE 2026-07-10 (v0.50.0 close-out):**
+> - ✅ **I2 (v0.50.0) shipped.** Gate-efficacy SHAPE mode now asserts
+>   `findings[0].rule` conforms to schema pattern `^[a-z0-9][a-z0-9-]*$`
+>   for every fixture — catches the dotted-name class before it lands
+>   in the live corpus (the class v0.46.0 and v0.47.0 reviewers hit).
+>   LIVE mode adds a primary-rule drift metric: when the emitted
+>   agent envelope's `findings[0].rule` differs from the expected
+>   fixture rule, an advisory WARN is surfaced (does NOT fail the
+>   test — a gate can legitimately pick a different primary from a
+>   ranked findings list). Live-mode gate-efficacy = precision/recall
+>   is now truly measurable.
+> - ✅ **G2 honesty statement shipped.** `agents/security-reviewer.md`
+>   now carries an explicit coverage-boundary block. On every review
+>   of `auth/`, `payment/`, `webhook/`, or multi-tenant paths, the
+>   reviewer emits a LOW-severity `security-coverage-boundary`
+>   finding naming the four classes NOT auto-verified (BOLA / IDOR,
+>   rate-limit/anti-abuse, business-logic correctness, model-DoS via
+>   token exhaustion) and explicitly states "human review REQUIRED
+>   on this path." Runtime BOLA multi-user proof still needs a
+>   dedicated slot in the ai-testing-agent (out of engine scope);
+>   the honesty statement closes the credibility gap in the interim.
+> - 🎯 **All actionable ENGINE_360 items now shipped.** I1/I2/I4 done;
+>   I3/I5 explicitly WONTFIX/DEFERRED with rationale; G1 lazy-MVP
+>   shipped (`pe audit`); G2 half runtime, half honesty statement.
+>   The G2 runtime BOLA gate is the only remaining item — external
+>   dependency on the ai-testing-agent for multi-user journey slots.
+>
+> **STATUS UPDATE 2026-07-05 (fix pass):**
+> - ✅ **Test suite now 37/0 green.** I4 fixture headers fixed (2 fixtures → `# <slug>`);
+>   the 2 "environmental" reds (a4_cli, p2_11 under stock py3.9) fixed at root via new
+>   `tests/_py.sh` interpreter resolver (mirrors `pe`'s py≥3.11 probe; BSD-sed-safe swap).
+> - ✅ **I1 self-gating done** — engine now has `.pre-commit-config.yaml` running its own
+>   deterministic gates (secrets/SAST/complexity/duplication/size). Activate once:
+>   `pip install pre-commit && pre-commit install`. LLM code-review-per-commit stays a
+>   documented manual pre-merge step (impractical to auto-run).
+> - ⏸️ **I3 (A4→.claude/gates persist) DEFERRED** — low value (A4 auto-execute is rarely the
+>   commit path); the write path is `pe gate parse --record`, but loop surgery isn't worth
+>   the risk. `ponytail:` re-evaluate only if a real trailer-resolution miss is observed.
+> - ⏹️ **I5 (pe verify covers .claude/gates) = WONTFIX** — `.claude/gates/*.json` are per-commit
+>   runtime verdicts, not code artifacts; a poisoned verdict is caught by re-running the gate,
+>   not by checksum. Out of supply-chain scope by design.
+> - ✅ **G1 shipped (lazy MVP)** — new `pe audit [--screens-only]`: runs every deterministic
+>   gate across the WHOLE repo via `pre-commit run --all-files` (closes the forward-only gap for
+>   existing code), and prints the ready `pe agent run design-critic/security-reviewer` sweep
+>   commands over existing files (opt-in — agent sweeps cost tokens, so printed not auto-run).
+>   `tests/test_audit.sh` green; help updated. The insight: the deterministic full-repo audit was
+>   already achievable via `pre-commit run --all-files` once the repo has `.pre-commit-config.yaml`
+>   — `pe audit` wraps + documents it and adds the agent-sweep guidance. *Remaining polish:* auto-run
+>   the design-critic sweep behind an explicit `--run-agents` flag (deliberately deferred — cost).
+> - 🔨 **G2-runtime BOLA remains — a FEATURE, not a fix.** Static half shipped (A9.5 payloads +
+>   IDOR checklist); the runtime multi-user object-ownership PROOF (agent journeys: user-A token
+>   vs user-B object → expect 403) needs its own slot in the ai-testing-agent. Only genuine gap left.
+
+
 > End-to-end validation before pivoting the engine at real projects. Three parallel
 > audits (retroactive-coverage, security-completeness, standards/correctness) +
 > direct verification. **This is the fix-list for next session** — work top-down.

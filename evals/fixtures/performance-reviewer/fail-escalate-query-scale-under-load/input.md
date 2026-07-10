@@ -1,4 +1,5 @@
-# Performance-reviewer fixture — fail-escalate-query-scale-under-load (A9.4, v0.47.0)
+# fail-escalate-query-scale-under-load
+<!-- Performance-reviewer fixture (A9.4, v0.47.0) -->
 
 ## Scenario
 

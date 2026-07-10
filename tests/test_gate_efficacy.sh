@@ -36,6 +36,8 @@ set -uo pipefail
 
 SCRIPT_DIR=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ENGINE_DIR=$(cd -P "$SCRIPT_DIR/.." && pwd)
+# Load $PY resolver (I2 v0.50.0: primary-rule assertions need Python ≥3.11).
+. "$SCRIPT_DIR/_py.sh"
 PE="$ENGINE_DIR/scripts/pe"
 CORPUS="$ENGINE_DIR/evals/fixtures"
 
@@ -244,6 +246,32 @@ for gate_dir in "$CORPUS"/*/; do
             else
                 record_pass "$gate_name/$fixture_name [$corpus_kind] (exit=$actual)"
             fi
+
+            # I2 (v0.50.0) — primary-rule correctness. For any fixture with
+            # findings[], assert findings[0].rule is non-empty AND matches the
+            # schema pattern `^[a-z0-9][a-z0-9-]*$`. Catches the dotted-name
+            # class the v0.46.0/v0.47.0 reviewers hit BEFORE it lands in the
+            # live corpus. Absence of findings[] (e.g. clean pass fixtures) is
+            # silent.
+            primary_rule=$("$PY" -c "
+import json, sys
+try:
+    d = json.load(open('$envelope'))
+    findings = d.get('findings') or []
+    if findings:
+        r = findings[0].get('rule', '')
+        sys.stdout.write(r)
+except Exception:
+    pass
+" 2>/dev/null)
+            if [ -n "$primary_rule" ]; then
+                if echo "$primary_rule" | grep -qE '^[a-z0-9][a-z0-9-]*$'; then
+                    :  # good — pattern conforms
+                else
+                    record_fail "$gate_name/$fixture_name [$corpus_kind] — primary rule '$primary_rule' fails schema pattern ^[a-z0-9][a-z0-9-]*$"
+                fi
+            fi
+
             _emit_metric "$gate_name" "$fixture_name" "$expected" "$actual" "$corpus_kind" null null null null
         else
             # LIVE MODE — actually invoke the gate agent, compare emitted envelope.
@@ -284,6 +312,39 @@ for gate_dir in "$CORPUS"/*/; do
                 record_fail "$gate_name/$fixture_name [$corpus_kind] — emitted envelope exit=$emitted_exit, expected=$expected (verdict mismatch)"
             else
                 record_pass "$gate_name/$fixture_name [$corpus_kind] (live emitted=$emitted_exit)"
+            fi
+
+            # I2 (v0.50.0) — primary-rule precision. Compare emitted
+            # findings[0].rule against expected findings[0].rule. Records
+            # the match/miss as an advisory metric (does NOT fail the test)
+            # — a gate can legitimately pick a different primary from a
+            # ranked findings list. WARN-level surfacing keeps the signal
+            # visible for weekly precision review.
+            expected_rule=$("$PY" -c "
+import json, sys
+try:
+    d = json.load(open('$envelope'))
+    findings = d.get('findings') or []
+    if findings:
+        sys.stdout.write(findings[0].get('rule', ''))
+except Exception:
+    pass
+" 2>/dev/null)
+            emitted_rule=$("$PY" "$ENGINE_DIR/scripts/pe_gate.py" "$local_out" 2>/dev/null \
+                | "$PY" -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    findings = d.get('findings') or []
+    if findings:
+        sys.stdout.write(findings[0].get('rule', ''))
+except Exception:
+    pass
+" 2>/dev/null)
+            if [ -n "$expected_rule" ] && [ -n "$emitted_rule" ]; then
+                if [ "$expected_rule" != "$emitted_rule" ]; then
+                    echo "  ⚠ $gate_name/$fixture_name — primary rule drift: expected='$expected_rule' emitted='$emitted_rule' (advisory)" >&2
+                fi
             fi
             # L2 completion: capture trajectory metrics per fixture.
             read -r cost_cents duration_ms num_turns tool_calls <<< "$(_extract_run_metrics)"

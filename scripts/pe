@@ -57,6 +57,7 @@ SUBCOMMANDS
     sync <project>        Re-point project symlinks at current engine (diff-before-clobber)
     status                Show engine version, last commit, install paths
     doctor [<project>]    Diagnose install (broken symlinks, missing deps)
+    audit [--screens-only] Run gates across the WHOLE repo (not just staged) + agent-sweep cmds
     eject <project>       Remove engine-managed symlinks from a project (asks confirmation)
     baseline capture ...  Record a Phase 0 slot baseline (speed / size / quality)
     collect [<project>] [--window N] [--date YYYY-MM-DD]
@@ -1391,7 +1392,49 @@ EOF
     esac
 }
 
+# cmd_audit (G1) — run gates across the WHOLE repo, not just the staged diff.
+# Pre-commit hooks only see staged files, so existing debt is invisible until a
+# file is touched. `pe audit` closes that: deterministic gates via
+# `pre-commit run --all-files`, then the ready-to-run agent-sweep commands for
+# the taste/judgment gates (design-critic, security-reviewer) over EXISTING files.
+# ponytail: agent sweeps are printed, not auto-run — they cost tokens; operator
+# opts in. `--screens-only` limits to the design sweep.
+cmd_audit() {
+    local screens_only=0
+    [ "${1:-}" = "--screens-only" ] && screens_only=1
+    echo "═══ pe audit — full-repo, not just staged ═══"
+
+    if [ "$screens_only" = 0 ]; then
+        echo "── deterministic gates (all files) ──"
+        if command -v pre-commit >/dev/null 2>&1 && [ -f .pre-commit-config.yaml ]; then
+            pre-commit run --all-files || echo "  (findings above — advisory in audit mode)"
+        else
+            echo "  SKIP: needs pre-commit + .pre-commit-config.yaml."
+            echo "  Fix: pip install pre-commit  (config ships from \`pe install\`)."
+        fi
+    fi
+
+    # Agent sweeps — the taste/logic gates that no hook can do. Print commands +
+    # file counts; don't burn tokens without opt-in.
+    echo "── agent sweeps (existing files — opt-in, cost tokens) ──"
+    local ui
+    ui=$( { git ls-files 'templates/**' 'app/**' 'src/**' 2>/dev/null \
+            | grep -iE '\.(html|jsx|tsx|vue|svelte)$' || true; } | wc -l | tr -d ' ')
+    echo "  design-critic over $ui existing UI files (the '--all-screens' sweep):"
+    echo "    git ls-files | grep -iE '\\.(html|jsx|tsx|vue|svelte)\$' \\"
+    echo "      | while read f; do pe agent run design-critic --brief \"\$f\"; done"
+    if [ "$screens_only" = 0 ]; then
+        local routes
+        routes=$( { git ls-files 2>/dev/null | grep -iE 'route|view|api|controller' || true; } \
+                  | wc -l | tr -d ' ')
+        echo "  security-reviewer over $routes existing route/view files:"
+        echo "    (same loop with \`pe agent run security-reviewer\`)"
+    fi
+    echo "═══ audit done — deterministic findings above are real; agent sweeps are opt-in ═══"
+}
+
 case "$cmd" in
+    audit)      cmd_audit "$@" ;;
     install)    cmd_install "$@" ;;
     launchd)    cmd_launchd "$@" ;;
     upgrade)    cmd_upgrade "$@" ;;

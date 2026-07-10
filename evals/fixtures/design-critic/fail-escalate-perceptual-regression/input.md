@@ -1,4 +1,5 @@
-# Design-critic fixture — fail-escalate-perceptual-regression (A9.3, v0.46.0)
+# fail-escalate-perceptual-regression
+<!-- Design-critic fixture (A9.3, v0.46.0) -->
 
 ## Scenario
 

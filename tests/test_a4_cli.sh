@@ -11,6 +11,7 @@ set -uo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_DIR="$(cd "$SELF_DIR/.." && pwd)"
+. "$(dirname "$0")/_py.sh"
 PE="$ENGINE_DIR/scripts/pe"
 
 TMP=$(mktemp -d)
@@ -27,7 +28,7 @@ echo "test_a4_cli.sh — A4 CLI shape checks"
 echo ""
 
 # ─── 1. --auto-execute advertised ────────────────────────────────
-help_out=$(python3 "$ENGINE_DIR/scripts/pe_orchestrator.py" decide --help 2>&1)
+help_out=$("$PY" "$ENGINE_DIR/scripts/pe_orchestrator.py" decide --help 2>&1)
 if echo "$help_out" | grep -q -- "--auto-execute"; then
     record_pass "shadow decide --help lists --auto-execute"
 else
@@ -64,7 +65,7 @@ JSON
 
 # ─── 3. --auto-execute without --enforce → exit 2 ──────────────
 cd "$TMP"
-out=$(python3 "$ENGINE_DIR/scripts/pe_orchestrator.py" decide \
+out=$("$PY" "$ENGINE_DIR/scripts/pe_orchestrator.py" decide \
     --envelope env.json \
     --slot-id t \
     --iteration 1 \
@@ -80,7 +81,7 @@ else
 fi
 
 # ─── 4. --auto-execute without --agent → exit 2 ───────────────
-out=$(python3 "$ENGINE_DIR/scripts/pe_orchestrator.py" decide \
+out=$("$PY" "$ENGINE_DIR/scripts/pe_orchestrator.py" decide \
     --envelope env.json \
     --slot-id t \
     --iteration 1 \
@@ -96,7 +97,7 @@ else
 fi
 
 # ─── 5. shadow-only mode (no --auto-execute) still exits 0 ────
-out=$(python3 "$ENGINE_DIR/scripts/pe_orchestrator.py" decide \
+out=$("$PY" "$ENGINE_DIR/scripts/pe_orchestrator.py" decide \
     --envelope env.json \
     --slot-id t \
     --iteration 1 \

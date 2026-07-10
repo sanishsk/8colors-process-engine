@@ -1,0 +1,45 @@
+# Engine self-gating (I1) — the engine runs its OWN deterministic gates on its
+# own commits. Only the hooks that APPLY to engine code (Python + shell + docs)
+# are wired; design/motion/migration/api/boot hooks are N/A here (no UI/app).
+# The LLM code-review trailer is NOT auto-enforced on engine commits — engine
+# changes are reviewed pre-merge by hand (documented exemption; running an agent
+# per engine commit is impractical). ponytail: deterministic self-gate only.
+#
+# One-time:  pip install pre-commit && pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: secrets-scan
+        name: Scan staged files for secrets
+        entry: hooks/secrets-scan.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: sast-scan
+        name: SAST (semgrep/bandit on engine scripts)
+        entry: hooks/sast-scan.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: complexity-gate
+        name: Complexity + dead-code (ruff C901/PLR, xenon, vulture)
+        entry: hooks/complexity-gate.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: duplication-gate
+        name: Duplication ratchet (jscpd — must not raise baseline %)
+        entry: hooks/duplication-gate.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: size-budget
+        name: Net-LOC + per-file + per-function size budgets
+        entry: hooks/size-budget.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]

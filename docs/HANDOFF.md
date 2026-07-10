@@ -3,20 +3,21 @@
 > **Rolling doc — rewritten at each session end.** Read this at the top
 > of your next session (after `/start-session`) to orient in <2 minutes.
 >
-> **Last updated:** 2026-07-09 (v0.49.0 shipped — Loose-ends
-> cleanup, ALL 4 items. e2e-runner self-grade prohibition
-> hardened + 2 execution rules named + verdict mapping. tdd-guide
-> identity clarified — state-machine gate, not reviewer.
-> `memory:` frontmatter removed from 11 agents (no consumer);
-> `effort:` retained + documented in _gate-contract.md §Section 0
-> with full key/consumer table. database-reviewer gains
-> API-contract section (6 rules) + Seed-data convention section
-> (4 rules). **Twenty-eight V2 items shipped, ZERO PARTIAL,
-> ZERO Loose-ends. V2 IS COMPLETE.**)
+> **Last updated:** 2026-07-10 (v0.50.0 shipped — ENGINE_360
+> close-out bundle. Between-sessions operator work committed:
+> engine self-gating (.pre-commit-config.yaml), `pe audit`
+> full-repo subcommand (G1 lazy MVP), tests/_py.sh Python
+> resolver, fixture header cleanup. This release ships the two
+> remaining items: I2 gate-efficacy primary-rule assertions
+> (SHAPE mode = pattern conformance; LIVE mode = drift metric)
+> + G2 honesty statement in security-reviewer (explicit
+> coverage-boundary disclaimer with `security-coverage-boundary`
+> finding on auth/payment/webhook/tenant paths). Only remaining
+> engine gap: G2 runtime BOLA (external ai-testing-agent slot).)
 
 ---
 
-## Current state — v0.49.0 (`2cd6cf9` → `<v0.49.0 sha>` this session)
+## Current state — v0.50.0 (`c86a575` → `<v0.50.0 sha>` this session)
 
 **V2 progress against `docs/ENHANCEMENT_PLAN_V2.md`:**
 
@@ -62,6 +63,7 @@
 | A9.4 resilience-under-load wiring (performance-reviewer §A9.4 workflow + 4-band verdict ladder + 6 finding rules + PF1-hook-on-chaos-runner via measure_queries + 5 process-engine.yaml knobs + fixture) | ✅ SHIPPED | v0.47.0 |
 | A9.5 OWASP payload catalogue (13 payload lists mapped to OWASP API Top 10 2023 + security-reviewer §Step 2 coverage rule + auth-robustness template demo + README documents split with SAST) | ✅ SHIPPED | v0.48.0 |
 | Loose-ends cleanup — e2e-runner self-grade hardened + tdd-guide identity clarified + memory: frontmatter removed from 11 agents + database-reviewer gains API-contract (6 rules) + Seed-data convention (4 rules) sections | ✅ SHIPPED | v0.49.0 |
+| ENGINE_360 close-out — engine self-gating (I1) + pe audit full-repo (G1 lazy MVP) + fixture header cleanup (I4) + I2 gate-efficacy primary-rule assertions + G2 honesty statement in security-reviewer | ✅ SHIPPED | v0.50.0 |
 
 **PARTIAL count: 0** — v0.42.0 closed the A4 loop; v0.44.0
 closed the §9 watchpoint on the escalation ladder with live-
