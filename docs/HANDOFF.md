@@ -82,6 +82,24 @@ V3 plan.
 
 ## 🔴 RESUME HERE — first action next session
 
+0. **NEW (operator decision 2026-07-12): functional-journey program is queued
+   FIRST, ahead of the Kadha/UX plans.** Full plan: `docs/FUNCTIONAL_JOURNEYS_PLAN.md`
+   (validation of ai-testing-agent + A9 wiring + 8CStudio deploy gates → F1–F7 slots).
+   Product-repo slots F1–F3 (seeded E2E tenant, journey suite v1
+   J1/J2/J4/J10, deploy-gate wiring) = 8CStudio BACKLOG **#238** — one focused
+   week, staging-side, does not conflict with #227. **Engine-side work queued
+   here: F4 `journey-coverage` pre-commit gate** (`.process-engine.yaml`
+   `journeys:` module→suite map + `Journey-impact:` trailer escape hatch) and
+   **F5 e2e-runner journey-draft mode + `/check <module>` command** (wraps the
+   testing-agent's `test_intent` MCP tool). F7 updates TESTING_TOPOLOGY.md +
+   brief template + tdd-guide checklist. This closes the known gap: A9 wired
+   review-time checks, but nothing enforces or runs FUNCTIONAL journeys, and
+   no gate requires new features to add E2E coverage.
+   Related planning docs registered in 8CStudio (BACKLOG #239/#240):
+   `KADHA_PLATFORM_MASTER_PLAN.md` + `KADHA_UX_BENCHMARK_REDESIGN_PLAN.md` —
+   engine touchpoints there: KU-1 feeds design-critic D5/D7 aspirational
+   references; KU-0 conventions become design-lint rules.
+
 1. **Adopters need to be re-installed at v0.49.0** —
    contract/documentation-only release. No new hooks or runtime
    binaries. Agents/e2e-runner, agents/tdd-guide,
