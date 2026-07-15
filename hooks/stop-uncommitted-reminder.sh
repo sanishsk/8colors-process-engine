@@ -37,9 +37,10 @@ COUNT=$(git -C "$PROJECT_ROOT" status --porcelain 2>/dev/null | wc -l | tr -d ' 
 MSG="Session wrap: $COUNT uncommitted change(s) in this repo. Consider \`/end-session\` to close out cleanly, or commit + push if this work is ready."
 
 # Advisory Stop response — Claude sees this as guidance, does not block turn end.
+# Stop-hook schema has no "allow" decision; use systemMessage for advisory notes.
 "${PE_PYTHON:-python3}" -c '
 import json, sys
-print(json.dumps({"decision": "allow", "reason": sys.argv[1]}))
+print(json.dumps({"systemMessage": sys.argv[1]}))
 ' "$MSG" 2>/dev/null || echo "$MSG" >&2
 
 exit 0
