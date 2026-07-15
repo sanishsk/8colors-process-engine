@@ -133,6 +133,31 @@ pact are already integrated):
 **Do NOT add:** a second load tool (Locust is enough — the plan's k6 mention
 should defer to it), a second SAST (semgrep covers it), or a second fuzzer.
 
+## Functional journey layer (added 2026-07-14, #238 F7)
+
+The third coverage class alongside security and performance: **business-flow
+journeys** — multi-step, stateful API tests that codify the operator's manual
+post-fix checks (quote math → invoice, payments, hours, credit notes,
+expenses, the Kadha prep chain, tenant isolation). Division of labor follows
+the axis rule:
+
+- **Agent (dynamic/runtime):** `JourneyExecutor` runs the suites
+  (`<product>/tests/journeys/*.json`) against a live app with auto-auth.
+  Authoring gotchas + runner invocation: `8CStudio/tests/journeys/README.md`.
+- **Engine/product (commit-time/judgment):** the `journey-coverage`
+  commit-msg gate (product `scripts/devlog/hooks/check_journey_coverage.py` +
+  `tests/journeys/coverage-map.json`) forces every commit touching a mapped
+  business module to update a suite or state `Journey-impact:` on the record.
+  Deploy gate: `scripts/run_journeys.sh` + `manifest.json` blocking policy
+  (judged from results JSON — the agent CLI exits 0 even on failure).
+- **On demand:** the product `/check <module>` command replaces manual
+  clicking-through after a fix.
+
+Full program + status: `docs/FUNCTIONAL_JOURNEYS_PLAN.md`. Deviation from the
+original plan recorded there: the module→suite map lives in
+`tests/journeys/coverage-map.json` (product-owned sidecar), not
+`.process-engine.yaml`.
+
 ## The one-line policy
 
 > **Static & commit-time & judgment → engine. Dynamic & runtime & execution →

@@ -123,6 +123,14 @@ Steps:
 
 Exit condition: coverage ≥ 80% for touched paths.
 
+**Functional-journey check (#238 F7):** if the project has
+`tests/journeys/coverage-map.json` and the touched paths match a mapped
+prefix, unit/integration coverage alone does not close the loop — either
+update the covering journey suite in the same change or state the impact
+explicitly (the commit will require a `Journey-impact:` trailer). Business
+outcomes (totals, state machines, cross-module rollups) are asserted at the
+journey layer, not just in unit tests.
+
 ## Edge cases you MUST test (Phase 1)
 
 1. Null / undefined / missing input
