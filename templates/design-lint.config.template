@@ -15,6 +15,20 @@
 #     backdrop-blur — the AI-look tells).
 #   * Optional color hex allowlist — anything outside is WARN
 #     (or FAIL under design_lint.strict=true).
+#
+# PER-THEME strict override (P5.3):
+#   Each theme MAY set `strict: true|false`, overriding the global
+#   design_lint.strict flag for that theme's files:
+#     * unset  → legacy: forbidden fragments/inline always FAIL;
+#                color/spacing/radius/shadow follow the global flag.
+#     * true   → everything (incl. forbidden/inline) FAILs — use for a
+#                greenfield "born-clean" scope you want hard-gated.
+#     * false  → everything WARNs (commit proceeds) — use for a known-
+#                legacy scope you want to surface drift on without blocking
+#                during a migration.
+#   NOTE: list/regex values must avoid backslash escapes (use plain
+#   substrings like `cyan-`) so the stdlib fallback parser (no PyYAML)
+#   and the PyYAML path agree.
 
 themes:
   # ─── Example: dark studio-facing shell ─────────────────────────────
@@ -22,6 +36,7 @@ themes:
     path_patterns:
       - "^app/(?:admin|studio|internal)/"
       - "^templates/studio/"
+    # strict: false     # surface drift, don't block (mid-migration)
     # Add project-specific forbidden fragments here:
     forbid_class_fragments:
       - "\\brainbow-\\w+"
@@ -41,6 +56,7 @@ themes:
     path_patterns:
       - "^app/(?:gallery|deliver|client)/"
       - "^templates/delivery/"
+    # strict: true      # greenfield client-facing scope — hard-gate all drift
     forbid_class_fragments:
       - "\\bshadow-\\w+-glow"    # different vibe — no glows
     forbid_inline_regex: []
