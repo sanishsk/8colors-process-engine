@@ -121,6 +121,74 @@ default_forbidden_inline = [
 ]
 
 # ─── Load per-theme config if present ────────────────────────────
+def _scalar(v: str):
+    v = v.strip()
+    # Strip a trailing inline comment (quote-aware): keep a `#` that is inside
+    # a quoted value (e.g. "#f6f3ee"), drop a real ` # comment` after the value.
+    if v and v[0] in "\"'":
+        end = v.find(v[0], 1)
+        if end != -1:
+            v = v[:end + 1]
+    else:
+        i = v.find(" #")
+        if i != -1:
+            v = v[:i].strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+        v = v[1:-1]
+    low = v.lower()
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    return v
+
+def _fallback_parse(text: str) -> dict:
+    """Parse the `.design-lint.yaml` subset without PyYAML.
+
+    Supports: `themes:` → theme names (indent 2) → per-theme scalar keys
+    (`strict: false`) and list keys (`path_patterns:` / `color_tokens:` /
+    `forbid_*:` followed by `- item` lines). 2-space indentation, the shape
+    the shipped template uses. Booleans and quotes are coerced so behavior
+    matches the PyYAML path. Regex/token values MUST avoid backslash escapes
+    (use plain substrings like `cyan-`) so both parsers agree.
+    """
+    cfg = {"themes": {}}
+    themes_map = cfg["themes"]
+    cur_theme = None
+    cur_list = None
+    in_themes = False
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        s = raw.strip()
+        if indent == 0:
+            in_themes = s.rstrip() == "themes:"
+            cur_theme = cur_list = None
+            continue
+        if not in_themes:
+            continue
+        if s.startswith("- "):
+            if cur_theme is not None and cur_list is not None:
+                themes_map[cur_theme].setdefault(cur_list, []).append(_scalar(s[2:]))
+            continue
+        if indent <= 2:  # theme name
+            cur_theme = s[:-1] if s.endswith(":") else s
+            themes_map[cur_theme] = {}
+            cur_list = None
+            continue
+        # indent >= 4: a key under the current theme
+        if ":" in s:
+            k, _, v = s.partition(":")
+            k, v = k.strip(), v.strip()
+            if v in ("", "[]"):
+                themes_map[cur_theme][k] = []
+                cur_list = k
+            else:
+                themes_map[cur_theme][k] = _scalar(v)
+                cur_list = None
+    return cfg
+
 themes = {}
 default_theme_key = "_default"
 if Path(config_path).exists():
@@ -129,16 +197,7 @@ if Path(config_path).exists():
         with open(config_path) as f:
             cfg = yaml.safe_load(f) or {}
     except ImportError:
-        # PyYAML not installed — parse a minimal subset manually.
-        cfg = {}
-        cur = None
-        for line in Path(config_path).read_text().splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            if not line.startswith(" ") and stripped.endswith(":"):
-                cur = stripped[:-1]
-                cfg[cur] = {}
+        cfg = _fallback_parse(Path(config_path).read_text())
     themes = (cfg.get("themes") or {}) if isinstance(cfg, dict) else {}
     if not themes and isinstance(cfg, dict):
         themes = {default_theme_key: cfg}
@@ -163,6 +222,21 @@ for f in files:
     text = p.read_text(encoding="utf-8", errors="replace")
     theme_name, spec = theme_for(str(p))
 
+    # Per-theme strict override (P5.3 multi-theme enforcement).
+    #   theme.strict unset  → legacy behavior: forbidden always FAIL,
+    #                         color/spacing follow the global strict flag.
+    #   theme.strict: true  → everything FAIL (born-clean scope).
+    #   theme.strict: false → everything (incl. forbidden/inline) WARN,
+    #                         so a known-legacy scope surfaces drift
+    #                         without blocking commits.
+    theme_strict = spec.get("strict") if isinstance(spec, dict) else None
+    if theme_strict is None:
+        eff_strict = strict
+        forbidden_fail = True
+    else:
+        eff_strict = bool(theme_strict)
+        forbidden_fail = bool(theme_strict)
+
     forbidden_class = list(default_forbidden_class_frags)
     forbidden_class += list((spec.get("forbid_class_fragments") or []))
     forbidden_inline = list(default_forbidden_inline)
@@ -170,22 +244,29 @@ for f in files:
     color_allowlist = set((spec.get("color_tokens") or []))
     color_check = bool(color_allowlist)
 
+    _lvl = "FAIL" if forbidden_fail else "WARN"
     for pat in forbidden_inline:
         for m in re.finditer(pat, text):
             line = text[:m.start()].count("\n") + 1
-            print(f"[design-lint] FAIL {p}:{line} theme={theme_name} forbidden inline: {m.group(0)[:80]}", file=sys.stderr)
-            fail += 1
+            print(f"[design-lint] {_lvl} {p}:{line} theme={theme_name} forbidden inline: {m.group(0)[:80]}", file=sys.stderr)
+            if forbidden_fail:
+                fail += 1
+            else:
+                warn += 1
     for pat in forbidden_class:
         for m in re.finditer(pat, text):
             line = text[:m.start()].count("\n") + 1
-            print(f"[design-lint] FAIL {p}:{line} theme={theme_name} forbidden class fragment: {m.group(0)}", file=sys.stderr)
-            fail += 1
+            print(f"[design-lint] {_lvl} {p}:{line} theme={theme_name} forbidden class fragment: {m.group(0)}", file=sys.stderr)
+            if forbidden_fail:
+                fail += 1
+            else:
+                warn += 1
     if color_check:
         for m in re.finditer(r"#([0-9a-fA-F]{3,8})\b", text):
             token = "#" + m.group(1).lower()
             if token not in color_allowlist:
                 line = text[:m.start()].count("\n") + 1
-                if strict:
+                if eff_strict:
                     print(f"[design-lint] FAIL {p}:{line} theme={theme_name} color {token} not in allowlist", file=sys.stderr)
                     fail += 1
                 else:
@@ -209,7 +290,7 @@ for f in files:
                 continue
             line = text[:m.start()].count("\n") + 1
             frag = m.group(0)
-            if strict:
+            if eff_strict:
                 print(f"[design-lint] FAIL {p}:{line} theme={theme_name} {human} {frag} not in allowlist", file=sys.stderr)
                 f += 1
             else:
