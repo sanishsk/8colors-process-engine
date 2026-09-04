@@ -29,7 +29,15 @@ THRESHOLD="${ENGINE_REVIEW_THRESHOLD:-5}"
 BEHAVIOR_RE="${ENGINE_REVIEW_BEHAVIOR_PATHS:-^(src|app|modules|lib|scripts|hooks)/}"
 
 STAGED=$(git diff --cached --name-only)
-NUM_FILES=$(echo "$STAGED" | grep -c . || echo 0)
+# `grep -c` ALWAYS prints a count, and exits 1 when that count is zero.
+# `|| echo 0` therefore appends a SECOND line on the empty-staged path, so
+# NUM_FILES becomes "0\n0" and the `-lt` test below dies with
+#   [: 0\n0: integer expression expected
+# — the threshold fast-path is skipped and a zero-file commit is asked for
+# an envelope sha. Same family as the pipefail bug above: a fallback bolted
+# onto a command that had already answered. `|| true` swallows the exit
+# status without adding output.
+NUM_FILES=$(printf '%s' "$STAGED" | grep -c . || true)
 
 BEHAVIOR_HITS=$(echo "$STAGED" | grep -E "$BEHAVIOR_RE" || true)
 HAS_BEHAVIOR="0"

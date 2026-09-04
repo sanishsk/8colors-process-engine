@@ -120,7 +120,11 @@ for f in $STAGED; do
     esac
 
     if [ "$enforce_file" -eq 1 ]; then
-        lines="$(wc -l < "$f" 2>/dev/null | tr -d ' ' || echo 0)"
+        # `tr` succeeds even when `wc` failed, so the old `|| echo 0`
+        # could never fire; an unreadable file yielded "" and the `-gt`
+        # below errored. Default after the fact instead.
+        lines="$(wc -l < "$f" 2>/dev/null | tr -d ' ')"
+        lines="${lines:-0}"
         if [ "$lines" -gt "$max_file" ]; then
             echo "[size-budget] FAIL: $f is $lines lines (max_file_lines=$max_file)" >&2
             fail=1

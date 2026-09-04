@@ -7,6 +7,63 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.4] — 2026-09-04
+
+### Fixed — a counter that answered twice, and a help screen that ran a subprocess
+
+Found by the adoption audit (`docs/ADOPTION_AUDIT.md`), by executing every
+hook against a fixture rather than reading it.
+
+**`code-review-trailer.sh` skipped its own threshold check.** The staged-file
+counter was `$(... | grep -c . || echo 0)`. `grep -c` always prints a count
+and exits 1 when that count is zero, so on an empty staged set the fallback
+appended a *second* line: `NUM_FILES` became `"0\n0"`, and
+
+    [ "$NUM_FILES" -lt "$THRESHOLD" ]
+
+died with `[: 0\n0: integer expression expected`. `[` returning 2 inside an
+`if` does not trip `set -e`, so the fast path was simply skipped and a
+zero-file commit was asked for an envelope sha — with a shell error on stderr
+where a non-zero exit hid it. This is the same shape as 0.51.2's pipefail bug,
+in the same file: a fallback bolted onto a command that had already answered.
+
+The same `|| echo 0` idiom was at two more sites — `design-review-trailer.sh`
+and `ponytail-preflight.sh`. Both are currently unreachable behind an emptiness
+guard, so neither had misbehaved; both are corrected anyway, because the guard
+is one edit away from being removed. `size-budget.sh` had the mirror defect: a
+`|| echo 0` after a pipeline whose last stage always succeeds, so the fallback
+could never fire and an unreadable file yielded `""` into a `-gt` test.
+
+**`pe help` executed `claude -p`.** Line 72 of `scripts/pe` carried an
+unescaped backtick pair inside an unquoted heredoc, so every `pe help`,
+`pe --help` and bare `pe` forked a `claude -p` subprocess, printed its usage
+error to stderr, and rendered the line as `Invoke an engine agent headlessly
+via ` with the command missing. Every other backtick in the file's twenty
+heredocs was already escaped; this one was not.
+
+### Fixed — the version bump checklist was followed halfway, four times
+
+`VERSION` read 0.51.3 while `plugin.json`, `.claude-plugin/plugin.json` and
+the README badge all read 0.50.0 — steps 2 and 3 of CONTRIBUTING's bump
+checklist skipped on 0.51.0, .1, .2 and .3. `tests/test_pe_pin.sh` asserts
+this alignment and had been red the whole time. Nothing runs it.
+
+### Changed
+
+- `tests/test_trailer_pipefail.sh` now drives the hooks inside a throwaway
+  fixture repo with a staged set and a resolvable gate record. It previously
+  ran them in whatever directory the suite was launched from, so its
+  assertions depended on the engine repo's own staging area — which is why
+  it passed only while the counter was broken. Adds a check that no trailer
+  hook emits a shell diagnostic on an empty staged set: verified red against
+  the old counter, green against the new one.
+
+**Value bar:** V1 — `code-review-trailer` mis-gated and `pe help` forked a
+subprocess, both reproducible at HEAD; two of the engine's own tests
+(`test_trailer_pipefail`, `test_pe_pin`) were red at HEAD and nothing ran them.
+
+---
+
 ## [0.51.3] — 2026-09-04
 
 ### Fixed — the A3 contract named a command that does not exist
