@@ -206,7 +206,7 @@ Fifteen fixed, one deliberately not.
 | 13 | `pe doctor --json` was advertised by `pe_doctor.py --help` and rejected by the CLI | V3 | fixed 0.51.6 |
 | 14 | `perf-gate`'s path regex anchored `/models?/`, `/db/`, `/orm/`, `/repositor`, `/schema\.py` with a leading slash, so a repo-root `models/user.py` did not match. The two 8colors projects that would trip it both use a top-level `models/` — the gate was off for the layout it was written for. | V3 | fixed 0.51.7 |
 | 15 | `pe gate parse --record` printed a well-formed envelope on stdout, then exited 4 without writing, with the reason on stderr | V1 | fixed 0.51.7 |
-| 16 | `--record` writes one fixed filename, so a project has a one-slot gate history — while `scripts/dev-log-collect.sh`, shipped by this engine, globs the directory and reported "0 gate verdicts" for a day with three reviews | V4 | **open, see below** |
+| 16 | `--record` writes one fixed filename, so a project has a one-slot gate history — while `scripts/dev-log-collect.sh`, shipped by this engine, globs the directory and reported "0 gate verdicts" for a day with three reviews | V4 | fixed 0.52.0, see below |
 | 17 | `docs/AGENT_INVOCATION_RULES.md` said the envelope orchestrator was "Phase 3 — not wired yet". It graduated 2026-06-28. The same block said E1 ships one reference emitter (seven agents emit it) and named four agents that "will adopt the envelope in follow-up slot E1.1", which shipped. | V3 | fixed 0.51.9 |
 | 18 | `README.md` advertised 19 specialist agents; there are 21 | V3 | fixed 0.51.9 |
 | 19 | `docs/launch/BETA_TESTER_BRIEF.md` — written to be handed to people outside the project — claimed v0.8.0, 15 agents, 5 commands, 6 hooks, against 0.51.9 / 21 / 10 / 29 | V3 | numbers fixed 0.51.9; body flagged do-not-send |
@@ -278,21 +278,64 @@ the design hooks. The number is the point. A project reading "6 of 29" is a
 project that can ask which of the other 23 it wanted — which is the question
 Origyn never got asked before hand-rolling a gate the engine already had.
 
-### The one thing found and deliberately not fixed
+### The one thing found and deliberately not fixed — and why it stayed open
 
 Finding 16: the engine ships a writer that keeps one slot and a reader that
 globs a directory, and they do not fit. The obvious fix — have `--record`
-also drop a timestamped sibling — was written, and removed before it
-shipped. `tests/test_hooks.sh` caught the consequence within a minute: the
-engine would be creating untracked files in every adopter's working tree,
-which then never comes clean, and `stop-uncommitted-reminder` — also shipped
-by this engine — would nag on every turn, forever.
+also drop a timestamped sibling — was written and removed before it shipped.
+`tests/test_hooks.sh` caught the consequence within a minute: the engine
+would be creating untracked files in every adopter's working tree, which then
+never comes clean, and `stop-uncommitted-reminder` — also shipped by this
+engine — would nag on every turn, forever.
 
-Whether gate records are tracked, ignored or pruned is the adopting
-project's policy. The engine has nowhere to express that today, so it does
-not get to assume one. The local wrapper a project already wrote stays local
-until it does. That is the CONTRIBUTING rule applied against a change that
-looked like a clean V4 right up until a test disagreed.
+The conclusion drawn at the time was that whether gate records are tracked,
+ignored or pruned is the adopting project's policy, and the engine had
+"nowhere to express that today". **That was wrong, and it is worth being
+precise about how.**
+
+The policy already had somewhere to live. `pe install` has gitignored
+`.claude/gates/` in adopter projects since v0.13, so a history file there
+would never have shown up as untracked in an adopter tree at all. What made
+the objection look live was that the *engine's own* `.gitignore` did not
+carry that rule — it ignored `.pe/` instead. And `install.sh` had the mirror
+image: it added `.claude/gates/` for adopters and never `.pe/`. Each repo was
+missing exactly the rule the other had, so the engine's runtime writes
+(`decisions.jsonl`, `telemetry.jsonl`, `traces/`, `a4-runs/`, the
+`/gate-review` transcript) *were* dirtying every adopter tree — the exact
+failure the finding was written to avoid, already happening for five other
+paths, just not for gate records.
+
+Fixed in 0.52.0: both trees ignore both paths, `--record` appends one line
+per verdict to `.claude/gates/history.jsonl`, and the append is best-effort
+so an unwritable history can never fail a verdict the commit hook depends on.
+
+Writing it re-ran the original experiment, and `tests/test_hooks.sh` went red
+again — which is worth recording, because the reason is not the one the first
+attempt inferred. The gates directory holds one sidecar that the FAIL path
+deletes, so it was frequently **empty**, and git cannot see an empty
+directory. An unignored `.claude/gates/` therefore never showed up in
+`git status`, and that silence read as proof it was harmless. It was not
+proof of anything. A history file makes the directory non-empty and the
+problem visible for the first time.
+
+So the fix does not lean on `pe install` having run: `--record` drops a
+`.gitignore` containing `*` into the gates directory, which ignores the
+contents and itself. The evidence is regenerable and must never be
+committed, in any repo, installed or not.
+
+Two of the new assertions were themselves vacuous on the first attempt: one
+ran `git status` in a directory that was not a git repo, and another built a
+`$(...)` inside an `assert` string, where the escaped quotes are still
+literal when the string is constructed — git got a path with quote
+characters in it, failed, printed nothing, and the emptiness test passed
+having measured nothing. Both now run against a real repo and were confirmed
+red before being confirmed green.
+
+The original decision was still the right call on the evidence in hand: a
+test disagreed, and the change was pulled rather than argued with. The lesson
+is narrower than "don't assume policy" — it is that "the engine has nowhere
+to express this" is a claim about the codebase, and claims about the codebase
+are checkable.
 
 ### The engine now gates its own commits deliberately
 

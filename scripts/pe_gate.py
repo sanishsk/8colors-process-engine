@@ -492,44 +492,135 @@ def report_invalid(envelope: dict, errors: list[str],
 
 def write_record(record_path: Path, envelope: dict, *, diff_sha: str | None,
                  source: Path) -> None:
-    """Write the evidence sidecar the pre-commit hook verifies.
+    """Write the evidence sidecar the pre-commit hook verifies, and append
+    the same verdict to an immutable history beside it.
 
-    One file, atomically: tempfile + replace, so a concurrent gate never
-    sees a torn write.
+    The sidecar is one file, written atomically (tempfile + replace) so a
+    concurrent gate never sees a torn write. `--record` writes ONE filename,
+    so every review overwrites the last — which is correct for the hook,
+    whose only question is "what is the verdict for the diff being committed
+    RIGHT NOW", and useless for every other question. Yesterday's verdicts
+    were gone. scripts/dev-log-collect.sh, shipped by this same engine,
+    globs .claude/gates/*.json to count verdicts for the retrospective
+    agent, and reported "0 gate verdicts" for a project that had run three
+    reviews that day.
 
-    NOT two. A timestamped sibling was written here and then removed before
-    this shipped. The motivation was real — `--record` writes ONE filename,
-    so every review overwrites the last, while scripts/dev-log-collect.sh
-    (shipped by this same engine) globs .claude/gates/*.json to count
-    verdicts into the digest the retrospective agent reads, and reported
-    "0 gate verdicts" for a project with three reviews that day. But the
-    engine cannot start creating untracked files in an adopter's working
-    tree on its own: tests/test_hooks.sh caught the consequence immediately
-    — the tree never comes clean again, and stop-uncommitted-reminder, also
-    shipped by this engine, then nags every turn forever.
+    A timestamped sibling was written here once and removed before shipping,
+    for a real reason: the engine cannot start creating untracked files in
+    an adopter's working tree, because the tree then never comes clean and
+    stop-uncommitted-reminder — also shipped by this engine — nags every
+    turn forever. The docstring that stood here said the policy needed
+    "somewhere to live" first.
 
-    Whether gate records are tracked, ignored, or pruned is the adopting
-    project's policy, not the engine's to assume. Origyn's local wrapper is
-    the right home for it until that policy has somewhere to live. Logged
-    open in docs/ADOPTION_AUDIT.md.
+    It already had somewhere. `pe install` has gitignored `.claude/gates/`
+    in adopter projects since v0.13; the engine's own .gitignore did not,
+    which is why the objection still looked live from inside this repo.
+    Both are ignored as of v0.52.0, so the append is safe. See
+    _append_history for why it is best-effort.
     """
+    # utcnow() is deprecated in 3.12 and emitted a DeprecationWarning on
+    # stderr on every successful record — noise in the same channel the
+    # recorded / NOT-recorded lines use.
     record = {
         "envelope": envelope,
         "verdict": envelope.get("verdict"),
         "gate_name": envelope.get("gate_name"),
         "diff_sha": diff_sha,
-        # utcnow() is deprecated in 3.12 and emitted a DeprecationWarning on
-        # stderr on every successful record — noise in the same channel the
-        # recorded / NOT-recorded lines use.
         "recorded_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source": str(source),
     }
     blob = json.dumps(record, indent=2, sort_keys=True)
 
     record_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_gitignored(record_path.parent)
     tmp = record_path.with_suffix(record_path.suffix + ".tmp")
     tmp.write_text(blob, encoding="utf-8")
     tmp.replace(record_path)
+    _append_history(record_path, record)
+
+
+def _ensure_gitignored(gates_dir: Path) -> None:
+    """Make the gates directory ignore its own contents.
+
+    Everything here is regenerable evidence, never source, so none of it
+    should ever be committed. `pe install` adds `.claude/gates/` to an
+    adopter's root .gitignore — but the hooks work without `pe install`, and
+    a self-ignoring directory does not depend on an install step having run.
+
+    This is load-bearing, not tidiness. Until v0.52.0 the directory held one
+    file that the FAIL path deletes, so it was often EMPTY — and git cannot
+    see an empty directory, which is the only reason an untracked
+    `.claude/gates/` never showed up. tests/test_hooks.sh went red the moment
+    a history file made the directory non-empty: `stop-uncommitted-reminder`,
+    shipped by this same engine, then nags about it on every single turn.
+    That is exactly the failure that kept this history unwritten for a
+    release, and it is answered here rather than by convention.
+
+    `*` matches `.gitignore` itself, so the whole directory disappears.
+    """
+    marker = gates_dir / ".gitignore"
+    if marker.exists():
+        return
+    try:
+        marker.write_text("# Gate evidence — regenerable, never committed.\n*\n",
+                          encoding="utf-8")
+    except OSError:
+        # Best-effort, same reasoning as the history append: a verdict the
+        # commit hook needs must not fail because a marker could not be
+        # written.
+        pass
+
+
+# One line per recorded verdict, never rewritten. This is the only durable
+# answer to "what did the gates say last Tuesday, and on which diff" — the
+# sidecar beside it holds exactly one verdict and is overwritten by the next
+# review.
+HISTORY_NAME = "history.jsonl"
+
+
+def _append_history(record_path: Path, record: dict) -> None:
+    """Append one verdict to the gate history. Best-effort by design.
+
+    The commit gate reads the sidecar, not this file. An unwritable history
+    must never turn a successful record into a failure, so every error here
+    is swallowed after saying so on stderr — the operator finds out, the
+    commit still has its verdict.
+    """
+    history_path = record_path.with_name(HISTORY_NAME)
+    line = json.dumps({
+        "recorded_at": record["recorded_at"],
+        "gate_name": record["gate_name"],
+        "verdict": record["verdict"],
+        "diff_sha": record["diff_sha"],
+        "source": record["source"],
+        "findings": len(record["envelope"].get("findings") or []),
+        # Severity counts rather than the findings themselves: the history is
+        # for "how often, how bad, on what" over months. The full envelope is
+        # an order of magnitude larger and is already in the sidecar for the
+        # one review that matters right now.
+        "severities": _severity_counts(record["envelope"]),
+        "model_used": record["envelope"].get("model_used"),
+        "failure_class": record["envelope"].get("failure_class"),
+    }, sort_keys=True)
+    try:
+        with history_path.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except OSError as exc:
+        print(
+            f"gate: verdict recorded, but history append failed ({exc}); "
+            f"{history_path} is incomplete.",
+            file=sys.stderr,
+        )
+
+
+def _severity_counts(envelope: dict) -> dict:
+    counts: dict[str, int] = {}
+    for finding in envelope.get("findings") or []:
+        if isinstance(finding, dict):
+            sev = finding.get("severity")
+            if sev:
+                counts[sev] = counts.get(sev, 0) + 1
+    return counts
 
 
 def _build_parser() -> "argparse.ArgumentParser":

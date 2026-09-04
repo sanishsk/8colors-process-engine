@@ -264,7 +264,13 @@ done
 if [ ! -f "$TARGET/.gitignore" ]; then
     touch "$TARGET/.gitignore"
 fi
-for pattern in "*.research-index.sqlite" ".process-engine.local.yaml" ".claude/gates/"; do
+# .pe/ holds everything the engine writes at runtime — decisions.jsonl,
+# telemetry.jsonl, traces/, a4-runs/, gate-review transcripts. The engine
+# gitignores it in its OWN repo and did not add it here, so every adopter
+# who ran `pe shadow decide` or `pe telemetry collect` got a permanently
+# dirty working tree — and stop-uncommitted-reminder, shipped by this same
+# engine, then nagged about it every turn.
+for pattern in "*.research-index.sqlite" ".process-engine.local.yaml" ".claude/gates/" ".pe/"; do
     if ! grep -qF -- "$pattern" "$TARGET/.gitignore" 2>/dev/null; then
         echo "$pattern" >> "$TARGET/.gitignore"
     fi

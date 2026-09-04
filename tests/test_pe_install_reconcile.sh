@@ -142,6 +142,45 @@ assert "the operator's edit is preserved as a .local-backup" \
 assert "install output reports the replacement rather than doing it silently" \
        "grep -qi 'Replaced' \"$TMP/install5.out\""
 
+# ─── Test 6: runtime paths are gitignored in the target ──────────────────
+echo ""
+echo "Test 6: engine runtime paths do not dirty the adopter's tree"
+
+# Everything the engine writes at runtime — .pe/ (decisions, telemetry,
+# traces, a4-runs, gate-review transcripts) and .claude/gates/ (verdict
+# sidecar + history) — must be ignored where it lands. Until v0.52.0 the
+# installer added .claude/gates/ and not .pe/, while the engine's own repo
+# ignored .pe/ and not .claude/gates/: each tree was missing exactly the
+# rule the other had, and every adopter who ran `pe shadow decide` got a
+# permanently dirty tree that stop-uncommitted-reminder then nagged about
+# every turn.
+for pattern in ".pe/" ".claude/gates/"; do
+    assert "install gitignores $pattern in the target" \
+           "grep -qF -- '$pattern' \"$PROJECT/.gitignore\""
+done
+
+# Asked of git, in a real repo, rather than of `git status` in $PROJECT —
+# which is not a git repo, so `git status` errors to empty output and any
+# "the tree is clean" test on it passes without checking anything.
+GITPROJ="$TMP/gitproject"
+mkdir -p "$GITPROJ"
+git -C "$GITPROJ" init -q
+bash "$INSTALL" --subset gate-only "$GITPROJ" > "$TMP/install6.out" 2>&1
+mkdir -p "$GITPROJ/.pe" "$GITPROJ/.claude/gates"
+echo '{}' > "$GITPROJ/.pe/decisions.jsonl"
+echo '{}' > "$GITPROJ/.claude/gates/history.jsonl"
+for f in ".pe/decisions.jsonl" ".claude/gates/history.jsonl"; do
+    assert "git ignores $f after install" \
+           "git -C \"$GITPROJ\" check-ignore -q \"$f\""
+done
+# Computed here, not inside the assert string: a `$(...)` written into that
+# string is expanded while the string is being BUILT, with the escaped
+# quotes still literal, so git got a path with quote characters in it,
+# failed, printed nothing, and the emptiness test passed having measured
+# nothing. Twice, in both the red and green runs.
+UNTRACKED=$(git -C "$GITPROJ" status --porcelain | grep -E '[.]pe/|[.]claude/gates/' || true)
+assert "no engine runtime file shows as untracked" '[ -z "$UNTRACKED" ]'
+
 echo ""
 echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

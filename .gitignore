@@ -11,6 +11,12 @@ __pycache__/
 
 # Phase 3 shadow-mode runtime logs (never commit — written to consumer repos via pe shadow decide)
 .pe/
+
+# Gate verdict records + their append-only history. Ignored in adopter
+# projects by install.sh since v0.13, and not here until v0.52.0 — the
+# engine ignored .pe/ for itself and .claude/gates/ for everyone else, so
+# each repo was missing exactly the rule the other had.
+.claude/gates/
 .env.local
 
 # Dev-log collector outputs — regenerable, per-machine snapshots
