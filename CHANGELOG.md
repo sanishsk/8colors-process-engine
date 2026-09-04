@@ -7,6 +7,94 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.13] — 2026-09-04
+
+### Added — the `/gate-review` workflow slot, briefed and architected (no code yet)
+
+`docs/AGENT_INVOCATION_RULES.md:33-38` is six lines of prose telling the
+model to "launch 3 agents in parallel" and "aggregate findings". No
+mechanism. Whether it happens is something the model may or may not do —
+the exact drift class the engine exists to prevent, inside the engine's own
+doctrine. This slot replaces it with a Claude Code dynamic workflow.
+
+Two documents, no implementation: `docs/research/brief-gate-review-workflow.md`
+and `docs/research/architect-gate-review-workflow.md`.
+
+**Step 0 changed the plan five times.** Recorded rather than discarded:
+
+- **The workflow's return value cannot reach the commit gate.** Scripts have
+  no filesystem access; `hooks/pre-commit-envelope-check.sh` reads
+  `.claude/gates/last-gate.json` with a matching `diff_sha`. A workflow that
+  ends in `return {verdict}` produces a verdict the enforcement layer is
+  blind to. The final stage must be an `agent()` — agents hold `Bash` —
+  running `pe gate parse --record`. This is load-bearing and was not in the
+  incoming brief.
+- **`gate_name` is a closed enum** and already contains `merge-gate`, which
+  is exactly what an aggregate over several gates is. No schema change
+  anywhere.
+- **`timestamp` is required and the script cannot produce one** —
+  `new Date()` throws inside a workflow. The aggregating agent stamps it.
+- **Plugin distribution needs no manifest key.** The default plugin workflow
+  directory is `workflows/`; the manifest key exists only for a non-default
+  path and *replaces* rather than adds. The incoming brief's "register
+  `workflows/` in the manifest" deliverable is inert — neither `plugin.json`
+  is read for its directory keys.
+- **`args` cannot be relied on.** Passing arguments to a slash-invoked saved
+  workflow is undocumented; the incoming sketch required a `runId` it then
+  never used.
+
+### Scope decisions, with the evidence behind them
+
+- **No `pe install` wiring.** The engine's install path list is hardcoded in
+  **six** places with no shared constant (`install.sh:199`, `:204`, `:516`;
+  `_cmd_lifecycle.sh:233`, `:370`, `:541`), every glob is `*.md` while
+  workflows are `.js`, `pe_verify.py`'s `SURFACE_GLOBS` would need an entry,
+  subset-filtering is an unmade decision, and Claude Code 2.1.216+ refuses to
+  write through a symlink in `.claude/workflows/`. The pilot runs from the
+  engine's own `workflows/` directory instead — available via plugin
+  namespacing and in the engine repo — and install wiring becomes its own
+  slot *if the pilot proves out*. Wiring a surface before anything runs it is
+  the failure `docs/ADOPTION_AUDIT.md` was written about.
+- **No fixer agent.** A workflow cannot pause, so an agent that edits files,
+  re-reviews its own edits and reports PASS removes the operator from where
+  the doctrine insists they stay. The circuit breaker in the incoming design
+  guards against a runaway loop, not a wrong fix. Review and report now;
+  opt-in fix loop later, with evidence.
+- **No `pe doctor` check.** Workflow enablement is **not detectable** from a
+  shell — the only readable signals are negative. A green tick meaning "we
+  found no reason to think it is off" is the kind of check v0.51.4-0.51.12
+  spent its time removing. Also: `pe doctor` has two implementations
+  (`_cmd_lifecycle.sh` and `pe_doctor.py`), so any future check needs both.
+
+### The safety property the design turns on
+
+`agent()` returns `null` when an agent is skipped or dies. The documented
+idiom is `.filter(Boolean)` — and applied naively here it **fails open**: if
+`security-reviewer` dies, the aggregator sees two clean envelopes and returns
+PASS, and a payment-path change is committed having never been
+security-reviewed, silently. The script therefore enforces, before the
+aggregator runs, that `PASS` is reachable only when every gate returned an
+envelope; a missing gate forces `WARN` at best plus a `gate-did-not-run`
+HIGH finding. The script enforces it, not the agent, because the script is
+the part that cannot be talked out of it.
+
+### Also recorded
+
+The inline envelope schema is a **structural subset**, not a copy: the
+canonical schema uses draft-07 `allOf`/`if`/`then` conditionals whose support
+in the workflow runtime is undocumented, and a schema silently ignored is
+worse than one absent. The sync test therefore asserts *consistency* — every
+inline enum exactly matches its canonical counterpart — rather than equality,
+which would fail on cosmetic edits and pass on real divergence.
+
+**Value bar:** V4 — a gap a review found and could not act on. The audit
+records that the orchestration layer is prose nothing observes. Explicitly
+**not** V1: no incident has been traced to the parallel pattern silently not
+running, because nothing watches it. That is an argument for the change, not
+evidence for it, and the brief says so.
+
+---
+
 ## [0.51.12] — 2026-09-04
 
 ### Changed — the beta brief reads as a hand-out again

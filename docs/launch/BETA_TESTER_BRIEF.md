@@ -2,7 +2,7 @@
 
 > Hand-out for the beta cohort. Copy / paste / link as needed.
 >
-> **v0.51.12 — every count, model tier, command name and threshold below is
+> **v0.51.13 — every count, model tier, command name and threshold below is
 > verified against the repository by CI.**
 
 ---
@@ -20,7 +20,7 @@ weeks of real work, then I want to know what broke, what was
 confusing, and what you expected that wasn't there.
 
 Repo: <https://github.com/sanishsk/8colors-process-engine>
-Current version: **v0.51.12**
+Current version: **v0.51.13**
 
 ### Want to try just one piece?
 
@@ -711,7 +711,7 @@ The eject is reversible — `pe install` restores the symlinks.
 
 ---
 
-## Where the engine is now (v0.51.12, 2026-09-04)
+## Where the engine is now (v0.51.13, 2026-09-04)
 
 `pe sync`, the install presets and `pe doctor` are all still there. What
 has been added since, grouped by what it changes for you:
