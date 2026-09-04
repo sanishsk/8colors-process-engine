@@ -16,12 +16,18 @@
 # audit's boot failures at once. Ships generic; every adopter declares
 # its own commands. If boot_check is absent OR enabled=false: skip.
 #
-# Invoked by:
-#   - pe doctor  (opportunistic)
-#   - CI job (via templates/ci/engine-quality.yml.template)
+# Invoked by: NOTHING, as of 2026-09-04.
 #
-# NOT wired as a pre-commit hook — boot is slow (10-60s). Runs at
-# CI + `pe doctor` time only.
+# This header used to claim `pe doctor` (opportunistic) and the CI job in
+# templates/ci/engine-quality.yml.template. Neither references this file —
+# grep the repo. The adoption audit found it wired to no pre-commit config,
+# no hooks.json entry, no CI template and no consuming project, with no test
+# and no fixture. It is the engine's one fully-orphaned hook.
+#
+# It is kept rather than deleted because the capability is sound and the
+# missing half is the wiring, not the script. Correctly NOT a pre-commit
+# hook — boot is slow (10-60s); it belongs at CI or `pe doctor` time, which
+# is exactly where it is not yet called from. See docs/ADOPTION_AUDIT.md.
 #
 # Bypass: PE_SKIP_BOOT_SMOKE=1
 
