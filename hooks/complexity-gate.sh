@@ -139,17 +139,6 @@ run_eslint() {
     #      have failed on the flag rather than on the code.
     #
     # A gate that cannot run must skip and say so, never block silently.
-    local runner=""
-    if command -v eslint >/dev/null 2>&1; then
-        runner="eslint"
-    elif command -v npx >/dev/null 2>&1 && npx --no-install eslint --version >/dev/null 2>&1; then
-        # --no-install alone: use a locally installed eslint, never download.
-        runner="npx --no-install eslint"
-    else
-        log_skip "eslint (not installed — npm i -D eslint to enable)"
-        return 0
-    fi
-
     # Claude Code workflow scripts are not standalone JavaScript. The body
     # runs inside a runtime-supplied async wrapper, where a top-level
     # `return` IS the contract — it is the workflow's result. eslint parsing
@@ -177,6 +166,17 @@ run_eslint() {
         return 0
     fi
     STAGED_JS="$lintable"
+
+    local runner=""
+    if command -v eslint >/dev/null 2>&1; then
+        runner="eslint"
+    elif command -v npx >/dev/null 2>&1 && npx --no-install eslint --version >/dev/null 2>&1; then
+        # --no-install alone: use a locally installed eslint, never download.
+        runner="npx --no-install eslint"
+    else
+        log_skip "eslint (not installed — npm i -D eslint to enable)"
+        return 0
+    fi
 
     log_run "eslint (complexity/max-depth/max-lines-per-function)"
 
