@@ -9,8 +9,13 @@
 #       that isn't in the engine anymore.
 #   (3) Valid symlinks (target still exists) are left untouched.
 #   (4) Same reconciliation applies to .claude/commands/.
+#   (5) Every workflows/*.js in the engine lands in .claude/workflows/,
+#       as a copy, and a locally modified one is backed up before being
+#       overwritten rather than clobbered.
 #
-# Not a comprehensive install.sh test — just the reconciling contract.
+# Not a comprehensive install.sh test — just the reconciling contract, plus
+# (5), which is here because this is the only test that runs a real install
+# into a real target and can therefore ask what actually arrived.
 # Run: bash tests/test_pe_install_reconcile.sh
 # Exits 0 if all assertions pass; non-zero on first failure.
 
@@ -104,6 +109,38 @@ bash "$INSTALL" --subset gate-only "$PROJECT" > "$TMP/install4.out" 2>&1
 
 assert "after re-install: broken command symlink is REMOVED" \
        "[ ! -L \"$PROJECT/.claude/commands/vanished-cmd.md\" ]"
+
+# ─── Test 5: workflows are delivered, not left in the engine ─────────────
+echo ""
+echo "Test 5: .claude/workflows/ receives every engine workflow"
+
+# Derived from the engine, not from a list kept here — a workflow added
+# without an installer change must turn this red rather than ship undelivered.
+# /gate-review is executable gate logic that decides what reaches
+# .claude/gates/last-gate.json; before v0.52.0 `pe install` never copied it
+# and the only route into a project was a `cp` in docs/RUNNING_AGENTS.md.
+for wf in "$ENGINE_DIR"/workflows/*.js; do
+    [ -f "$wf" ] || continue
+    wf_name="$(basename "$wf")"
+    assert "install delivered workflows/$wf_name" \
+           "[ -f \"$PROJECT/.claude/workflows/$wf_name\" ]"
+    assert "workflows/$wf_name is a copy, not a symlink (2.1.216+ won't write through one)" \
+           "[ ! -L \"$PROJECT/.claude/workflows/$wf_name\" ]"
+    assert "workflows/$wf_name matches the engine's copy byte for byte" \
+           "cmp -s \"$wf\" \"$PROJECT/.claude/workflows/$wf_name\""
+done
+
+# A locally edited workflow must not be silently destroyed by the overwrite.
+FIRST_WF="$(basename "$(ls "$ENGINE_DIR"/workflows/*.js | head -1)")"
+printf '\n// operator edit\n' >> "$PROJECT/.claude/workflows/$FIRST_WF"
+bash "$INSTALL" --subset gate-only "$PROJECT" > "$TMP/install5.out" 2>&1
+
+assert "modified workflow is restored to the engine version" \
+       "cmp -s \"$ENGINE_DIR/workflows/$FIRST_WF\" \"$PROJECT/.claude/workflows/$FIRST_WF\""
+assert "the operator's edit is preserved as a .local-backup" \
+       "grep -q 'operator edit' \"$PROJECT/.claude/workflows/$FIRST_WF.local-backup\""
+assert "install output reports the replacement rather than doing it silently" \
+       "grep -qi 'Replaced' \"$TMP/install5.out\""
 
 echo ""
 echo "Results: $pass passed, $fail failed"

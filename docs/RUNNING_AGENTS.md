@@ -212,20 +212,66 @@ If a gate is skipped or dies, the verdict is capped at WARN and a
 `gate-did-not-run` finding names it. Two clean reviews out of three is not a
 pass.
 
-**To use it in a repo that has the engine cloned but not installed as a
-plugin**, put the script where Claude Code looks for saved workflows:
+**In a repo that has the engine cloned but not installed as a plugin**,
+`pe install` copies every workflow into `.claude/workflows/` for you. Then
+`/gate-review`.
+
+Until v0.52.0 it did not, and the only route was the `cp` below — which meant
+every adopter who ran the installer got the agents, the commands and the
+hooks, and silently no workflows at all. If you are on an older engine, or
+you want just the one file:
 
 ```bash
 mkdir -p .claude/workflows
 cp ~/engine/workflows/gate-review.js .claude/workflows/
 ```
 
-Then `/gate-review`. Copy rather than symlink: Claude Code 2.1.216+ refuses
-to write through a symlink in that directory, and whether it *discovers*
-through one is unverified — a copy has neither question hanging over it.
+Copy rather than symlink, and this is why `pe install` copies too: Claude
+Code 2.1.216+ refuses to write through a symlink in that directory, and
+whether it *discovers* through one is unverified — a copy has neither
+question hanging over it. The cost is that copies do not track the engine, so
+**re-run `pe install` after an engine upgrade**. A workflow you have edited
+locally is backed up to `*.local-backup` before it is overwritten, and the
+installer says so.
 
 Needs Claude Code ≥ 2.1.154 and a paid plan. Everything else on this page
 works without it.
+
+## Many issues at once — `/parallel-fix`
+
+`/gate-review` is one diff reviewed by three agents. `/parallel-fix` is the
+opposite shape, and the one a backlog actually has: several unrelated issues,
+one repo, fixed at the same time.
+
+```
+/parallel-fix
+```
+with the issues as arguments — a list of strings, or `{title, task}` objects.
+
+Each fix runs in **its own git worktree**, so two agents cannot interleave
+edits in one tree, sweep up each other's half-finished work with `git add -A`,
+or invalidate a suite run in progress. Each lands on its own branch, named by
+the script rather than by the agents, so two cannot pick the same one.
+
+Isolation stops them corrupting each other's *work*. It does not stop them
+producing two fixes that are each correct alone and wrong together, so the
+script cross-references the files every branch touched and reports the
+overlaps as a **sequencing requirement** — the independent branches merge
+first, the colliding ones last, with the suite run between. That is a
+property of the set of results, which no individual agent could have seen.
+
+Three things it refuses to call landable, all checked by the script rather
+than asked of the agent that did the work:
+
+- a fix agent that returned nothing — that issue is **unfixed**, reported by
+  name, never quietly dropped from the count
+- a test the agent did not watch **fail before the fix** — a test written
+  afterwards demonstrates only that the fix is self-consistent
+- a branch whose suite run was red, or that no verifier reviewed
+
+**It merges nothing.** A workflow cannot pause for a human, and merging
+several agents' branches unattended is exactly where the damage happens. You
+get branches and a merge order; the merging is yours.
 
 ## Running it once vs. requiring it every time
 
