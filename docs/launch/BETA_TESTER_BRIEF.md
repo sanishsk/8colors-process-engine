@@ -3,7 +3,7 @@
 > Hand-out for the 2–3 beta cohort. Copy / paste / link as needed.
 >
 > **⚠ NOT READY TO SEND. Body last written 2026-06-30 for v0.8.0; the
-> engine is v0.51.9.** The numbers in the header and TL;DR below have been
+> engine is v0.51.10.** The numbers in the header and TL;DR below have been
 > corrected against the repository (2026-09-04) and
 > `tests/test_docs_version_claims.sh` now fails when they drift again. The
 > rest of the document — the agent table, the "what shipped" section, the
@@ -29,7 +29,7 @@ weeks of real work, then I want to know what broke, what was
 confusing, and what you expected that wasn't there.
 
 Repo: <https://github.com/sanishsk/8colors-process-engine>
-Current version: **v0.51.9**
+Current version: **v0.51.10**
 
 ---
 

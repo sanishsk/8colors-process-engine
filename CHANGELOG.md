@@ -7,6 +7,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.10] — 2026-09-04
+
+### Changed — `docs/ADOPTION_AUDIT.md` brought to its finished state
+
+The audit was written at 0.51.6, mid-cycle, and its own numbers went stale
+by six releases — which would have been a fitting way to end it. Findings
+17–20 added, statuses updated, and a table of what changed across
+0.51.4–0.51.9.
+
+Final count: the four defects that prompted the audit, plus **sixteen it
+found**. Fifteen fixed; one — the one-slot gate history — recorded as a
+deliberate non-fix, because the change the evidence pointed at would have
+made every adopter's working tree permanently dirty.
+
+Finding 20 is the useful contrast, and it is mine: the first wiring of
+`docs-updated-trailer` carried `pass_filenames: false`, so the commit-msg
+hook received no `$1` and failed on every commit with a usage error. It was
+caught on the very next commit and fixed in minutes — because it failed
+loudly. Every other defect in the table was a gate or a document that failed
+quietly. That difference is the whole subject of the audit.
+
+**Value bar:** V3 — the audit's own summary line said "eight more defects,
+six of which are now fixed" while the table beneath it listed sixteen.
+
+---
+
 ## [0.51.9] — 2026-09-04
 
 ### Changed — the engine decided, in writing, which of its own hooks it runs

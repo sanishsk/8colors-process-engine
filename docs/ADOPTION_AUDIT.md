@@ -26,8 +26,8 @@ CLAUDE.md reached 80,437 bytes. It did not do that out of ignorance: it did
 it because `hooks/README.md` said the hook was a 40,000-char *advisory*,
 which stopped being true in v0.12.0 (2026-07-02).
 
-This audit asks the general question. It found **eight more defects**, six of
-which are now fixed.
+This audit asks the general question. It found **sixteen more defects**.
+Fifteen are fixed; one is recorded as a deliberate non-fix.
 
 ---
 
@@ -156,7 +156,7 @@ contract — has never run end to end. See §5.
 
 ## 4. Defects this audit found
 
-Six fixed, two open.
+Fifteen fixed, one deliberately not.
 
 | # | Defect | Class | Status |
 |---|---|---|---|
@@ -172,8 +172,17 @@ Six fixed, two open.
 | 14 | `perf-gate`'s path regex anchored `/models?/`, `/db/`, `/orm/`, `/repositor`, `/schema\.py` with a leading slash, so a repo-root `models/user.py` did not match. The two 8colors projects that would trip it both use a top-level `models/` — the gate was off for the layout it was written for. | V3 | fixed 0.51.7 |
 | 15 | `pe gate parse --record` printed a well-formed envelope on stdout, then exited 4 without writing, with the reason on stderr | V1 | fixed 0.51.7 |
 | 16 | `--record` writes one fixed filename, so a project has a one-slot gate history — while `scripts/dev-log-collect.sh`, shipped by this engine, globs the directory and reported "0 gate verdicts" for a day with three reviews | V4 | **open, see below** |
+| 17 | `docs/AGENT_INVOCATION_RULES.md` said the envelope orchestrator was "Phase 3 — not wired yet". It graduated 2026-06-28. The same block said E1 ships one reference emitter (seven agents emit it) and named four agents that "will adopt the envelope in follow-up slot E1.1", which shipped. | V3 | fixed 0.51.9 |
+| 18 | `README.md` advertised 19 specialist agents; there are 21 | V3 | fixed 0.51.9 |
+| 19 | `docs/launch/BETA_TESTER_BRIEF.md` — written to be handed to people outside the project — claimed v0.8.0, 15 agents, 5 commands, 6 hooks, against 0.51.9 / 21 / 10 / 29 | V3 | numbers fixed 0.51.9; body flagged do-not-send |
+| 20 | The first wiring of `docs-updated-trailer` carried `pass_filenames: false`, so the commit-msg hook got no `$1` and failed on every commit with a usage error | V1 | fixed 0.51.9, within minutes — the hook said so out loud |
 
 Defects 5–7 were all red in the engine's own test suite at HEAD. Nothing ran it.
+
+Defect 20 is the useful contrast: a gate I wired myself, misconfigured on the
+first attempt, caught on the very next commit and fixed in minutes — because
+it failed loudly. Every other defect in this table was a gate or a document
+that failed quietly. The difference is the whole subject of the audit.
 
 ---
 
@@ -250,15 +259,51 @@ not get to assume one. The local wrapper a project already wrote stays local
 until it does. That is the CONTRIBUTING rule applied against a change that
 looked like a clean V4 right up until a test disagreed.
 
+### The engine now gates its own commits deliberately
+
+`.pre-commit-config.yaml` ran 5 of 29 hooks and dismissed the rest in one
+sentence. It now carries a per-hook decision table: a reason for each of the
+6 it runs and for each of the 23 it does not.
+`tests/test_engine_self_gating.sh` fails if a hook is neither wired nor given
+a reason, so a new hook cannot be added without somebody deciding.
+
+`docs-updated-trailer` is the one hook added. It does not check that
+documentation is *correct* — nothing cheap can — but it makes the author
+name, in the commit message, which docs a structural change touched. Given
+that seven of this audit's sixteen findings were documents stating things
+that were not true, that is where the leverage was.
+
 ### What is still not covered
 
-- **Agent behaviour.** `test_gate_efficacy.sh` seeds five gates. Sixteen
+- **Agent behaviour.** `test_gate_efficacy.sh` seeds five gates. Fifteen
   agents have no corpus, so a prompt regression in any of them is invisible.
-- **`boot-smoke`.** Still wired nowhere. Wiring it into `pe doctor` when a
+  This is the largest remaining hole, and the one this audit is weakest on:
+  every claim in §3 is inferred from fixtures and envelopes on disk, because
+  the engine has no telemetry that would settle whether an agent ran.
+- **`boot-smoke`.** Still wired nowhere. Calling it from `pe doctor` when a
   project declares `boot_check` is the obvious next step and is not done.
-- **Hook *verdicts* on the smoke fixture.** The smoke test asserts a hook runs
-  and speaks, not that it decides correctly. Eleven hooks still have no test
-  that checks what they decide.
+- **Hook *verdicts* on the smoke fixture.** `test_hook_smoke.sh` asserts a
+  hook runs and speaks, not that it decides correctly. Eleven hooks still
+  have no test of what they decide.
+- **`pe_orchestrator.py` (1202 lines) and `research_index.py` (1027)** are
+  over the file budget. Listed explicitly in `test_size_budget_repo.sh`'s
+  `KNOWN_OVER`, which also fails if an entry goes stale, so neither can
+  quietly become fine or quietly stay forgotten.
+- **`docs/launch/BETA_TESTER_BRIEF.md`** has had its countable claims
+  corrected and carries a do-not-send banner. Its body has not been re-read
+  against the current engine and still contradicts `AGENT_INVOCATION_RULES.md`
+  on at least one model tier.
+
+## What changed while this audit was written
+
+| Version | |
+|---|---|
+| 0.51.4 | the `"0\n0"` counter; `pe help` executing `claude -p`; four releases of version drift |
+| 0.51.5 | the hook catalogue at 14 of 29; the 40,000-char claim; `boot-smoke`'s invented callers; `pe incident open-pr` in CONTRIBUTING; a red test fixture |
+| 0.51.6 | this document; CI, a suite runner, `test_hook_smoke.sh`; `pe doctor` coverage; the shim-routed miscount; `--json` |
+| 0.51.7 | `--record` failing silently; `perf-gate` off for repo-root layouts; `pe_gate.py` split |
+| 0.51.8 | `scripts/pe` 1506 → 112 lines; `test_size_budget_repo.sh`; CI bypass removed |
+| 0.51.9 | the self-gating decision table; `docs-updated-trailer`; three more false documents |
 
 ---
 
