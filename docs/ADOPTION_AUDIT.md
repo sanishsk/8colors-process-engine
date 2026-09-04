@@ -96,11 +96,11 @@ included — **8 of 29 hooks have never been referenced by anything**:
 | `boot-smoke` | no | **Orphan.** Not in the template, not in `hooks.json`, not in `pe doctor`, not in any CI template. Its own header claimed `pe doctor` and the CI job invoke it. Neither does. Keep — the capability is sound and the wiring is the missing half — header corrected in 0.51.5. |
 | `perf-gate` | yes | Keep. In the template, tested, and its path regex has a real blind spot (§4). |
 | `api-contract-check` | partial | Keep. Depends on external `ai-test`; degrades to an advisory skip. |
-| `migration-lint` | no | Keep — but write a test before trusting it. |
-| `copy-lint` | no | Keep — but write a test before trusting it. |
-| `test-run` | no | Keep — but write a test before trusting it. |
-| `research-index-rebuild` | no | Keep — but write a test before trusting it. |
-| `stacking-rule-check` | no | `pre-push`, and no project installs a `pre-push` hook. Either wire it or say it is dormant. |
+| `migration-lint` | **yes** (0.52.0) | Keep. Blocks `sys.exit()` in `migrations/`, ignores it everywhere else. |
+| `copy-lint` | **yes** (0.52.0) | Keep. WARNs by default, blocks under `copy_lint.strict`. |
+| `test-run` | **yes** (0.52.0) | Keep. Propagates the runner's exit code rather than collapsing it. |
+| `research-index-rebuild` | **yes** (0.52.0) | Keep. A failing rebuild must never block a commit; now asserted. |
+| `stacking-rule-check` | **yes** (0.52.0) | `pre-push`, and no project installs a `pre-push` hook. Tested now; still dormant until something wires it. |
 | `design-review-trailer` | yes | In the template; no project wires it. Keep. |
 
 Nothing here is worth deleting. That is the honest answer, and it is a
@@ -108,15 +108,35 @@ different answer from "all of it is fine": the eight are not dead weight, they
 are **untested capability that no adoption has ever exercised**. The mechanism
 in §6 is what converts that from a standing risk into a measured one.
 
-### Hooks with no dedicated test (11 of 29)
+### Hooks with no dedicated test — 11 of 29, now 3
 
-`boot-smoke`, `cache-hygiene-warn`, `complexity-gate`, `copy-lint`,
+Was: `boot-smoke`, `cache-hygiene-warn`, `complexity-gate`, `copy-lint`,
 `deps-audit`, `duplication-gate`, `migration-lint`, `research-index-rebuild`,
 `size-budget`, `stacking-rule-check`, `test-run`.
 
-Three of those — `complexity-gate`, `duplication-gate`, `size-budget` — run on
-**every commit to the engine itself** and have never had a test. They are now
-at least covered by `test_hook_smoke.sh` for "does it run".
+Eight of those got verdict tests in 0.52.0 (`tests/test_hook_verdicts.sh`).
+The distinction that matters is the one `test_hook_smoke.sh` draws about
+itself: it runs every hook and asserts only that it terminates and speaks when
+it refuses — **"It asserts nothing about VERDICT."** A hook that runs cleanly
+and blocks the wrong thing, or blocks nothing at all, passes that loop
+perfectly. So each of the eight now gets a pair: an input it must accept and
+an input it must refuse. A hook that always exits 0 fails one; a hook that
+always exits 1 fails the other.
+
+Writing them was worth it beyond the coverage number. Building the harness
+produced two green-but-vacuous assertions of exactly the kind being hunted:
+a helper whose exit code never escaped its command-substitution subshell, so
+four checks read a stale value; and a stdin payload built with `$(...)`, which
+strips the trailing newline, so `stacking-rule-check`'s `while read` loop
+never executed and three more assertions passed against a hook that had
+inspected nothing. Both were caught only because each hook also has a case it
+must REFUSE — the accept-only half stayed green throughout.
+
+Still untested for verdict: `complexity-gate`, `duplication-gate`,
+`size-budget` — the three that run on **every commit to the engine itself**.
+They are covered by `test_hook_smoke.sh` for "does it run", and by the fact
+that the engine's own commits are visibly blocked by them (this session hit
+the net-lines and per-function gates), which is evidence but not a test.
 
 ---
 
