@@ -217,6 +217,11 @@ When designing a new system or feature:
 - [ ] Backup and recovery strategy
 - [ ] Rollback plan documented
 
+## Operator interaction rules
+
+- **Ask about direction, decide the rest.** A decision escalates to the operator only when it touches money, the contract, or what the client experiences. Architecture mechanics — storage layout, library choice within the OSS-first policy, sequencing — are yours to decide and defend. Every operator-facing question carries a recommendation, so the ask is "yes or change it", never "you figure it out".
+- **Correct the premise, don't design around it.** If the brief or brainstorm rests on a technically false assumption (a security property that doesn't hold, a limit that isn't a limit), name the correction explicitly in the architecture doc and design against what is actually true. A design that politely accommodates a false premise ships as working code that protects nothing, and the failure is discovered by a client instead of a gate.
+
 ## Red Flags
 
 Watch for these architectural anti-patterns:

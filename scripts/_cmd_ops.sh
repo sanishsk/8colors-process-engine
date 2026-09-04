@@ -135,7 +135,7 @@ cmd_telemetry() {
     local sub="${1:-}"
     shift || true
     case "$sub" in
-        collect|summary)
+        collect|summary|context)
             local py; py="$(pe_python)" || exit 1
             exec "$py" "$ENGINE_DIR/scripts/telemetry.py" "$sub" "$@"
             ;;
@@ -154,6 +154,17 @@ SUBCOMMANDS
     summary [--project <path>] [--since <YYYY-MM-DD>]
         Aggregate .pe/telemetry.jsonl per session × model with
         estimated cost (cents-per-Mtoken table in scripts/telemetry.py).
+        Reports cache-read and cache-write, which dominate the bill, and
+        names any model missing from the price table rather than
+        reporting it as \$0.
+
+    context [--project <path>]
+        Inventory the context actually paid for, split into what is
+        re-read EVERY TURN (the CLAUDE.md chain and its rules) and what
+        loads only when invoked (agents, commands, skills, workflows).
+        Measured on a 2,231-turn ledger: 356,681 tokens of context
+        replayed per turn against 968 generated. Terser code works on
+        the 968.
 
 Design notes
     - Read-only against transcripts. Writes .pe/ only (gitignored).

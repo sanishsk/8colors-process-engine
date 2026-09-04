@@ -94,7 +94,17 @@ CENTS_PER_MTOKEN: dict[str, dict[str, int]] = {
     "claude-haiku-4":   {"input": 80, "output": 400, "cache_read": 8, "cache_creation": 100},
 }
 
-# fallback if the model is unknown (0 cost — surfaces the miss)
+# Fallback for an unpriced model. The comment here used to read "0 cost —
+# surfaces the miss", and nothing surfaced anything: `pe telemetry summary`
+# printed $0.00 beside 1390 turns of claude-opus-5 with no warning, so the
+# most expensive model in the ledger read as free. A price table that silently
+# returns zero is worse than no price table, because a zero looks like an
+# answer. cmd_summary now names every unpriced model and its turn count.
+#
+# Prices are NOT guessed here. A wrong number is indistinguishable from a
+# right one at a glance, and this feeds budget decisions. Add the real
+# per-Mtoken cents from the pricing page, or set them per project under
+# `telemetry.prices.<model-prefix>` in .process-engine.yaml.
 UNKNOWN_MODEL_PRICES = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
 
 
@@ -291,6 +301,70 @@ def _emit_tool_use_child_spans(rec: dict[str, Any], parent: TurnRecord) -> list[
     return spans
 
 
+def _parse_since(value: str | None) -> tuple[dt.datetime | None, int]:
+    """(cutoff, exit_code). exit_code is 2 when the flag was malformed."""
+    if not value:
+        return None, 0
+    try:
+        return dt.datetime.fromisoformat(value).replace(tzinfo=dt.timezone.utc), 0
+    except ValueError:
+        print(f"ERROR: --since must be YYYY-MM-DD (got {value!r})", file=sys.stderr)
+        return None, 2
+
+
+def _before_cutoff(timestamp: str | None, cutoff: dt.datetime | None) -> bool:
+    if cutoff is None or not timestamp:
+        return False
+    try:
+        return dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00")) < cutoff
+    except ValueError:
+        # Keep the record — a bad timestamp is not a reason to drop usage data.
+        return False
+
+
+def _existing_span_ids(trace_path: Path) -> set[str]:
+    if not trace_path.exists():
+        return set()
+    return {
+        span["span_id"]
+        for span in _iter_transcript(trace_path)
+        if span.get("span_id")
+    }
+
+
+def _collect_one_transcript(
+    tp: Path, traces_dir: Path, ledger, seen: set[str],
+    cutoff: dt.datetime | None,
+) -> tuple[int, int, int]:
+    """Append one transcript's new turns. Returns (added, dedup, pre_since)."""
+    trace_path = traces_dir / f"{tp.stem}.jsonl"
+    traces_seen = _existing_span_ids(trace_path)
+    added = dedup = pre_since = 0
+
+    with trace_path.open("a", encoding="utf-8") as tf:
+        for rec in _iter_transcript(tp):
+            turn = parse_assistant_record(rec)
+            if turn is None:
+                continue
+            if turn.turn_uuid in seen:
+                dedup += 1
+                continue
+            if _before_cutoff(turn.timestamp, cutoff):
+                pre_since += 1
+                continue
+            ledger.write(json.dumps(turn.to_dict()) + "\n")
+            seen.add(turn.turn_uuid)
+            added += 1
+            if turn.turn_uuid not in traces_seen:
+                tf.write(json.dumps(_emit_otel_span(turn)) + "\n")
+                # L1 completion: child spans per tool_use in the record.
+                for child in _emit_tool_use_child_spans(rec, turn):
+                    if child["span_id"] and child["span_id"] not in traces_seen:
+                        tf.write(json.dumps(child) + "\n")
+                        traces_seen.add(child["span_id"])
+    return added, dedup, pre_since
+
+
 def cmd_collect(args: argparse.Namespace) -> int:
     project = Path(args.project).resolve()
     if not (project / ".git").exists():
@@ -299,7 +373,6 @@ def cmd_collect(args: argparse.Namespace) -> int:
 
     claude_home = Path(args.claude_home).expanduser() if args.claude_home else None
     transcript_dir = _transcript_dir(project, claude_home)
-
     if not transcript_dir.is_dir():
         print(
             f"[telemetry] no transcripts at {transcript_dir} — "
@@ -308,13 +381,9 @@ def cmd_collect(args: argparse.Namespace) -> int:
         )
         return 0
 
-    since_dt: dt.datetime | None = None
-    if args.since:
-        try:
-            since_dt = dt.datetime.fromisoformat(args.since).replace(tzinfo=dt.timezone.utc)
-        except ValueError:
-            print(f"ERROR: --since must be YYYY-MM-DD (got {args.since!r})", file=sys.stderr)
-            return 2
+    cutoff, rc = _parse_since(args.since)
+    if rc:
+        return rc
 
     pe_dir = project / ".pe"
     pe_dir.mkdir(exist_ok=True)
@@ -323,54 +392,15 @@ def cmd_collect(args: argparse.Namespace) -> int:
     traces_dir.mkdir(exist_ok=True)
 
     seen = _load_seen_uuids(telemetry_path)
-    added = 0
-    skipped_dedup = 0
-    skipped_since = 0
-
+    added = dedup = pre_since = 0
     with telemetry_path.open("a", encoding="utf-8") as ledger:
         for tp in sorted(transcript_dir.glob("*.jsonl")):
-            session_id = tp.stem
-            trace_path = traces_dir / f"{session_id}.jsonl"
-            traces_seen: set[str] = set()
-            if trace_path.exists():
-                for span in _iter_transcript(trace_path):
-                    sid = span.get("span_id")
-                    if sid:
-                        traces_seen.add(sid)
-
-            with trace_path.open("a", encoding="utf-8") as tf:
-                for rec in _iter_transcript(tp):
-                    turn = parse_assistant_record(rec)
-                    if turn is None:
-                        continue
-                    if turn.turn_uuid in seen:
-                        skipped_dedup += 1
-                        continue
-                    if since_dt is not None and turn.timestamp:
-                        try:
-                            ts = dt.datetime.fromisoformat(
-                                turn.timestamp.replace("Z", "+00:00")
-                            )
-                            if ts < since_dt:
-                                skipped_since += 1
-                                continue
-                        except ValueError:
-                            pass  # keep — don't drop records over a bad timestamp
-                    ledger.write(json.dumps(turn.to_dict()) + "\n")
-                    seen.add(turn.turn_uuid)
-                    added += 1
-                    if turn.turn_uuid not in traces_seen:
-                        tf.write(json.dumps(_emit_otel_span(turn)) + "\n")
-                        # L1 completion: child spans per tool_use in
-                        # the assistant record's content array.
-                        for child in _emit_tool_use_child_spans(rec, turn):
-                            if child["span_id"] and child["span_id"] not in traces_seen:
-                                tf.write(json.dumps(child) + "\n")
-                                traces_seen.add(child["span_id"])
+            a, d, s = _collect_one_transcript(tp, traces_dir, ledger, seen, cutoff)
+            added += a; dedup += d; pre_since += s
 
     print(
-        f"[telemetry] added {added} record(s); skipped {skipped_dedup} dedup, "
-        f"{skipped_since} pre-since",
+        f"[telemetry] added {added} record(s); skipped {dedup} dedup, "
+        f"{pre_since} pre-since",
         file=sys.stderr,
     )
     print(f"[telemetry] ledger:  {telemetry_path}", file=sys.stderr)
@@ -385,39 +415,17 @@ def cmd_summary(args: argparse.Namespace) -> int:
         print(f"[telemetry] no ledger at {telemetry_path} — run `pe telemetry collect` first", file=sys.stderr)
         return 0
 
-    since_dt: dt.datetime | None = None
-    if args.since:
-        try:
-            since_dt = dt.datetime.fromisoformat(args.since).replace(tzinfo=dt.timezone.utc)
-        except ValueError:
-            print(f"ERROR: --since must be YYYY-MM-DD (got {args.since!r})", file=sys.stderr)
-            return 2
-
-    # Aggregate per-session per-model
-    @dataclass
-    class Agg:
-        turns: int = 0
-        input_tokens: int = 0
-        output_tokens: int = 0
-        cache_read_tokens: int = 0
-        cache_creation_tokens: int = 0
-        cost_cents: float = 0.0
-        models: dict[str, int] = field(default_factory=dict)
+    since_dt, rc = _parse_since(args.since)
+    if rc:
+        return rc
 
     per_session: dict[str, Agg] = {}
     per_model: dict[str, Agg] = {}
     grand = Agg()
 
     for rec in _iter_transcript(telemetry_path):
-        if since_dt is not None and rec.get("timestamp"):
-            try:
-                ts = dt.datetime.fromisoformat(
-                    rec["timestamp"].replace("Z", "+00:00")
-                )
-                if ts < since_dt:
-                    continue
-            except ValueError:
-                pass
+        if _before_cutoff(rec.get("timestamp"), since_dt):
+            continue
         s = rec.get("session_id", "?")
         m = rec.get("model", "?")
         for agg in (per_session.setdefault(s, Agg()), per_model.setdefault(m, Agg()), grand):
@@ -433,28 +441,305 @@ def cmd_summary(args: argparse.Namespace) -> int:
     if since_dt:
         print(f"  since: {since_dt.date()}")
     print()
-    print("Per-model totals:")
-    print(f"  {'model':<32} {'turns':>7} {'input':>12} {'output':>12} {'cost ($)':>10}")
-    for m in sorted(per_model):
-        a = per_model[m]
-        print(
-            f"  {m:<32} {a.turns:>7} {a.input_tokens:>12,} "
-            f"{a.output_tokens:>12,} {a.cost_cents/100:>10.2f}"
-        )
-    print()
-    print("Per-session (top 10 by cost):")
-    ranked = sorted(per_session.items(), key=lambda x: x[1].cost_cents, reverse=True)[:10]
-    print(f"  {'session':<40} {'turns':>7} {'cost ($)':>10}  models")
-    for s, a in ranked:
-        mods = ", ".join(f"{m}={n}" for m, n in sorted(a.models.items()))
-        print(f"  {s:<40} {a.turns:>7} {a.cost_cents/100:>10.2f}  {mods}")
-    print()
+    _print_per_model(per_model)
+    _print_per_session(per_session)
     print(
         f"Grand total: {grand.turns} turns  "
         f"{grand.input_tokens:,} input  {grand.output_tokens:,} output  "
         f"{grand.cache_read_tokens:,} cache-read  "
         f"${grand.cost_cents/100:.2f}"
     )
+    _print_where_the_tokens_went(grand)
+    return 0
+
+
+@dataclass
+class Agg:
+    """Token + cost totals for one slice of the ledger."""
+    turns: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cost_cents: float = 0.0
+    models: dict[str, int] = field(default_factory=dict)
+
+
+def _print_per_session(per_session: dict) -> None:
+    print("Per-session (top 10 by cost):")
+    ranked = sorted(
+        per_session.items(), key=lambda kv: kv[1].cost_cents, reverse=True
+    )[:10]
+    print(f"  {'session':<40} {'turns':>7} {'cost ($)':>10}  models")
+    for session_id, agg in ranked:
+        mods = ", ".join(f"{m}={n}" for m, n in sorted(agg.models.items()))
+        print(f"  {session_id:<40} {agg.turns:>7} {agg.cost_cents/100:>10.2f}  {mods}")
+    print()
+
+
+def _print_per_model(per_model: dict) -> None:
+    """Per-model totals, including the cache columns.
+
+    cache-read and cache-creation were computed and then not printed, so the
+    table showed input and output — 88 and 968 tokens per turn on the ledger
+    this was written against — and hid the 356,681 tokens per turn of context
+    replay that is the actual bill. You cannot reduce what the tool built to
+    show you cost does not show.
+    """
+    print("Per-model totals:")
+    print(
+        f"  {'model':<26} {'turns':>6} {'input':>10} {'output':>11} "
+        f"{'cache-read':>14} {'cache-write':>12} {'cost ($)':>9}"
+    )
+    unpriced = []
+    for m in sorted(per_model):
+        a = per_model[m]
+        flag = ""
+        if a.cost_cents == 0 and (a.output_tokens or a.cache_read_tokens):
+            unpriced.append((m, a.turns))
+            flag = " *"
+        print(
+            f"  {m:<26} {a.turns:>6} {a.input_tokens:>10,} "
+            f"{a.output_tokens:>11,} {a.cache_read_tokens:>14,} "
+            f"{a.cache_creation_tokens:>12,} {a.cost_cents/100:>9.2f}{flag}"
+        )
+    if unpriced:
+        print()
+        print("  * NOT $0 — UNPRICED. These models are missing from")
+        print("    CENTS_PER_MTOKEN in scripts/telemetry.py, so their cost is")
+        print("    reported as zero and the totals below UNDERSTATE the bill:")
+        for m, turns in unpriced:
+            print(f"      {m}  ({turns:,} turns)")
+    print()
+
+
+def _print_where_the_tokens_went(grand) -> None:
+    """The breakdown that says which lever is worth pulling.
+
+    Input-side tokens are billed at different rates — a cache read costs about
+    a tenth of a fresh read, a cache write about a quarter more — so raw token
+    counts rank the levers wrongly. These weights are the published ratios,
+    not prices, and hold regardless of which model ran.
+    """
+    if not grand.turns:
+        return
+    read_w, write_w = 0.10, 1.25
+    weighted = {
+        "context replayed (cache read)": grand.cache_read_tokens * read_w,
+        "context written (cache create)": grand.cache_creation_tokens * write_w,
+        "new input": float(grand.input_tokens),
+        "output (what was generated)": float(grand.output_tokens),
+    }
+    total = sum(weighted.values()) or 1.0
+    print()
+    print("Where the tokens go (input-side weighted to billing ratios):")
+    for label, value in sorted(weighted.items(), key=lambda kv: -kv[1]):
+        print(f"  {label:<32} {value/total:>6.1%}   {value:>14,.0f} tok-equivalent")
+    print()
+    print(f"  Per turn, averaged over {grand.turns:,} turns:")
+    print(f"    context replayed  {grand.cache_read_tokens/grand.turns:>10,.0f} tokens")
+    print(f"    generated         {grand.output_tokens/grand.turns:>10,.0f} tokens")
+    print()
+    print("  Generation is the small number. Writing terser code cuts the")
+    print("  bottom row; cutting what is re-read every turn cuts the top one.")
+    print("  `pe telemetry context` inventories what that prefix is made of.")
+
+
+# ─── context cost (T1, v0.52.0) ──────────────────────────────────────────
+#
+# The measurement that motivates this command: on a 2,231-turn ledger,
+# 356,681 tokens of context were replayed per turn against 968 generated.
+# Context replay plus cache writes was 97.8% of input-side billed-equivalent
+# tokens; generation was 2.0%. Any effort spent writing terser code is
+# working on the 2%.
+#
+# Not all context is equal, and the difference decides where effort pays:
+#
+#   PER TURN   CLAUDE.md and the rules files it pulls in are re-read on
+#              every single turn of every session. One kilobyte cut here is
+#              cut thousands of times.
+#   ON DEMAND  agents/, commands/ and skills/ load only when invoked.
+#              Trimming a 6 KB agent saves 6 KB on the turns that spawn it
+#              and nothing on the rest — worth doing, worth not confusing
+#              with the row above.
+#
+# Bytes-per-token is an estimate (~4 for English prose and markdown). It is
+# labelled as one everywhere it is printed, because a made-up precise number
+# is worse than an honest approximate one.
+CHARS_PER_TOKEN = 4
+
+# hooks/claude-md-size.sh's own thresholds, so one number does not drift
+# from the other.
+CLAUDE_MD_WARN_BYTES = 12_000
+CLAUDE_MD_FAIL_BYTES = 20_000
+
+
+def _md_files(root: Path, *globs: str) -> list[tuple[Path, int]]:
+    out: list[tuple[Path, int]] = []
+    for pattern in globs:
+        for path in sorted(root.glob(pattern)):
+            if path.is_file():
+                try:
+                    out.append((path, path.stat().st_size))
+                except OSError:
+                    continue
+    return out
+
+
+def _per_turn_prefix(project: Path, home: Path) -> list[tuple[Path, int]]:
+    """Files re-read on every turn: the CLAUDE.md chain and its rules."""
+    found = _md_files(project, "CLAUDE.md", ".claude/CLAUDE.md")
+    found += _md_files(project, ".claude/rules/*.md", ".claude/rules/**/*.md")
+    found += _md_files(home, "CLAUDE.md")
+    found += _md_files(home, "rules/*.md", "rules/**/*.md")
+    seen: set[Path] = set()
+    unique = []
+    for path, size in found:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append((path, size))
+    return sorted(unique, key=lambda ps: -ps[1])
+
+
+def _on_demand(project: Path) -> list[tuple[str, int, int]]:
+    """(label, file count, total bytes) for context loaded only when used."""
+    groups = [
+        ("agents", (".claude/agents/*.md",)),
+        ("commands", (".claude/commands/*.md",)),
+        ("skills", (".claude/skills/*/SKILL.md",)),
+        ("workflows", (".claude/workflows/*.js",)),
+    ]
+    out = []
+    for label, globs in groups:
+        files = _md_files(project, *globs)
+        if files:
+            out.append((label, len(files), sum(size for _, size in files)))
+    return out
+
+
+def _ledger_turns(project: Path) -> tuple[int, int]:
+    """(turns, total cache-read tokens) from this project's ledger."""
+    path = project / ".pe" / "telemetry.jsonl"
+    if not path.exists():
+        return 0, 0
+    turns = replayed = 0
+    for line in path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        turns += 1
+        replayed += rec.get("cache_read_tokens", 0) or 0
+    return turns, replayed
+
+
+def _print_replay_reconciliation(prefix_tokens: int, turns: int, replayed: int) -> None:
+    """Set the file inventory against what was actually re-read.
+
+    This is the part that stops the command being misleading. On the ledger
+    it was written against the CLAUDE.md chain came to ~7,187 tokens per turn
+    while measured replay was ~356,681 — so those files are 2% of what is
+    re-read, and trimming them cannot be the answer to a context bill.
+
+    The remaining 98% is the conversation itself plus the system prompt and
+    tool definitions: every turn re-reads every previous turn, so cost grows
+    with the square of session length. That is not a file anyone can trim.
+    It is a reason to finish work in shorter sessions, compact earlier, and
+    push bounded work into subagents whose context does not accumulate into
+    the main thread.
+    """
+    if not turns or not replayed:
+        return
+    per_turn = replayed / turns
+    share = (prefix_tokens / per_turn) if per_turn else 0
+    print()
+    print("MEASURED — what was actually re-read, from .pe/telemetry.jsonl")
+    print(f"  {per_turn:>12,.0f} tok/turn replayed (mean over {turns:,} turns)")
+    print(f"  {prefix_tokens:>12,} tok/turn of that is the files listed above "
+          f"({share:.1%})")
+    print(f"  {per_turn - prefix_tokens:>12,.0f} tok/turn is conversation history, "
+          "the system prompt and tool definitions")
+    if share < 0.25:
+        print()
+        print("  The files are the small share. The rest grows with the")
+        print("  conversation — every turn re-reads every previous turn — so it")
+        print("  is not trimmed by editing anything. Shorter sessions, earlier")
+        print("  compaction, and pushing bounded work into subagents (whose")
+        print("  context does not accumulate here) move this number; terser")
+        print("  prose in CLAUDE.md does not.")
+
+
+def _print_prefix_inventory(prefix: list, prefix_bytes: int, project: Path) -> None:
+    print("PER TURN — re-read on every turn of every session")
+    if not prefix:
+        print("  (no CLAUDE.md or rules files found)")
+    for path, size in prefix:
+        try:
+            shown = path.relative_to(project)
+        except ValueError:
+            shown = path
+        print(f"  {size/1024:>8.1f} KB  ~{size//CHARS_PER_TOKEN:>7,} tok  {shown}")
+    print(f"  {'─'*8}")
+    print(
+        f"  {prefix_bytes/1024:>8.1f} KB  ~{prefix_bytes//CHARS_PER_TOKEN:>7,} tok  "
+        "TOTAL, every turn"
+    )
+
+
+def _warn_oversized_claude_md(prefix: list) -> None:
+    """Same thresholds as hooks/claude-md-size.sh, so the two cannot drift."""
+    over = [(p, sz) for p, sz in prefix
+            if p.name == "CLAUDE.md" and sz > CLAUDE_MD_WARN_BYTES]
+    if not over:
+        return
+    print()
+    for path, size in over:
+        verdict = "OVER HARD LIMIT" if size > CLAUDE_MD_FAIL_BYTES else "over WARN"
+        print(
+            f"  ! {path}: {size/1024:.1f} KB — {verdict} "
+            f"({CLAUDE_MD_WARN_BYTES//1000}/{CLAUDE_MD_FAIL_BYTES//1000} KB, "
+            "hooks/claude-md-size.sh)"
+        )
+
+
+def cmd_context(args: argparse.Namespace) -> int:
+    """Inventory the context that is paid for, ranked by what it costs."""
+    project = Path(args.project).resolve()
+    home = Path(args.claude_home).expanduser() if args.claude_home else Path.home() / ".claude"
+
+    prefix = _per_turn_prefix(project, home)
+    prefix_bytes = sum(size for _, size in prefix)
+    turns, replayed = _ledger_turns(project)
+
+    print(f"context cost — {project}")
+    print()
+    _print_prefix_inventory(prefix, prefix_bytes, project)
+    if turns:
+        cumulative = (prefix_bytes // CHARS_PER_TOKEN) * turns
+        print(
+            f"\n  Over the {turns:,} turns in this project's ledger that is "
+            f"~{cumulative:,} tokens\n  of prefix alone, re-read."
+        )
+    _print_replay_reconciliation(prefix_bytes // CHARS_PER_TOKEN, turns, replayed)
+
+    _warn_oversized_claude_md(prefix)
+
+    print()
+    print("ON DEMAND — loaded only when invoked, not part of the per-turn prefix")
+    demand = _on_demand(project)
+    if not demand:
+        print("  (none installed here)")
+    for label, count, size in demand:
+        print(f"  {size/1024:>8.1f} KB  ~{size//CHARS_PER_TOKEN:>7,} tok  "
+              f"{label} ({count} file{'s' if count != 1 else ''})")
+    print()
+    print("File token counts are estimates at ~4 chars/token; the MEASURED")
+    print("block above is exact, read from the ledger.")
     return 0
 
 
@@ -475,6 +760,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--project", default=".")
     s.add_argument("--since", default=None)
     s.set_defaults(func=cmd_summary)
+
+    x = sub.add_parser(
+        "context",
+        help="Inventory the context paid for per turn vs on demand",
+    )
+    x.add_argument("--project", default=".")
+    x.add_argument("--claude-home", default=None,
+                   help="Override Claude Code home (default: ~/.claude)")
+    x.set_defaults(func=cmd_context)
 
     return p
 
