@@ -154,6 +154,50 @@ else
     record_fail "missing file not caught: rc=$rc out='$out'"
 fi
 
+# ─── the manifest must cover the code `pe` actually runs ────────────
+# scripts/pe was one 1506-line file when SURFACE_GLOBS was written, so
+# "scripts/pe" covered the entire CLI. v0.51.8 split it into
+# scripts/_cmd_*.sh and the tuple was not revisited: the 112-line
+# dispatcher stayed checksummed while every command body it sources went
+# unverified. Nothing failed, because a glob that matches nothing is
+# indistinguishable from a glob with nothing to match.
+#
+# Derive the requirement from the dispatcher itself rather than from a
+# list someone maintains: whatever `scripts/pe` sources must be in the
+# manifest.
+sourced=$(grep -oE '\$ENGINE_DIR/scripts/[A-Za-z0-9_*.-]+\.sh' "$ENGINE_DIR/scripts/pe" \
+          | sed 's|.*/scripts/||' | sort -u)
+uncovered=""
+for pattern in $sourced; do
+    # shellcheck disable=SC2086
+    for f in $ENGINE_DIR/scripts/$pattern; do
+        [ -f "$f" ] || continue
+        rel="scripts/$(basename "$f")"
+        grep -qF "  $rel" "$ENGINE_DIR/MANIFEST.sha256" 2>/dev/null \
+            || grep -qE "[[:space:]]$rel\$" "$ENGINE_DIR/MANIFEST.sha256" 2>/dev/null \
+            || uncovered="$uncovered $rel"
+    done
+done
+if [ -z "$uncovered" ]; then
+    record_pass "every file scripts/pe sources is in MANIFEST.sha256"
+else
+    record_fail "scripts/pe sources files the manifest does not cover:$uncovered"
+fi
+
+# The workflow decides what reaches .claude/gates/last-gate.json.
+if [ -d "$ENGINE_DIR/workflows" ]; then
+    wf_missing=""
+    for f in "$ENGINE_DIR"/workflows/*.js; do
+        [ -f "$f" ] || continue
+        rel="workflows/$(basename "$f")"
+        grep -qE "[[:space:]]$rel\$" "$ENGINE_DIR/MANIFEST.sha256" 2>/dev/null \
+            || wf_missing="$wf_missing $rel"
+    done
+    [ -z "$wf_missing" ] \
+        && record_pass "every workflow script is in MANIFEST.sha256" \
+        || record_fail "workflow script(s) not in the manifest:$wf_missing"
+fi
+
 # ─── summary ────────────────────────────────────────────────────────
 echo ""
 echo "─────────────────────────────────────"
