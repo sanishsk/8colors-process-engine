@@ -47,16 +47,21 @@ its output. The envelope carries `verdict`, `failure_class`,
 `schemas/gate-envelope.schema.json`. Run `pe gate parse <transcript>`
 to extract + validate it.
 
-**Status of consumers:**
+**Status of consumers** (corrected 2026-09-04 — every line here was
+out of date, some by two months):
 
-- **E1 ships the contract + one reference emitter** (`code-reviewer`).
-- The orchestrator that routes on the envelope (escalation ladder +
-  circuit breaker) is **Phase 3 — not wired yet**. For now the
-  envelope is observational: it powers dashboards, fixture corpora,
-  and gives Phase 3 something concrete to build against.
-- The remaining gate agents (`security-reviewer`, `tdd-guide`,
-  `e2e-runner`, `database-reviewer`) will adopt the envelope in
-  follow-up slot E1.1.
+- **Seven agents emit the envelope**, not one: `code-reviewer`,
+  `security-reviewer`, `database-reviewer`, `tdd-guide`, `e2e-runner`,
+  `design-critic` and `performance-reviewer`. Six of them have eval
+  fixtures under `evals/fixtures/`. Slot E1.1 shipped.
+- The orchestrator that routes on the envelope **graduated on
+  2026-06-28**. `pe shadow decide` makes the routing decision;
+  enforcement is gated behind `--enforce`. This section said "Phase 3 —
+  not wired yet" until 2026-09-04, while `pe help` had said "graduated"
+  since June.
+- The envelope is no longer only observational. `hooks/pre-commit-envelope-check.sh`
+  blocks `git commit` unless `.claude/gates/last-gate.json` is PASS or WARN
+  **and** its recorded `diff_sha` matches the staged diff.
 
 **Gate-agent paradox:** the `code-reviewer` model is now `sonnet`,
 not `haiku`. Gates run at Sonnet+ regardless of the worker tier

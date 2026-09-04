@@ -1,24 +1,35 @@
 # 8colors-process-engine — beta tester brief
 
 > Hand-out for the 2–3 beta cohort. Copy / paste / link as needed.
-> **Last updated 2026-06-30 for v0.8.0** (Phase 3 escalation router
-> graduated 2026-06-28; distribution bundle shipped 2026-06-30).
+>
+> **⚠ NOT READY TO SEND. Body last written 2026-06-30 for v0.8.0; the
+> engine is v0.51.9.** The numbers in the header and TL;DR below have been
+> corrected against the repository (2026-09-04) and
+> `tests/test_docs_version_claims.sh` now fails when they drift again. The
+> rest of the document — the agent table, the "what shipped" section, the
+> walkthrough — has NOT been re-read against the current engine and will
+> contain more of the same. It states, for one, that `code-reviewer` runs on
+> Haiku; `docs/AGENT_INVOCATION_RULES.md` says Sonnet and explains why.
+>
+> A content pass is scheduled as deliverable 8 of the `/gate-review`
+> workflow slot. Do not hand this to the cohort before it lands.
 
 ---
 
 ## TL;DR
 
 I built **`8colors-process-engine`** — a portable Claude Code plugin
-that drops **15 specialist agents**, semantic search over your research
-docs, a weekly retro cron job, 5 slash commands, 2 session skills,
-6 pre-commit governance hooks, and a **verdict-blind gate escalation
-router** into any project in **one install command**. Defaults need
+that drops **21 specialist agents**, semantic search over your research
+docs, a weekly retro cron job, 10 slash commands, 2 session skills,
+29 governance hooks (git-side and Claude Code-side), and a
+**verdict-blind gate escalation router** into any project in **one
+install command**. Defaults need
 **zero API keys**. MIT-licensed. I want your hands on it for 2–4
 weeks of real work, then I want to know what broke, what was
 confusing, and what you expected that wasn't there.
 
 Repo: <https://github.com/sanishsk/8colors-process-engine>
-Current version: **v0.8.0**
+Current version: **v0.51.9**
 
 ---
 
@@ -70,9 +81,13 @@ down for adoption.
 
 ---
 
-## What's in the box (v0.8.0 inventory)
+## What's in the box (inventory)
 
-### 15 specialist agents
+> ⚠ This table lists 15 of the engine's 21 agents and has not been
+> re-checked since v0.8.0 — the model tiers in it are not reliable.
+> `ls agents/` is the current answer until the content pass lands.
+
+### specialist agents
 
 Each has a single job, a model tier matched to that job, and
 explicit when-to-invoke rules:
