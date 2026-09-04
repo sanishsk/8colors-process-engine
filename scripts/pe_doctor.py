@@ -227,6 +227,61 @@ def _check_paths(r: Result, project: Path, engine: Path | None,
         r.add("OK", "hook paths resolve", f"{checked} reference(s) all exist")
 
 
+def _engine_hooks(engine: Path | None) -> set[str]:
+    """Every hook the engine ships, by basename. `_`-prefixed files are
+    sourced libraries, not hooks."""
+    if not engine:
+        return set()
+    return {p.name for p in (engine / "hooks").glob("*.sh")
+            if not p.name.startswith("_")}
+
+
+def _wired_hooks(entries: list[str], settings_text: str,
+                 shipped: set[str]) -> set[str]:
+    """Which of the engine's hooks this project actually invokes.
+
+    Scans the WHOLE entry command, not just the first token. A project may
+    route hooks through its own shim — Origyn's config reads
+
+        entry: scripts/hooks/engine.sh code-review-trailer.sh
+
+    — and reading only the first token counted that as one hook named
+    `engine.sh`, so `pe doctor` reported 2 engine hooks for a project
+    running 6. A name counts only if the engine actually ships it, which
+    keeps a project's own `pre-commit.sh` out of the tally.
+    """
+    found: set[str] = set()
+    for text in entries + [settings_text]:
+        for m in HOOK_NAME.finditer(text):
+            if m.group(1) in shipped:
+                found.add(m.group(1))
+    return found
+
+
+def _check_coverage(r: Result, engine: Path | None, wired: set[str],
+                    shipped: set[str]) -> None:
+    """How much of the engine is this project running?
+
+    The other four checks answer "can the configured hooks run?". This one
+    answers the question that went unasked until 2026-09-04: how many of the
+    engine's hooks is this project configured to run at all? A capability
+    nobody runs rots unnoticed and gets rebuilt, worse, by the projects that
+    needed it. Origyn hand-wrote a CLAUDE.md size gate at 40/60 KB while
+    hooks/claude-md-size.sh sat unused with a stricter 12/20 KB standard.
+
+    Informational: never FAIL. Plenty of projects have no UI and no business
+    wiring the design hooks. The number is the point, not a target.
+    """
+    if not shipped:
+        return
+    missing = sorted(h[:-3] for h in shipped - wired)
+    detail = f"{len(wired)} of {len(shipped)} engine hooks wired"
+    if missing:
+        shown = ", ".join(missing[:6]) + ("…" if len(missing) > 6 else "")
+        detail += f" — not wired: {shown}"
+    r.add("OK" if wired else "WARN", "engine hook coverage", detail)
+
+
 def _check_engine(r: Result, engine: Path | None) -> None:
     """5 — the engine this project points at."""
     if not engine:
@@ -246,14 +301,21 @@ def check_project(project: Path, engine: Path | None) -> Result:
     cfg = project / ".pre-commit-config.yaml"
     cfg_text = _read(cfg)
     entries = _entries(cfg_text)
-    cfg_hooks = sorted({m.group(1) for e in entries
-                        for m in [HOOK_NAME.search(_entry_script(e))] if m})
+    settings = project / ".claude" / "settings.json"
+    shipped = _engine_hooks(engine)
+    wired = _wired_hooks(entries, _read(settings), shipped)
+    # Count what the project actually invokes, not what the first token of
+    # each entry happens to be named — see _wired_hooks.
+    cfg_hooks = sorted(wired) or sorted(
+        {m.group(1) for e in entries
+         for m in [HOOK_NAME.search(_entry_script(e))] if m})
 
     _check_git_hook(r, githooks, cfg_hooks)
     _check_bypass(r, githooks, cfg_hooks)
     _check_tracked(r, project, cfg)
-    _check_paths(r, project, engine, entries, project / ".claude" / "settings.json")
+    _check_paths(r, project, engine, entries, settings)
     _check_engine(r, engine)
+    _check_coverage(r, engine, wired, shipped)
     return r
 
 

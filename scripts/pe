@@ -278,6 +278,11 @@ Reports:
   - Outdated symlinks (project has a file that's no longer in engine)
   - Required deps for the RAG (numpy, google-generativeai, GEMINI_API_KEY)
   - launchd job status (macOS only, if project has CEO weekly wired)
+  - Hook reachability + coverage: how many of the engine's hooks this
+    project is configured to run, and which it is not
+
+FLAGS
+  --json [<project>]   Machine-readable reachability + coverage report.
 EOF
             ;;
         *)
@@ -596,6 +601,18 @@ EOF
 }
 
 cmd_doctor() {
+    # pe_doctor.py has advertised --json in its own --help since v0.51.0,
+    # but cmd_doctor read $1 as the project path, so `pe doctor --json .`
+    # answered "ERROR: --json does not exist". Delegate straight to the
+    # checker in that mode — the symlink section above is shell-formatted
+    # and has no JSON shape to contribute.
+    if [ "${1:-}" = "--json" ]; then
+        shift
+        local jpy; jpy="$(pe_python)" || exit 1
+        exec "$jpy" "$ENGINE_DIR/scripts/pe_doctor.py" "${1:-.}" \
+            --engine "$ENGINE_DIR" --json
+    fi
+
     local target="${1:-}"
     local broken=0
     local hooks_unreachable=0
