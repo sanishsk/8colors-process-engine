@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.51.11-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.51.12-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -59,10 +59,26 @@ pe install /path/to/your/project
 Restart Claude Code in `your-project`. You now have:
 
 - 21 specialist agents (or a leaner set via `pe install --subset gate-only|core`)
-- 9 slash commands
+- 10 slash commands
 - 2 session skills (`/start-session`, `/end-session`)
+- 29 hooks, git-side and in-session
 - Semantic search over `docs/research/`
 - An opinionated set of templates
+
+### Only want one piece? You don't have to install anything
+
+To run a **single agent** against your own code — a security review, a code
+review, a performance pass — see
+**→ [`docs/RUNNING_AGENTS.md`](docs/RUNNING_AGENTS.md) ←**
+
+```bash
+git diff --cached | pe agent run security-reviewer --brief - --dry-run
+```
+
+`--dry-run` shows exactly what would be sent and costs nothing. Swap
+`security-reviewer` for any of the 21 agents. The deterministic hooks
+(secrets, SAST, complexity, duplication, size) run straight from a clone with
+no install at all.
 
 **Optional one-liner extras:**
 
@@ -79,29 +95,42 @@ if the cadence breaks.
 
 ## What you get
 
-### Agents (19)
+### Agents (21)
+
+**The 7 gate agents** end their output with a machine-parseable gate envelope
+that `pe gate parse` validates:
+
+| Agent | Model | When |
+|---|---|---|
+| `code-reviewer` | Sonnet | MANDATORY review before commit. CRITICAL blocks. |
+| `security-reviewer` | Sonnet | Auth, user input, secrets, OWASP Top 10, SSRF, unsafe crypto. |
+| `database-reviewer` | Sonnet | Generic Postgres + multi-tenant SaaS reviewer (tenant isolation, migrations, query safety). |
+| `performance-reviewer` | Sonnet | N+1 queries, unbounded list endpoints, blocking work in a request path. |
+| `tdd-guide` | Sonnet | Executable state machine — stack detect → RED → GREEN → REFACTOR → COVERAGE. |
+| `e2e-runner` | Sonnet | End-to-end testing (Playwright / Vercel Agent Browser). Artifact management. |
+| `design-critic` | Sonnet | MANDATORY design review before UI commits. AI-aesthetic tells + hierarchy/density/responsive rubric. |
+
+**The other 14:**
 
 | Agent | Model | When |
 |---|---|---|
 | `architect` | Opus | System design, scalability, architectural decisions. Consults `docs/research/` first. |
 | `brief-writer` | Sonnet | 1-page briefs with alternatives + market check. Consults `docs/research/` first. |
-| `build-error-resolver` | Sonnet | Multi-stack (TS/Py/Go/Rust/Java) build + type-error resolution. Minimal diffs. |
-| `ceo` | Opus | Weekly retro + next-week plan. Auto-fires Fridays via launchd. |
-| `code-reviewer` | Haiku | MANDATORY review before commit. CRITICAL blocks. Envelope-contract gate. |
-| `data-model-auditor` | Haiku | Finds hardcoded business values; recommends moving to data model / config. |
-| `database-reviewer` | Sonnet | Generic Postgres + multi-tenant SaaS reviewer (tenant isolation, migrations, query safety). |
-| `design-critic` | Sonnet | MANDATORY design review before UI commits. AI-aesthetic tells + hierarchy/density/tabular-nums/empty-state/responsive rubric. Envelope-contract gate. |
-| `doc-updater` | Haiku | Documentation + codemap maintenance. Multi-stack feature-detect. |
-| `e2e-runner` | Sonnet | End-to-end testing (Playwright / Vercel Agent Browser). Artifact management. |
-| `memory-consolidator` | Sonnet | Extracts durable memory from session transcripts. |
 | `planner` | Opus | Complex features, refactoring, multi-step implementation plans. |
+| `researcher` | Sonnet | OSS/MCP scout. Runs async, parallel with implementation. |
+| `build-error-resolver` | Sonnet | Multi-stack (TS/Py/Go/Rust/Java) build + type-error resolution. Minimal diffs. |
+| `data-model-auditor` | Sonnet | Finds hardcoded business values; recommends moving to data model / config. |
+| `tenant-isolation-auditor` | Haiku | Scans recent git history for SQL crossing tenant boundaries without RLS context. |
+| `doc-updater` | Haiku | Documentation + codemap maintenance. Multi-stack feature-detect. |
 | `project-kickstarter` | Opus | Scaffolds new projects — structure, tests, lint, CLAUDE.md, rules. |
 | `project-onboarder` | Opus | Analyzes existing projects against standard rules; generates + applies improvement plan. |
-| `researcher` | Sonnet | OSS/MCP scout. Runs async, parallel with implementation. |
-| `retrospective-agent` | Sonnet | Daily/weekly/monthly retro. Degrades gracefully when dev-log absent. |
-| `security-reviewer` | Sonnet | Auth, user input, secrets, OWASP top 10. Envelope-contract gate. |
-| `tdd-guide` | Sonnet | Executable state machine — Phase 0 stack detect → RED → GREEN → REFACTOR → COVERAGE. |
-| `tenant-isolation-auditor` | Haiku | Scans recent git history for SQL crossing tenant boundaries without RLS context. |
+| `retrospective-agent` | Opus | Daily/weekly/monthly retro. Degrades gracefully when dev-log absent. |
+| `ceo` | Opus | Weekly retro + next-week plan. Auto-fires Fridays via launchd. |
+| `memory-consolidator` | Sonnet | Extracts durable memory from session transcripts. |
+| `incident-synthesizer` | Opus | Turns an incident into a proposed engine gate. Proposes only — never writes to the engine. |
+
+Gates run at Sonnet or above regardless of the worker tier. Running any one
+of these on its own: [`docs/RUNNING_AGENTS.md`](docs/RUNNING_AGENTS.md).
 
 ### Skills (2, user-global)
 
@@ -115,12 +144,18 @@ if the cadence breaks.
 
 Both project-agnostic; tweak via `.claude/session.yaml` per project.
 
-### Commands (4)
+### Commands (10)
 
 - **`/brainstorm [topic]`** — capture brainstorm → produce 1-page brief
-- **`/lock-backlog [phase]`** — lock a phase backlog (read-only audit trail)
+- **`/new-feature`** — the full chain: brainstorm → brief → architect → plan → tdd
+- **`/pre-commit`** — run the gates matching the staged paths, validate envelopes
+- **`/simplify`** — post-GREEN cleanup: reuse, dead code, altitude
 - **`/research-search [query]`** — semantic search over `docs/research/`
+- **`/retro`** — retrospective over the last day / week / month
 - **`/weekly-retro`** — Friday retro + next-week plan
+- **`/memory-consolidate`** — quarterly memory hygiene
+- **`/lock-backlog [phase]`** — lock a phase backlog (read-only audit trail)
+- **`/design-scan`** — quarterly refresh of the curated visual references
 
 ### RAG over `docs/research/`
 

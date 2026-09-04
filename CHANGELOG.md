@@ -7,6 +7,66 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.12] — 2026-09-04
+
+### Changed — the beta brief reads as a hand-out again
+
+0.51.11 corrected the brief's facts and, in doing so, left it arguing with
+itself: a section recounting the engine's own defects, a disclaimer about
+when CI arrived, and a reference-doc entry telling the reader to check the
+audit before trusting the rest of the page. Accurate, and the wrong document
+for it. A brief handed to a beta tester should describe what the engine does.
+The audit is still in the repository for anyone who wants it.
+
+Removed: "An honest note on the last three days", the no-CI disclaimer, and
+the framing around `ADOPTION_AUDIT.md` in the reference list. The drift
+notes in `RUNNING_AGENTS.md` and `CAPABILITY_CATALOG.md` are now one neutral
+line each — the actionable part ("re-run `pe install --subset gate-only`")
+kept, the retrospective dropped. The header banner is one line instead of
+eight. What replaced the removed section is a plain statement that the
+engine runs its own suite, hooks and gates on every push.
+
+### Changed — `docs/RUNNING_AGENTS.md` is now findable
+
+It was linked once, in a doctrine list two thirds down the README. Someone
+deciding whether to try one agent never got that far.
+
+- **README** — a section immediately after the 30-second install: *"Only
+  want one piece? You don't have to install anything"*, with the one-line
+  `--dry-run` command. Line 72 of 386.
+- **Beta brief** — the same, immediately under the TL;DR.
+- `tests/test_docs_version_claims.sh` fails if the README stops linking it,
+  or if the first link falls outside the README's first third.
+
+### Fixed — the README's own tables had drifted the same way the brief's had
+
+The brief is what gets sent; the README is what people see first on GitHub,
+and nothing had been checking it.
+
+- **"Agents (19)"** — there are 21. `incident-synthesizer` and
+  `performance-reviewer` were absent.
+- **Three wrong model tiers** — `code-reviewer` and `data-model-auditor`
+  listed as Haiku (both Sonnet), `retrospective-agent` as Sonnet (Opus). The
+  same `code-reviewer | Haiku` error the brief carried.
+- **"Commands (4)"** — there are 10.
+- **"9 slash commands"** in the install summary — 10; the hook count was
+  missing entirely.
+
+The agent table is now split into the 7 gate agents and the other 14, so
+which agents emit envelopes is visible at a glance.
+
+`tests/test_docs_version_claims.sh` now holds the README to the same rules as
+the brief: every agent present, every model tier matching its frontmatter,
+and both section headings matching the directory counts. Verified red against
+a single wrong tier and against removing the link.
+
+**Value bar:** V3 — three false model tiers and two false counts in the
+project's front page. V2 for the placement: the "can I just run one agent"
+question came from a beta tester, and the answer being unfindable is what
+makes it get asked again.
+
+---
+
 ## [0.51.11] — 2026-09-04
 
 ### Fixed — `size-budget`'s escape hatch could not be used, and fired on the wrong commit
