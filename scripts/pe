@@ -69,7 +69,7 @@ SUBCOMMANDS
     telemetry <sub>       Parse Claude Code transcripts → structured usage
                           records + OTel spans + cost (A1/L1/L4). Subs:
                           collect, summary.
-    agent run <name>      Invoke an engine agent headlessly via `claude -p`
+    agent run <name>      Invoke an engine agent headlessly via \`claude -p\`
                           with the agent's persona + a brief on stdin (A4).
     incident propose      Synthesize a gate proposal from one incident (A3).
                           Proposes only; never modifies the engine repo.

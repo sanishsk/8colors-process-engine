@@ -44,7 +44,8 @@ if [ -z "$UI_HITS" ]; then
     exit 0
 fi
 
-UI_COUNT=$(printf '%s\n' "$UI_HITS" | grep -c . || echo 0)
+# `|| true`, not `|| echo 0` — see code-review-trailer.sh:32.
+UI_COUNT=$(printf '%s' "$UI_HITS" | grep -c . || true)
 
 MSG=$(cat "$MSG_FILE")
 

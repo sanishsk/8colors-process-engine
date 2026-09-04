@@ -88,7 +88,8 @@ PY
 if [ -z "$new_content" ]; then
     line_count=0
 else
-    line_count=$(printf '%s' "$new_content" | grep -c '' 2>/dev/null || echo 0)
+    # `|| true`, not `|| echo 0` — see code-review-trailer.sh:32.
+    line_count=$(printf '%s' "$new_content" | grep -c '' 2>/dev/null || true)
 fi
 
 # Session-dedupe — surface once per project per 10 minutes unless the
