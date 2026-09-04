@@ -7,6 +7,89 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.9] — 2026-09-04
+
+### Changed — the engine decided, in writing, which of its own hooks it runs
+
+`.pre-commit-config.yaml` ran 5 of the engine's 29 hooks and dismissed the
+rest in one sentence. The absence of a gate is a decision; this one had never
+been written down, and the cost was concrete —
+`code-review-trailer.sh` rejected every commit it ever saw for two months
+because the engine's own config omitted it and no project had wired it yet,
+so the code path had never executed anywhere.
+
+The config now carries a per-hook table: five reasons for the hooks it runs,
+and a named reason for each of the 23 it does not (no CLAUDE.md, no UI, no
+migrations, no OpenAPI spec, no dependency manifest, too slow for pre-commit,
+Claude Code-side rather than git-side, reviewed by hand pre-merge).
+
+**One hook is added: `docs-updated-trailer`,** at the `commit-msg` stage. The
+engine's demonstrated failure mode is documentation that states things which
+are not true — four such defects on 2026-09-04 alone. The hook does not check
+that docs are *correct*; it forces the author to say, in the commit message,
+which docs a structural change touched. That is the cheapest thing that makes
+the omission visible.
+
+The four review trailers stay unwired, but now with the reason recorded
+rather than implied: engine changes are reviewed by hand on the PR, so every
+trailer would carry a skip-reason, which is a gate in name only. The gap they
+left — hook code that never executes — is closed better by
+`tests/test_hook_smoke.sh`, which runs all 29 in CI on every push.
+
+`CONTRIBUTING.md` now says `pre-commit install --hook-type pre-commit
+--hook-type commit-msg`. Bare `pre-commit install` writes only
+`.git/hooks/pre-commit`, so a `commit-msg` entry is inert — configured, and
+never running, which is the shape of the defect that started this. The new
+test caught that omission in its first run.
+
+### Fixed — three more documents that state things which are not true
+
+- **`docs/AGENT_INVOCATION_RULES.md`** said the envelope orchestrator was
+  "Phase 3 — not wired yet". It graduated **2026-06-28**; `pe help` has said
+  so since June. The same section said E1 ships "one reference emitter" —
+  seven agents emit the envelope and six have eval fixtures — and that four
+  named agents "will adopt the envelope in follow-up slot E1.1", which
+  shipped. Every line of that status block was out of date, some by two
+  months.
+- **`README.md`** advertised 19 specialist agents; there are 21.
+- **`docs/launch/BETA_TESTER_BRIEF.md`** — a document written to be handed
+  to people outside the project — claimed v0.8.0, "15 specialist agents",
+  5 commands and 6 hooks, against v0.51.9, 21 agents, 10 commands and 29
+  hooks. Header and TL;DR corrected; the body carries a **do-not-send**
+  banner, because the agent table it contains still lists `code-reviewer` as
+  Haiku while `AGENT_INVOCATION_RULES.md` says Sonnet and explains why. A
+  content pass is scheduled separately; correcting the countable numbers is
+  not the same as having re-read it.
+
+### Added
+
+- `tests/test_engine_self_gating.sh` — a hook must be wired on the engine's
+  own commits or named in the config's decision table. Adding
+  `hooks/new-thing.sh` without deciding either way fails. It deliberately
+  does not assert *which* hooks are wired; that judgement will change, what
+  must not is that somebody made it. Also fails when the table names a hook
+  that has been deleted, and when a `commit-msg` hook exists without
+  `CONTRIBUTING` telling contributors to install that stage.
+- `tests/test_docs_version_claims.sh` — no document may claim a version or
+  an inventory count the repository contradicts. Covers both `plugin.json`
+  files, the README badge and agent count, and the beta brief's version,
+  agent count and hook count. Counting is not judgement; anything countable
+  gets counted.
+
+The first wiring of `docs-updated-trailer` carried
+`pass_filenames: false`, copied from the pre-commit entries above it in the
+same file. A commit-msg hook is *handed* the message file as `$1`, so it
+failed on every commit with a usage error. It was caught on the first commit
+after wiring and fixed in minutes — because the hook says so out loud, which
+is the whole difference between it and the defects that started this audit.
+`test_engine_self_gating.sh` now asserts the shape.
+
+**Value bar:** V1 — the unrecorded omission of the trailer hooks is why a
+broken hook went unnoticed for two months. V3 for the four false documents,
+each quoted with the line it replaced.
+
+---
+
 ## [0.51.8] — 2026-09-04
 
 ### Changed — `scripts/pe` split, so its own gate stops being bypassed

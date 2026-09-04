@@ -1,11 +1,67 @@
 # Engine self-gating (I1) — the engine runs its OWN deterministic gates on its
-# own commits. Only the hooks that APPLY to engine code (Python + shell + docs)
-# are wired; design/motion/migration/api/boot hooks are N/A here (no UI/app).
-# The LLM code-review trailer is NOT auto-enforced on engine commits — engine
-# changes are reviewed pre-merge by hand (documented exemption; running an agent
-# per engine commit is impractical). ponytail: deterministic self-gate only.
+# own commits.
+#
+# Which of its 29 hooks the engine runs on itself, and why. Reviewed
+# 2026-09-04 after the adoption audit; `tests/test_engine_self_gating.sh`
+# fails if a hook is neither wired below nor listed in this table, so a new
+# hook cannot be added without someone deciding.
+#
+#   WIRED
+#     secrets-scan          any repo can leak a key
+#     sast-scan             engine ships shell + Python that adopters execute
+#     complexity-gate       ruff C901/PLR + vulture over scripts/
+#     duplication-gate      jscpd ratchet
+#     size-budget           scripts/pe was 1506 lines against this hook's own
+#                           800-line limit until 0.51.8, bypassed on every
+#                           commit. See tests/test_size_budget_repo.sh.
+#     docs-updated-trailer  NEW in 0.51.9. The engine's demonstrated failure
+#                           mode is documentation that states things which are
+#                           not true: four such defects on 2026-09-04 alone
+#                           (hooks/README.md's hook catalogue and its 40,000-
+#                           char claim, boot-smoke.sh's invented callers,
+#                           CONTRIBUTING.md's `pe incident open-pr`). This
+#                           hook does not check that docs are CORRECT — it
+#                           forces the author to say, in the commit message,
+#                           which docs a structural change touched. That is
+#                           the cheapest thing that makes the omission visible.
+#
+#   DELIBERATELY NOT WIRED — with the reason, not just the absence
+#     code-review-trailer   Engine changes are reviewed pre-merge, by hand, on
+#     security-review-trailer  the PR. Running a review agent per engine commit
+#     design-review-trailer    is impractical and the trailers would all carry
+#     perf-gate                a skip-reason, which is a gate in name only.
+#                              The reason these four were omitted UNTIL now was
+#                              never written down, and the cost was real:
+#                              code-review-trailer.sh rejected every commit it
+#                              ever saw for two months, because nothing
+#                              anywhere ran it. That gap is closed differently
+#                              and better — tests/test_hook_smoke.sh executes
+#                              all 29 hooks in CI on every push.
+#     claude-md-size        The engine has no CLAUDE.md.
+#     research-index-rebuild  The engine has no docs/research/.
+#     test-run              The suite takes ~80s; too slow for pre-commit.
+#                           CI runs it on every push (tests/run-all.sh).
+#     boot-smoke            Needs .process-engine.yaml → boot_check; the engine
+#                           is not an app and has no boot. Wired nowhere at
+#                           all — see docs/ADOPTION_AUDIT.md.
+#     migration-lint        No migrations.
+#     api-contract-check    No OpenAPI spec.
+#     design-lint           No UI. Nor motion-lint, signature-lint,
+#                           visual-baseline-guard, copy-lint.
+#     deps-audit            No dependency manifest; the engine is stdlib-only
+#                           bash + Python by design.
+#     stacking-rule-check   pre-push, and slot IDs are a project-side concept.
+#     ponytail-preflight    Claude Code PostToolUse hooks, not git-side. They
+#     post-edit-lint          apply to sessions working IN this repo and are
+#     pre-commit-envelope-check  wired through .claude/settings.json, not here.
+#     cache-hygiene-warn
+#     transcript-guard
+#     stop-uncommitted-reminder
 #
 # One-time:  pip install pre-commit && pre-commit install
+#            (REQUIRED — .git/hooks is not tracked, so a fresh clone has no
+#             gates at all and nothing complains. This repo was in exactly
+#             that state until 2026-09-04.)
 repos:
   - repo: local
     hooks:
@@ -43,3 +99,14 @@ repos:
         language: script
         pass_filenames: false
         stages: [pre-commit]
+
+      # No `pass_filenames: false` here, unlike the pre-commit entries
+      # above. A commit-msg hook is HANDED the message file as $1, and
+      # docs-updated-trailer.sh opens with `${1:?Usage: ...}` — suppressing
+      # filenames made it fail on every commit with a usage error. Caught on
+      # the first commit after wiring it, because the hook says so out loud.
+      - id: docs-updated-trailer
+        name: Docs-updated trailer required on structural commits
+        entry: hooks/docs-updated-trailer.sh
+        language: script
+        stages: [commit-msg]

@@ -54,16 +54,29 @@ is the same defect the 0.51.3 fix removed from
 ```bash
 git clone https://github.com/sanishsk/8colors-process-engine.git
 cd 8colors-process-engine
-pre-commit install                               # REQUIRED — see below
+pre-commit install --hook-type pre-commit --hook-type commit-msg
+                                                 # REQUIRED — see below
 ./scripts/pe install ~/code/some-test-project    # smoke-test your changes locally
 ```
 
 **`pre-commit install` is not optional and is easy to skip**, because
 nothing complains when you do. `.git/hooks/` is not tracked, so a fresh
-clone has no hook at all and the five gates in `.pre-commit-config.yaml`
+clone has no hook at all and the gates in `.pre-commit-config.yaml`
 simply never run — silently, on every commit. Until 2026-09-04 this
 repository itself was in exactly that state, which `pe doctor` found on
 its first run.
+
+**Both `--hook-type` flags matter.** Bare `pre-commit install` writes only
+`.git/hooks/pre-commit`, so the `commit-msg` entry in the config — currently
+`docs-updated-trailer` — is inert: configured, and never running. That is
+the same shape as the defect that prompted the audit, so the flags are in
+the command above rather than in a footnote.
+
+Which of its own 29 hooks the engine runs on itself, and why it does not run
+the other 23, is written out at the top of `.pre-commit-config.yaml`.
+`tests/test_engine_self_gating.sh` fails if a hook is neither wired nor given
+a reason — the absence of a gate is a decision, and it should be a written
+one.
 
 Check any project, including this one:
 
