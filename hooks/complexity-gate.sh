@@ -111,25 +111,93 @@ run_knip() {
     if command -v knip >/dev/null 2>&1; then
         knip --no-progress || echo "[complexity-gate] knip: issues above — advisory" >&2
     else
-        npx --yes --no-install knip --no-progress 2>/dev/null || log_skip "knip via npx"
+        # `--yes --no-install` is contradictory — see run_eslint. --no-install
+        # alone means "use it if the project has it, never download".
+        npx --no-install knip --no-progress 2>/dev/null || log_skip "knip via npx (not installed)"
     fi
     # knip is advisory-only by default (project-scoped analysis, not per-file)
 }
 
 run_eslint() {
     [ -z "$STAGED_JS" ] && return 0
-    if ! command -v eslint >/dev/null 2>&1 && ! command -v npx >/dev/null 2>&1; then
-        log_skip "eslint"; return 0
+
+    # This path had never executed. The engine repo contained zero JavaScript
+    # until 2026-09-04, so STAGED_JS was always empty and the function
+    # returned on its first line. The first .js file ever staged found it
+    # broken in three ways at once:
+    #
+    #   1. `npx --yes --no-install` is self-contradictory — --no-install says
+    #      "do not download", --yes says "auto-confirm the download". npm
+    #      resolves it by cancelling: "npx canceled due to missing packages
+    #      and no YES option".
+    #   2. That error went to 2>/dev/null, so the hook reported "FAIL — one
+    #      or more checks blocked the commit" with no reason. A missing tool
+    #      was indistinguishable from a real complexity violation, and every
+    #      other tool in this file skips loudly when absent.
+    #   3. `--no-eslintrc` is an eslint 8 flag. eslint 9 renamed it to
+    #      --no-config-lookup, so even a correctly-installed eslint 9 would
+    #      have failed on the flag rather than on the code.
+    #
+    # A gate that cannot run must skip and say so, never block silently.
+    local runner=""
+    if command -v eslint >/dev/null 2>&1; then
+        runner="eslint"
+    elif command -v npx >/dev/null 2>&1 && npx --no-install eslint --version >/dev/null 2>&1; then
+        # --no-install alone: use a locally installed eslint, never download.
+        runner="npx --no-install eslint"
+    else
+        log_skip "eslint (not installed — npm i -D eslint to enable)"
+        return 0
     fi
+
+    # Claude Code workflow scripts are not standalone JavaScript. The body
+    # runs inside a runtime-supplied async wrapper, where a top-level
+    # `return` IS the contract — it is the workflow's result. eslint parsing
+    # one as a module reports "Parsing error: 'return' outside of function"
+    # and stops, which is the linter being wrong about the file, not the file
+    # being wrong.
+    #
+    # They are excluded, and the exclusion is ANNOUNCED. A silent exemption
+    # list is how a gate stops meaning anything.
+    local lintable="" skipped=""
+    local f
+    for f in $STAGED_JS; do
+        case "$f" in
+            workflows/*|*/workflows/*) skipped="$skipped $f" ;;
+            *) lintable="$lintable $f" ;;
+        esac
+    done
+    if [ -n "$skipped" ]; then
+        echo "[complexity-gate] eslint: not linting workflow script(s) —$skipped" >&2
+        echo "                  (top-level return is the workflow contract; a" >&2
+        echo "                   module-mode parser cannot read them)" >&2
+    fi
+    if [ -z "${lintable// /}" ]; then
+        log_skip "eslint (only workflow scripts staged)"
+        return 0
+    fi
+    STAGED_JS="$lintable"
+
     log_run "eslint (complexity/max-depth/max-lines-per-function)"
-    local runner="eslint"
-    command -v eslint >/dev/null 2>&1 || runner="npx --yes --no-install eslint"
+
+    # eslint 9 dropped --no-eslintrc for --no-config-lookup. Pick by version
+    # rather than guessing; an unreadable version falls back to the 9 form.
+    local ver no_config
+    ver=$($runner --version 2>/dev/null | grep -oE '[0-9]+' | head -1)
+    if [ -n "$ver" ] && [ "$ver" -lt 9 ] 2>/dev/null; then
+        no_config="--no-eslintrc"
+    else
+        no_config="--no-config-lookup"
+    fi
+
+    # stderr is NOT discarded. If eslint refuses to run, the operator sees
+    # why instead of an unexplained block.
     # shellcheck disable=SC2086
     if ! $runner --rule 'complexity: ["error",{"max":10}]' \
                  --rule 'max-depth: ["error",{"max":4}]' \
                  --rule 'max-lines-per-function: ["error",{"max":50,"skipBlankLines":true,"skipComments":true,"IIFEs":true}]' \
-                 --no-eslintrc \
-                 $STAGED_JS 2>/dev/null; then
+                 $no_config \
+                 $STAGED_JS; then
         fail=1
     fi
 }

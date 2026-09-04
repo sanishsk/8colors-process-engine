@@ -197,6 +197,36 @@ test.
 
 ---
 
+## All the gates at once — `/gate-review`
+
+For a high-risk change — payments, auth, RLS — there is a workflow that runs
+`security-reviewer`, `database-reviewer` and `code-reviewer` **in parallel**,
+merges their findings into one ranked verdict, and records it where the
+commit hook reads it:
+
+```
+/8colors-process-engine:gate-review     # installed as a plugin
+```
+
+If a gate is skipped or dies, the verdict is capped at WARN and a
+`gate-did-not-run` finding names it. Two clean reviews out of three is not a
+pass.
+
+**To use it in a repo that has the engine cloned but not installed as a
+plugin**, put the script where Claude Code looks for saved workflows:
+
+```bash
+mkdir -p .claude/workflows
+cp ~/engine/workflows/gate-review.js .claude/workflows/
+```
+
+Then `/gate-review`. Copy rather than symlink: Claude Code 2.1.216+ refuses
+to write through a symlink in that directory, and whether it *discovers*
+through one is unverified — a copy has neither question hanging over it.
+
+Needs Claude Code ≥ 2.1.154 and a paid plan. Everything else on this page
+works without it.
+
 ## Running it once vs. requiring it every time
 
 Everything above is something you choose to run. If you want a concern
