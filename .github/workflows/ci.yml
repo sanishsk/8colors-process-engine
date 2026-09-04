@@ -1,0 +1,79 @@
+# The engine had no CI. Forty-three test scripts sat in tests/ and the only
+# thing that ran them was someone remembering to. On 2026-09-04 three were
+# red at HEAD — a stale plugin.json version, a fixture missing two fields the
+# schema had made required, and the regression test for a hook defect that
+# was itself broken. Each asserts something true and useful. Nothing ran them.
+#
+# Two jobs, deliberately:
+#
+#   suite  — the tests, which check what the engine's surfaces DECIDE.
+#   hooks  — every hook executed against a fixture, which checks that they
+#            RUN AT ALL. `code-review-trailer.sh` rejected every commit it
+#            ever saw because a grep for an absent optional trailer died
+#            under `set -euo pipefail` before printing anything. Reading it
+#            did not find that. Running it did.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure git (fixtures commit)
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name  ci
+          git config --global init.defaultBranch master
+      - name: Run the suite
+        run: tests/run-all.sh
+
+  hooks:
+    name: every hook runs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure git (fixtures commit)
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name  ci
+          git config --global init.defaultBranch master
+      - name: Execute every hook against a fixture
+        run: tests/test_hook_smoke.sh
+      - name: Every hook has a catalogue row
+        run: tests/test_hooks_documented.sh
+
+  self-gate:
+    name: the engine's own pre-commit gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pre-commit
+        run: pip install --quiet pre-commit
+      - name: Run the engine's gates over the whole repo
+        run: pre-commit run --all-files --show-diff-on-failure
+        env:
+          # scripts/pe is over its own 800-line file budget. The split is
+          # tracked; until it lands, the gate would fail every run and get
+          # ignored, which is how a gate stops working.
+          PE_SKIP_SIZE_BUDGET: '1'

@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.51.5-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.51.6-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -164,6 +164,8 @@ scripts. See [`docs/RHYTHM.md`](docs/RHYTHM.md).
 - [`docs/RHYTHM.md`](docs/RHYTHM.md) — weekly cadence (Mon brainstorm, Fri retro)
 - [`docs/AGENT_INVOCATION_RULES.md`](docs/AGENT_INVOCATION_RULES.md) — slot-type → agent-chain matrix
 - [`docs/RAG.md`](docs/RAG.md) — semantic search architecture + tradeoffs
+- [`docs/ADOPTION_AUDIT.md`](docs/ADOPTION_AUDIT.md) — which of the engine's
+  surfaces anything has actually run, and the defects that answering it found
 
 ---
 

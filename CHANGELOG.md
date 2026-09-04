@@ -7,6 +7,96 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.6] — 2026-09-04
+
+### Added — the adoption audit, and the machinery that keeps it honest
+
+`docs/ADOPTION_AUDIT.md` answers the question four defects in one afternoon
+made unavoidable: **which of the engine's surfaces has anything ever
+actually run?** Method was execute, not read.
+
+The headline numbers:
+
+- **29 of 29 hooks run** against a fixture. None shows the silent-fail
+  signature today — but running them with an *empty* staged set found
+  defect 5 (fixed in 0.51.4), which reading them had not.
+- **8 of 29 hooks have never been referenced by any project on this
+  machine**, counting generously enough that a mention in a comment counts.
+- The two projects that adopt the engine adopt **disjoint halves of it**.
+  8CStudio wires 11 hooks, all Claude Code side, and not one commit gate.
+  Origyn wires 6, all git-side, and not one PostToolUse hook. Neither has
+  ever run the other's half.
+- **11 of 29 hooks have no dedicated test** — including `complexity-gate`,
+  `duplication-gate` and `size-budget`, which run on every commit to the
+  engine itself.
+- **2 of 21 agents have left a gate envelope anywhere.** 6 have eval
+  fixtures. `pe incident propose` has never produced a proposal: the whole
+  A3 surface has never run end to end.
+
+Nothing is deleted. The eight unwired hooks are not dead weight; they are
+untested capability no adoption has exercised, which is a different problem
+and needs a different fix.
+
+### Added — there was no CI
+
+No `.github/workflows/` existed. Forty-five test scripts, and the only thing
+that ran them was someone remembering to. Three were red at HEAD.
+
+- `.github/workflows/ci.yml` — three jobs on every push and PR: the suite,
+  every hook executed against a fixture, and the engine's own pre-commit
+  gates over the whole repo.
+- `tests/run-all.sh` — there was no runner. Optional substring filter,
+  names what failed, exit 0 iff every test exits 0.
+- `tests/test_hook_smoke.sh` — executes all 29 hooks. Asserts each
+  terminates, speaks when it refuses, and emits no shell diagnostic. It
+  asserts nothing about verdict; that is each hook's own test's business.
+  Verified against a deliberately silent-failing probe hook.
+
+### Added — `pe doctor` now reports coverage
+
+`pe doctor` answered "can the configured hooks run?" and never "how many of
+the engine's hooks is this project configured to run?" — the question whose
+absence let Origyn hand-roll a CLAUDE.md gate the engine already shipped,
+stricter.
+
+```
+✓ engine hook coverage     6 of 29 engine hooks wired — not wired:
+                           api-contract-check, boot-smoke, cache-hygiene-warn…
+```
+
+Informational, never a failure — a project with no UI has no business
+wiring the design hooks. The number is the point.
+
+### Fixed
+
+- **`pe doctor` counted shim-routed hooks as one hook.** It read only the
+  first token of each `entry:`, so a project routing hooks through its own
+  wrapper — `entry: scripts/hooks/engine.sh code-review-trailer.sh` — was
+  counted as running one hook named `engine.sh`. It reported "2 hook(s)"
+  for Origyn, which runs six. A name now counts if it appears anywhere in
+  the entry command AND the engine actually ships it, which also keeps a
+  project's own `pre-commit.sh` out of the tally.
+- **`pe doctor --json` did not work through the CLI.** `pe_doctor.py` has
+  advertised the flag in its own `--help` since 0.51.0; `cmd_doctor` read
+  `$1` as the project path and answered `ERROR: --json does not exist`.
+
+### Decided — `pe incident open-pr` will not be built
+
+`pe incident propose` has produced zero proposals in any project on this
+machine. Building the second half of a pipeline whose first half has never
+run is speculative by definition, and the value bar asks for evidence, not
+symmetry. If opening the branch by hand turns out to be the friction that
+stops a second proposal happening, that is a V2 with evidence attached and
+the command is worth ten lines then. Rationale recorded in the audit §5.
+
+**Value bar:** V1 for the `pe doctor` miscount (Origyn, the only project
+wiring engine hooks via a shim, was reported at 2 of its 6). V3 for the
+unreachable `--json`. V4 for the audit and the CI — four defects in one
+afternoon, three of the engine's own tests red at HEAD, and nothing that
+would have run them.
+
+---
+
 ## [0.51.5] — 2026-09-04
 
 ### Fixed — things the engine states that are false
