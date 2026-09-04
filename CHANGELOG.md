@@ -7,6 +7,135 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.15] — 2026-09-04
+
+### Added — `/gate-review`, the engine's first dynamic workflow
+
+`docs/AGENT_INVOCATION_RULES.md` told the model to "Launch 3 agents in
+parallel" and "Aggregate findings". Six lines of prose with no mechanism —
+the drift class this engine exists to prevent, sitting in its own doctrine.
+`workflows/gate-review.js` replaces it.
+
+Four phases: read the staged diff, run `security-reviewer`,
+`database-reviewer` and `code-reviewer` in `parallel()` with the envelope
+schema bound at each call site, merge into one `merge-gate` envelope ranked
+by severity, then record it.
+
+**The recording step is not optional and was not in the incoming brief.** A
+workflow script has no filesystem access, and
+`hooks/pre-commit-envelope-check.sh` reads `.claude/gates/last-gate.json`. A
+workflow that ends in `return { verdict }` produces a verdict the enforcement
+layer is blind to. The final phase is therefore an `agent()` — agents hold
+`Bash` — running `pe gate parse --record`, and it returns the recorder's own
+stderr line verbatim so the workflow cannot claim to have recorded something
+it did not.
+
+### The property the whole design turns on
+
+`agent()` returns `null` when an agent is skipped or dies, and the documented
+`.filter(Boolean)` idiom **fails open** here: drop a dead `security-reviewer`,
+see two clean envelopes, report PASS, and a payment-path change is committed
+having never been security-reviewed — silently.
+
+The script counts what came back before anything aggregates. A missing gate
+adds a `gate-did-not-run` HIGH finding and caps the verdict at WARN. **PASS is
+reachable only when every gate answered**, and the check is re-applied to the
+aggregate afterwards, because the aggregating agent was told the rules and
+being told is not the same as being bound by them.
+
+### Added — tests that execute the workflow, not a description of it
+
+`tests/gate_review_harness.mjs` loads the real `workflows/gate-review.js`,
+stubs the runtime's four hooks (`agent`, `parallel`, `phase`, `log`) and
+drives the actual control flow across nine scenarios — nothing staged, all
+clean, one HIGH, one CRITICAL, a dead gate, a dead aggregator, every gate
+dead, a failed record, and **an aggregator that reports PASS while a gate is
+missing**. 19 assertions.
+
+Substituting the naive `.filter(Boolean)` for the floor turns **six** of them
+red, including "FAIL-OPEN: a dead security-reviewer still produced PASS" and
+"gates_ran" reporting three gates when one never ran. That is the regression
+this file exists to catch.
+
+`tests/test_gate_review_behaviour.sh` wraps it for `run-all.sh` and CI, and
+skips loudly when `node` is absent — saying in that case that the decision
+logic went untested, rather than passing quietly. **`node` is not an engine
+dependency and does not become one**: Claude Code executes the workflow, never
+node on an adopter's machine. It is used only to exercise the logic where a
+runner already ships it.
+
+`tests/test_gate_review_schema_sync.sh` holds the schema inlined in the `.js`
+to `schemas/gate-envelope.schema.json`. It asserts **consistency, not
+equality**: the inline object is a deliberate structural subset, because the
+canonical schema's draft-07 `allOf`/`if`/`then` conditionals have undocumented
+support in this runtime and a schema silently ignored is worse than one
+absent. Equality would fail on cosmetic edits and still pass on real
+divergence. Verified red against three separate drifts.
+
+### Changed
+
+- **`docs/E1_GATE_ENVELOPE.md §9`** — Option D added, and the three lines a
+  fourth option falsified are corrected: "Three viable approaches", "The
+  A/B/C decision", "identical for all three". New §9.1 records why D
+  dominates C (who owns the runtime) and the two contract-level facts:
+  persistence must go through an agent, and `gate_name` is `merge-gate`,
+  which was already in the enum — Option D needed no schema change.
+- **`docs/AGENT_INVOCATION_RULES.md`** — the prose parallel pattern is gone.
+  It now says run `/gate-review`, states that a gate which does not answer
+  can never produce PASS, and says what to do where workflows are
+  unavailable.
+- **`docs/RUNNING_AGENTS.md`** — a `/gate-review` section, including how to
+  enable it in a repo that has the engine cloned but not installed as a
+  plugin. **Copy, not symlink**: Claude Code 2.1.216+ refuses to write
+  through a symlink there, and whether it *discovers* through one is
+  unverified.
+
+### Fixed — `complexity-gate`'s eslint path could not run, and blocked silently
+
+The first JavaScript ever staged in this repository found it. `STAGED_JS` had
+always been empty, so `run_eslint` returned on its first line and the path had
+never executed anywhere.
+
+`eslint --no-eslintrc` — **`--no-eslintrc` is an eslint 8 flag.** eslint 9
+rejects it outright ("Invalid option '--eslintrc'"), and that message went to
+`2>/dev/null`. The hook printed *"FAIL — one or more checks blocked the
+commit"* with no reason attached, so a rejected flag was indistinguishable
+from a real complexity violation. **This is not specific to this repo**: any
+project that wires `complexity-gate` and has eslint 9 installed gets an
+unexplained block on every JavaScript commit. The flag is now chosen by
+eslint major version, and stderr is no longer discarded.
+
+Two more in the same function. `npx --yes --no-install` is self-contradictory
+— `--no-install` says do not download, `--yes` says auto-confirm the download,
+and npm resolves it by cancelling. It is `--no-install` alone now, in both the
+eslint and knip fallbacks. And an unavailable eslint now **skips loudly**,
+like every other tool in the file, instead of failing.
+
+Claude Code workflow scripts are excluded from the eslint pass and **the
+exclusion is announced**. They are not standalone JavaScript — the body runs
+inside a runtime-supplied async wrapper where a top-level `return` is the
+contract — so a module-mode parser reports a parse error and stops. That is
+the linter being wrong about the file. A silent exemption list is how a gate
+stops meaning anything, so it prints which files it skipped and why.
+
+`tests/test_complexity_gate_eslint.sh` covers all of it, including a real
+`max-depth` violation that must block *with the rule named*. Verified against
+the old hook: five assertions red, among them "a clean .js was blocked".
+
+### Not done, and why
+
+No `pe install` wiring, no fixer agent, no `pe doctor` version check — the
+three scope cuts argued in `docs/research/architect-gate-review-workflow.md`.
+No symlink committed into the engine's own `.claude/workflows/`: discovery
+through a symlink is unverified, and shipping a `/gate-review` that might
+silently not exist is the defect class this release cycle has been about.
+
+**Value bar:** V4 — the adoption audit recorded that the orchestration layer
+is prose nothing observes. Still not V1: no incident has been traced to the
+parallel pattern silently not running, because nothing watched it.
+
+---
+
 ## [0.51.14] — 2026-09-04
 
 ### Fixed — a routing table that sent work to an agent which does not exist

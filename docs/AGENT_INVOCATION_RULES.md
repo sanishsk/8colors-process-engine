@@ -30,13 +30,39 @@ belt-and-suspenders backup but does NOT replace the workflow-stage
 invocation. Rationale and tradeoffs: see the target project's
 `docs/research/brief-code-reviewer-workflow-stage.md`.
 
-Parallel review pattern for high-risk slots (RLS changes, payment, auth):
-Launch 3 agents in parallel:
-1. security-reviewer — data isolation focus
-2. database-reviewer — transaction safety + RLS
-3. code-reviewer — general quality
+### Parallel review for high-risk slots — run `/gate-review`
 
-Aggregate findings; fix CRITICAL + HIGH before merge.
+For RLS changes, payment paths and auth/multi-tenancy, do not launch the
+three gate agents by hand. Run the workflow:
+
+```
+/gate-review                      # in the engine repo
+/8colors-process-engine:gate-review   # when installed as a plugin
+```
+
+It runs `security-reviewer`, `database-reviewer` and `code-reviewer` in
+parallel against the staged diff, validates each envelope at the call site,
+merges the findings into one `merge-gate` envelope ranked by severity, and
+records it to `.claude/gates/last-gate.json` so
+`hooks/pre-commit-envelope-check.sh` can see it.
+
+**Why a workflow and not this paragraph.** Until v0.51.15 these six lines
+*were* the mechanism: an instruction to launch three agents and aggregate
+their findings, which the model either followed or did not, with nothing
+observing which. That is the drift class this engine exists to prevent, and
+it was sitting in the engine's own doctrine. A script either runs the three
+gates or visibly fails.
+
+**A gate that does not answer can never produce PASS.** If any of the three
+is skipped or dies, the workflow adds a `gate-did-not-run` HIGH finding and
+caps the verdict at WARN. Two clean envelopes out of three is not a pass.
+
+`/gate-review` needs Claude Code ≥ 2.1.154 and a paid plan. Everything else
+in the engine works without it; where it is unavailable, invoke the three
+agents by hand and treat a missing one the same way.
+
+Contract and rationale: `docs/E1_GATE_ENVELOPE.md §9.1`,
+`docs/research/architect-gate-review-workflow.md`.
 
 ## Gate envelope (E1, 2026-06-24)
 

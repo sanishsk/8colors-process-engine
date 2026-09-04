@@ -218,19 +218,45 @@ run immediately before Phase 3.
 
 ## 9. Orchestrator — named, deferred
 
-E1 deliberately does not implement the orchestrator that consumes the
-envelope. Three viable approaches, all compatible with this contract;
-the choice does not need to be made until Phase 4 (parallel DAG):
+E1 deliberately did not implement the orchestrator that consumes the
+envelope. **Four** viable approaches, all compatible with this contract.
+A–C were named in v0.19.0 and deferred to Phase 4; **D was added in
+v0.51.15 and is the one being piloted** — see §9.1.
 
 | Option | Mechanism | Best for | Tradeoff |
 |---|---|---|---|
 | **A. Subagent burst** | Spawn multiple `Agent(...)` invocations in one Claude Code message | Short-lived, shared-context fan-outs | Loses true parallelism on long tasks; subagents share the parent's context budget |
 | **B. Headless `claude -p`** | Run background `claude -p` sessions, each emits an envelope to a file | True parallelism, isolation | No shared context between workers; cross-worker conflicts surface only at the merge gate |
 | **C. External Python orchestrator** | A driver script that schedules workers, parses envelopes via `pe gate parse`, drives escalation | Maximum control, observability, scheduling logic | More code to own; requires a long-running process |
+| **D. Claude Code dynamic workflow** | A saved JS script — `parallel()` of schema-bound `agent()` calls, aggregation, then an agent that records via `pe gate parse --record` | Parallel fan-out with envelope validation at the call site, resume, and per-agent token visibility | Claude Code-only and needs a paid plan; script cannot touch the filesystem, so persistence must go through an agent |
 
 Phases 0–3 are entirely sequential (one worker → one gate → maybe
-retry → next worker). The A/B/C decision only bites at Phase 4. The
-envelope contract is identical for all three.
+retry → next worker). The envelope contract is identical for all four.
+
+### 9.1 Option D — the Phase 4 pilot
+
+D dominates C on the axis this engine cares about most: **who owns the
+runtime**. C means writing and maintaining a scheduler; D means Anthropic
+maintains it and the engine writes ~200 lines of orchestration. It also
+dominates A, whose subagents share the parent's context budget — which is
+the thing fan-out exists to avoid.
+
+Shipped as `workflows/gate-review.js`. Two properties are worth stating
+here because they are contract-level, not implementation detail:
+
+- **The script cannot persist the verdict itself.** Workflow scripts have
+  no filesystem access, and `hooks/pre-commit-envelope-check.sh` reads
+  `.claude/gates/last-gate.json`. So the final stage is an `agent()` — agents
+  hold `Bash` — running `pe gate parse --record`. The envelope therefore
+  passes through *this* contract's full validator on its way to disk,
+  including the `verdict`/`failure_class` conditional the runtime's schema
+  binding does not express.
+- **`gate_name` is `merge-gate`.** The aggregate is an envelope over several
+  gates, and `merge-gate` was already in the enum — Option D needed no
+  change to this schema at all.
+
+Design rationale, scope cuts and the fail-open hazard that shapes the
+script: `docs/research/architect-gate-review-workflow.md`.
 
 ---
 
