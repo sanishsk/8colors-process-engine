@@ -300,6 +300,53 @@ that were not true, that is where the leverage was.
   checksum. Adding the glob and regenerating the manifest belong to the same
   release.
 
+## The pilot, run for real
+
+`/gate-review` was run against a real staged diff — twelve files from
+Origyn's explore-catalogue work, in an isolated worktree so the live
+session's own `.claude/gates/last-gate.json` was never touched. This is
+the test the whole audit argues for: not "does the script parse" but
+"does it do the thing when pointed at code nobody wrote for it".
+
+**What worked.** All three gates answered (`gates_missing: []`). Twelve
+findings, every one anchored to a file and line in Origyn's tree, ranked
+CRITICAL→LOW, deduplicated across gates. The verdict was WARN, correctly
+— three HIGH findings, no CRITICAL. 6 agents, 612k subagent tokens, 9
+minutes wall-clock for what the prose version of this ("Launch 3 agents
+in parallel… aggregate findings") asked an operator to do by hand.
+
+**What broke, and why it matters.** Nothing was recorded. Four finding
+messages ran past the canonical schema's 500-character cap, `pe gate
+parse` refused the envelope, and the entire review — three gates already
+paid for — reached `.claude/gates/last-gate.json` as nothing at all.
+
+The cause is this audit's own recurring defect in a new place. The
+inline schema in `workflows/gate-review.js` declared the cap as
+`description: 'max 500 chars'`. A description is a note to a human; the
+runtime validates against the schema. So the model was told the limit in
+prose, exceeded it, and the runtime had no grounds to object — the
+failure surfaced at the last step, after all the work was done.
+
+Three things changed as a result:
+
+1. Every cap the canonical schema sets is now **declared** inline
+   (`maxLength`, `pattern`), not described, so the runtime enforces and
+   retries at the call site.
+2. `test_gate_review_schema_sync.sh` now compares `maxLength` and
+   `pattern` between the two schemas, not just enums. It found a second
+   instance immediately: `schema_version`'s semver pattern was prose too.
+3. The script clamps over-long text before recording. Losing the tail of
+   one message is bad; losing three gates' work because one message ran
+   78 characters long is worse. `gate_review_harness.mjs` gained a
+   scenario reproducing the live failure — verified red without the
+   clamp.
+
+**The honesty floor held.** The workflow reported `recorded: false`,
+`exit_code: 4`, and the recorder's stderr verbatim. It did not report a
+WARN it had failed to persist. That is the one property that could not
+be recovered after the fact, and the `record-fails` harness scenario had
+predicted this exact shape before it happened for real.
+
 ## What changed while this audit was written
 
 | Version | |

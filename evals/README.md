@@ -124,18 +124,32 @@ fixture from someone other than the change author.
 - **tdd-guide** — 3 fixtures. Introduced in v0.20.0.
 - **design-critic** — 7 fixtures. Introduced in v0.20.0, grown through the
   D5–D8 design-ceiling work.
-- **performance-reviewer** — 5 fixtures. Introduced in v0.37.0.
+- **performance-reviewer** — 6 fixtures. Introduced in v0.37.0; the
+  adversarial lookalike was added in v0.51.17.
+- **e2e-runner** — 5 fixtures, one per branch of its verdict mapping
+  (PASS / WARN-flaky / FAIL-regression / FAIL-blocked) plus the
+  self-grade lookalike. Introduced in v0.51.17.
 
-Total: 26 fixtures across 6 gates. Every gate has at minimum one
+Total: 32 fixtures across all 7 gates. Every gate has at minimum one
 adversarial safe-lookalike — the corpus is deliberately balanced so
 "catch the failures" and "don't false-positive on the lookalikes"
 carry equal weight.
 
-These counts are checked against `evals/fixtures/` by
-`tests/test_agent_refs.sh`. They read "16 fixtures across 5 gates" until
-2026-09-04, with `performance-reviewer` absent entirely — the corpus grew
-by ten fixtures and a whole gate without the page that describes it
-changing.
+`merge-gate` is in the schema's `gate_name` enum but is not an agent —
+it is the aggregate envelope `/gate-review` emits over the gates that
+ran. Its behaviour is tested by `tests/gate_review_harness.mjs`, which
+drives the real workflow script, not by fixtures here.
 
-Additional gates (e2e-runner, merge-gate) get seeded when the
-first live-mode measurement pass is scheduled.
+**Both claims above are enforced, not maintained by hand.**
+`tests/test_gate_fixture_coverage.sh` derives the gate roster from the
+agents that source `agents/_gate-contract.md` and fails if any of them
+has no corpus, no adversarial fixture, or fixtures of only one polarity.
+
+That test was written because this section was wrong twice over. It
+read "16 fixtures across 5 gates" until 2026-09-04 with
+`performance-reviewer` missing entirely, and it claimed every gate had
+an adversarial lookalike while `performance-reviewer` had four failure
+fixtures and none — a corpus that rewarded flagging everything.
+`e2e-runner` had emitted envelopes since v0.10.0 with zero fixtures the
+whole time: the efficacy runner iterates the directories that exist, so
+a gate with no directory has no failures and looks fine.

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "performance-reviewer",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.91,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-09-04T11:32:00Z",
+  "summary": "Query count is O(1) in line count: selectinload prefetches lines and products, so the loop hits memory — 4 statements for a 40-line invoice, none in the loop. The unlimited TaxRate.query.all() reads a 34-row lookup table, bounded by a unique constraint, once per process.",
+  "findings": [],
+  "scope": {
+    "branch": "feat/invoice-tax-breakdown",
+    "commit": "b83f5c1",
+    "files_reviewed": ["modules/invoices/pdf.py"],
+    "lines_reviewed": 45
+  }
+}

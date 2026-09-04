@@ -44,13 +44,25 @@ export const meta = {
 // one absent. The conditional rule (FAIL => failure_class != none, otherwise
 // == none) is enforced by `pe gate parse` in the Record phase instead.
 //
-// tests/test_gate_review_schema_sync.sh fails if any enum here stops
-// matching the canonical file.
+// EVERY constraint expressible here is declared here, not described in prose.
+// The first live run against a real repo (Origyn, 2026-09-04) produced three
+// gate envelopes, twelve genuine findings, a correct WARN — and then failed
+// to record any of it, because four finding messages ran past 500 characters.
+// The limit was written as `description: 'max 500 chars'`, which is a note to
+// a reader, not a rule to a validator: the runtime accepted the long strings
+// and `pe gate parse` rejected the envelope at the final step, after all
+// three gates had already been paid for.
+//
+// A limit the model is told about in prose is a limit it will sometimes
+// miss. A maxLength is one the runtime enforces and retries on.
+//
+// tests/test_gate_review_schema_sync.sh fails if any enum, maxLength or
+// pattern here stops matching the canonical file.
 const ENVELOPE_SCHEMA = {
   type: 'object',
   required: ['schema_version', 'gate_name', 'verdict', 'failure_class', 'findings', 'model_used', 'timestamp'],
   properties: {
-    schema_version: { type: 'string', description: 'semver, e.g. 1.0.0' },
+    schema_version: { type: 'string', pattern: '^[0-9]+\\.[0-9]+\\.[0-9]+$' },
     gate_name: {
       type: 'string',
       enum: ['code-reviewer', 'security-reviewer', 'tdd-guide', 'e2e-runner', 'database-reviewer', 'design-critic', 'performance-reviewer', 'merge-gate'],
@@ -67,16 +79,16 @@ const ENVELOPE_SCHEMA = {
         required: ['severity', 'rule', 'message'],
         properties: {
           severity: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
-          rule: { type: 'string', description: 'kebab-case, max 60 chars' },
-          message: { type: 'string', description: 'max 500 chars' },
+          rule: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$', maxLength: 60 },
+          message: { type: 'string', maxLength: 500 },
           file: { type: 'string' },
           line: { type: 'integer' },
-          suggestion: { type: 'string', description: 'max 1000 chars' },
+          suggestion: { type: 'string', maxLength: 1000 },
         },
       },
     },
     model_used: { type: 'string' },
-    timestamp: { type: 'string', description: 'ISO-8601 UTC, e.g. 2026-09-04T12:00:00Z' },
+    timestamp: { type: 'string', format: 'date-time', description: 'ISO-8601 UTC, e.g. 2026-09-04T12:00:00Z' },
   },
 }
 // >>> GATE-ENVELOPE-SCHEMA-END
@@ -89,6 +101,31 @@ const ENVELOPE_SCHEMA = {
 const GATES = ['security-reviewer', 'database-reviewer', 'code-reviewer']
 
 const BLOCKING = ['CRITICAL', 'HIGH']
+
+// The canonical schema's string caps. Declared in ENVELOPE_SCHEMA so the
+// runtime enforces them at the call site, and clamped again here because the
+// schema is a request and this is a guarantee — the same reason the missing-
+// gate floor is applied by the script rather than asked of the aggregator.
+//
+// Losing the tail of one message is a bad outcome. Losing the entire review
+// — three gates, twelve findings, a correct verdict — because one message ran
+// 78 characters long is a worse one, and it is what happened on the first
+// live run before this existed.
+const MAX_MESSAGE = 500
+const MAX_SUGGESTION = 1000
+
+function clamp(text, limit) {
+  if (typeof text !== 'string' || text.length <= limit) return text
+  return text.slice(0, limit - 14) + ' …[truncated]'
+}
+
+function clampFinding(f) {
+  const out = { ...f, message: clamp(f.message, MAX_MESSAGE) }
+  if (typeof f.suggestion === 'string') {
+    out.suggestion = clamp(f.suggestion, MAX_SUGGESTION)
+  }
+  return out
+}
 
 // ─── Collect ─────────────────────────────────────────────────────────────
 phase('Collect')
@@ -222,7 +259,11 @@ if (!merged) {
 
 // Re-apply the floor to the aggregate. The agent was told the rules; this
 // is the part that does not depend on it having followed them.
-const findings = missingFindings.concat(merged.findings || [])
+const findings = missingFindings.concat(merged.findings || []).map(clampFinding)
+const overlong = findings.filter(f => /…\[truncated\]$/.test(f.message)).length
+if (overlong > 0) {
+  log(`${overlong} finding message(s) exceeded ${MAX_MESSAGE} chars and were truncated to keep the envelope recordable.`)
+}
 const worst = findings.some(f => f.severity === 'CRITICAL')
   ? 'FAIL'
   : findings.some(f => BLOCKING.includes(f.severity))
