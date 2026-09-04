@@ -42,8 +42,12 @@ engine file costs every project quietly.
 nobody can see landing is a change nobody can roll back.
 
 **Never commit to `master`.** Branch, PR, human merge — including for
-agent-authored proposals, which reach the engine as a branch via
-`pe incident open-pr` and never as a direct write.
+agent-authored proposals. `pe incident propose` materializes a proposal
+into `.pe/incident-proposals/<slug>/` in the *operator's* project; the
+operator opens the branch and PR against the engine by hand. There is no
+`pe incident open-pr` — this paragraph named one until 2026-09-04, which
+is the same defect the 0.51.3 fix removed from
+`agents/incident-synthesizer.md` and missed here.
 
 ## Quick start
 

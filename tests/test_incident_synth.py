@@ -59,6 +59,14 @@ VALID_ENVELOPE = {
         },
         "regression_check": "Run tests/test_gate_efficacy.sh; new fixture must yield exit=1.",
     },
+    "value_bar": {
+        "criterion": "V1",
+        "evidence": "2026-W27, 8CStudio + invoice-system: two slots shipped f-string SQL into raw cursor.execute().",
+    },
+    "generalisable": {
+        "value": True,
+        "reason": "f-string SQL is a language-level defect, not a project convention.",
+    },
     "notes": "Adversarial safe-lookalike already covered.",
 }
 

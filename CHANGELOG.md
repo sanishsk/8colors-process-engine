@@ -7,6 +7,60 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.5] — 2026-09-04
+
+### Fixed — things the engine states that are false
+
+Four of them, all found by the adoption audit, all in the class the value
+bar calls V3.
+
+**`hooks/README.md` listed 14 of the 29 hooks that ship.** It calls itself
+"the hook catalogue". Missing were every hook the engine runs on *itself*
+(`complexity-gate`, `duplication-gate`, `size-budget`), every design and
+motion hook, and all but three of the trailer family. An adopter reading it
+to decide what to wire would have wired half the engine.
+
+**The size guard's row named numbers that stopped being true in v0.12.0.**
+The table said `claude-md-size` "warns (does not block) when CLAUDE.md
+exceeds 40,000 chars", and the tuning table listed `ENGINE_CLAUDE_MD_LIMIT`
+= `40000`. Since 2026-07-02 the hook warns at 12000 bytes and **blocks** at
+20000. At least one adopting project hand-rolled its own 40/60 KB advisory
+gate from that row rather than wiring the hook that was already stricter;
+its CLAUDE.md reached 80,437 bytes. A doc that is merely out of date is one
+thing — this one was load-bearing.
+
+**`boot-smoke.sh` documented two callers it does not have.** Its header
+said "Invoked by: pe doctor (opportunistic), CI job (via
+templates/ci/engine-quality.yml.template)". Neither references it. It is
+the engine's one fully-orphaned hook: no pre-commit config, no `hooks.json`
+entry, no CI template, no consuming project, no test. Kept — the capability
+is sound and the wiring is the missing half — but the header now says so.
+
+**`CONTRIBUTING.md` still named `pe incident open-pr`.** 0.51.3 removed
+that claim from `agents/incident-synthesizer.md` and missed the second
+site. Same defect, one file over.
+
+### Fixed — `tests/test_incident_synth.py` was red at HEAD
+
+`schemas/proposal-envelope.schema.json` gained `value_bar` and
+`generalisable` as required fields when 0.51.0 opened the engine to
+calibrated improvement. The test's `VALID_ENVELOPE` fixture was never
+updated, so `test_valid_envelope_no_errors` had been failing ever since.
+Nothing runs the suite.
+
+### Added
+
+- `tests/test_hooks_documented.sh` — fails when a `hooks/*.sh` has no
+  catalogue row, when a row names a script that no longer exists, or when
+  the catalogue stops quoting the size guard's real defaults. A hook
+  deliberately wired nowhere still needs a row, under "Wired nowhere".
+  Verified red by removing one row.
+
+**Value bar:** V3 for all four false statements, each quoted above with the
+line it replaced. V1 for the red test.
+
+---
+
 ## [0.51.4] — 2026-09-04
 
 ### Fixed — a counter that answered twice, and a help screen that ran a subprocess
