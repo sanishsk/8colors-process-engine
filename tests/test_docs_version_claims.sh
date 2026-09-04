@@ -74,5 +74,52 @@ if grep -qE '[0-9]+ governance hooks' "$brief" 2>/dev/null; then
         || bad "beta brief says $brief_hooks governance hooks; hooks/ holds $hooks"
 fi
 
+# ─── the brief's agent table must quote real model tiers ────────────
+# It said `code-reviewer | Haiku` while agents/code-reviewer.md said sonnet
+# and AGENT_INVOCATION_RULES.md explained why gates never run below Sonnet.
+# Four of the fifteen tiers it listed were wrong.
+if [ -f "$brief" ]; then
+    wrong=""
+    checked=0
+    while IFS='|' read -r _ name model _; do
+        name=$(printf '%s' "$name" | tr -d ' `')
+        model=$(printf '%s' "$model" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+        [ -f "agents/$name.md" ] || continue
+        real=$(awk -F': *' '/^model:/{print $2; exit}' "agents/$name.md" | tr -d ' ')
+        [ -z "$real" ] && continue
+        checked=$((checked + 1))
+        [ "$model" = "$real" ] || wrong="$wrong $name(doc:$model,real:$real)"
+    done < <(grep -E '^\| `[a-z0-9-]+` \| [A-Za-z]+ \|' "$brief")
+
+    if [ "$checked" -eq 0 ]; then
+        bad "no agent/model rows found in the beta brief — has the table moved?"
+    elif [ -z "$wrong" ]; then
+        ok "all $checked agent model tiers in the beta brief match agents/*.md"
+    else
+        bad "beta brief quotes the wrong model for:$wrong"
+    fi
+
+    # Every agent must appear in the brief, or it is selling 15 of 21 again.
+    absent=""
+    for f in agents/*.md; do
+        b=$(basename "$f" .md)
+        case "$b" in _*) continue ;; esac
+        grep -qF "\`$b\`" "$brief" || absent="$absent $b"
+    done
+    [ -z "$absent" ] && ok "every agent appears in the beta brief" \
+                     || bad "agents missing from the beta brief:$absent"
+
+    cmds=$(find commands -name '*.md' | wc -l | tr -d ' ')
+    brief_cmds=$(grep -oE '^### [0-9]+ slash commands' "$brief" | grep -oE '[0-9]+')
+    [ "$brief_cmds" = "$cmds" ] \
+        && ok "beta brief says $cmds slash commands" \
+        || bad "beta brief says $brief_cmds slash commands; commands/ holds $cmds"
+
+    gates=$(grep -l '_gate-contract' agents/*.md | grep -v '_gate-contract' | wc -l | tr -d ' ')
+    grep -q "The $gates gate agents" "$brief" \
+        && ok "beta brief says $gates gate agents" \
+        || bad "beta brief does not say '$gates gate agents'"
+fi
+
 echo "  ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

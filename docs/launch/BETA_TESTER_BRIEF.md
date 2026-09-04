@@ -1,18 +1,15 @@
 # 8colors-process-engine — beta tester brief
 
-> Hand-out for the 2–3 beta cohort. Copy / paste / link as needed.
+> Hand-out for the beta cohort. Copy / paste / link as needed.
 >
-> **⚠ NOT READY TO SEND. Body last written 2026-06-30 for v0.8.0; the
-> engine is v0.51.10.** The numbers in the header and TL;DR below have been
-> corrected against the repository (2026-09-04) and
-> `tests/test_docs_version_claims.sh` now fails when they drift again. The
-> rest of the document — the agent table, the "what shipped" section, the
-> walkthrough — has NOT been re-read against the current engine and will
-> contain more of the same. It states, for one, that `code-reviewer` runs on
-> Haiku; `docs/AGENT_INVOCATION_RULES.md` says Sonnet and explains why.
+> **Verified against the repository on 2026-09-04 for v0.51.11.** Every
+> count, model tier, command name and threshold below was read from the
+> engine, not remembered. Three tests keep it that way and fail in CI the
+> moment it drifts: `test_docs_version_claims.sh` (versions and inventory
+> counts), `test_agent_docs_complete.sh` (the agent catalogue) and
+> `test_subset_rosters.sh` (what the install presets contain).
 >
-> A content pass is scheduled as deliverable 8 of the `/gate-review`
-> workflow slot. Do not hand this to the cohort before it lands.
+> If you are reading this from a checkout, `cat VERSION` is the authority.
 
 ---
 
@@ -29,7 +26,7 @@ weeks of real work, then I want to know what broke, what was
 confusing, and what you expected that wasn't there.
 
 Repo: <https://github.com/sanishsk/8colors-process-engine>
-Current version: **v0.51.10**
+Current version: **v0.51.11**
 
 ---
 
@@ -83,45 +80,58 @@ down for adoption.
 
 ## What's in the box (inventory)
 
-> ⚠ This table lists 15 of the engine's 21 agents and has not been
-> re-checked since v0.8.0 — the model tiers in it are not reliable.
-> `ls agents/` is the current answer until the content pass lands.
+### 21 specialist agents
 
-### specialist agents
+Each has a single job, a model tier matched to that job, and explicit
+when-to-invoke rules.
 
-Each has a single job, a model tier matched to that job, and
-explicit when-to-invoke rules:
+**The 7 gate agents** end their output with a machine-parseable **gate
+envelope**. That JSON is what the escalation router reads, and what
+`pe gate parse` validates. These are the ones worth wiring into
+enforcement:
+
+| Agent | Model | Job |
+|---|---|---|
+| `code-reviewer` | Sonnet | MANDATORY before commit; CRITICAL findings block |
+| `security-reviewer` | Sonnet | OWASP Top 10, secrets, auth, input handling, SSRF, unsafe crypto |
+| `database-reviewer` | Sonnet | PostgreSQL schema / migration / RLS / tenant isolation |
+| `performance-reviewer` | Sonnet | N+1 queries, unbounded list endpoints, blocking work in a request path |
+| `tdd-guide` | Sonnet | Write-tests-first; RED phase is a hard refusal point |
+| `e2e-runner` | Sonnet | Generates + runs E2E tests; manages journeys + artifacts |
+| `design-critic` | Sonnet | Two-mode UI gate: the floor everywhere, the ceiling where it matters |
+
+**The other 14:**
 
 | Agent | Model | Job |
 |---|---|---|
 | `brief-writer` | Sonnet | 1-page brief with alternatives + market check; required before non-trivial work |
-| `researcher` | Haiku | OSS / MCP scout; runs async, parallel with implementation |
 | `architect` | Opus | System design, scalability, integration patterns |
 | `planner` | Opus | Multi-slot implementation plans with dependency analysis |
-| `code-reviewer` | Haiku | MANDATORY before commit; emits gate envelope; CRITICAL findings block |
-| `security-reviewer` | Sonnet | OWASP top 10, secrets, auth, input handling; emits gate envelope |
-| `database-reviewer` | Sonnet | PostgreSQL schema / migration / RLS / tenant isolation; emits gate envelope |
-| `tdd-guide` | Sonnet | Write-tests-first; enforces 80%+ coverage; emits gate envelope |
-| `e2e-runner` | Sonnet | Generates + runs E2E tests; manages journeys + artifacts; emits gate envelope |
+| `researcher` | Sonnet | OSS / MCP scout; searches before you write |
+| `build-error-resolver` | Sonnet | Minimal-diff build / type-error fixes; no architectural edits |
+| `data-model-auditor` | Sonnet | Finds hardcoded business values; recommends moving them to the data model |
+| `tenant-isolation-auditor` | Haiku | New SQL that crosses a tenant boundary without RLS context |
 | `doc-updater` | Haiku | Codemaps, READMEs, schema docs |
-| `build-error-resolver` | Haiku | Minimal-diff build / type-error fixes; no architectural edits |
-| `data-model-auditor` | Sonnet | Finds hardcoded business values; recommends moving them to data model |
-| `retrospective-agent` | Sonnet | Daily / weekly / monthly retros from dev-log digests |
+| `project-kickstarter` | Opus | Scaffolds a new project. Once, at the start |
+| `project-onboarder` | Opus | Gaps in an existing project against the doctrine. Once, on adoption |
+| `retrospective-agent` | Opus | Daily / weekly / monthly retros from dev-log digests |
 | `ceo` | Opus | Friday weekly retro + next-week plan (auto-fires) |
 | `memory-consolidator` | Sonnet | Quarterly memory hygiene; archives historical resume blocks |
+| `incident-synthesizer` | Opus | Should this incident become an engine-wide gate? Proposes only, never writes |
 
-The 5 agents marked "emits gate envelope" are the **gate agents** —
-their JSON output drives the escalation router. See **What's
-enforced** below.
+Gates run at Sonnet or above regardless of the worker tier — see the
+"gate-agent paradox" note in `docs/AGENT_INVOCATION_RULES.md`.
 
-`pe install` symlinks all 15 by default. If you want a leaner
-install, `pe install --subset gate-only` gives you just the 5 gate
-agents; `--subset core` gives you gates + planner + brief-writer +
-architect (8 total). Default is `full`.
+`pe install` symlinks all 21 by default. For a leaner install,
+`--subset gate-only` gives you the 7 gate agents; `--subset core` gives
+you those plus `planner`, `brief-writer` and `architect` (10 total).
 
-The `brief-writer` and `architect` agents specifically query the
-semantic index in their Step 0 — that's where the Workbox-miss
-class gets structurally closed.
+**To run just one agent — a security review, a code review, anything —
+see [`docs/RUNNING_AGENTS.md`](../RUNNING_AGENTS.md).** You do not have to
+install the engine to use one piece of it.
+
+The `brief-writer` and `architect` agents query the semantic index in their
+Step 0 — that's where the Workbox-miss class gets structurally closed.
 
 ### 2 session skills
 
@@ -142,39 +152,75 @@ class gets structurally closed.
 Both are project-agnostic. Both work standalone with no other
 engine pieces.
 
-### 5 slash commands
+### 10 slash commands
 
-- **`/brainstorm [topic]`** — capture brainstorm → produce 1-page
+- **`/brainstorm [topic]`** — capture brainstorm → produce a 1-page
   brief via `brief-writer`
-- **`/lock-backlog [phase]`** — lock a phase backlog (read-only
-  audit trail; the `ceo` agent reads it but can't modify it)
+- **`/new-feature`** — the full chain: brainstorm → brief → architect →
+  plan → tdd, with the checkpoints where you decide
+- **`/pre-commit`** — run the gates that match the staged paths, validate
+  the envelopes via `pe gate parse`
+- **`/simplify`** — post-GREEN cleanup: reuse, dead code, altitude. Tests
+  must stay green
 - **`/research-search [query]`** — semantic search over your
   `docs/research/*.md`
-- **`/weekly-retro`** — Friday retro + next-week plan (also
-  auto-fires via launchd/systemd/Task Scheduler)
+- **`/retro`** — retrospective over the last day / week / month; invokes
+  `retrospective-agent`
+- **`/weekly-retro`** — Friday retro + next-week plan; invokes `ceo` (also
+  auto-fires via launchd / systemd / Task Scheduler)
 - **`/memory-consolidate`** — quarterly memory hygiene; invokes
   `memory-consolidator`
+- **`/lock-backlog [phase]`** — lock a phase backlog (read-only audit
+  trail; `ceo` reads it but cannot modify it)
+- **`/design-scan`** — quarterly refresh of the curated visual references
 
-### 6 pre-commit + commit-msg + pre-push hooks
+### 29 hooks
 
-Drop into `.pre-commit-config.yaml`:
+Two layers. **Claude Code hooks** fire from inside a session
+(PreToolUse / PostToolUse / Stop) and are merged into
+`<project>/.claude/settings.json` by `pe install`. **git-side hooks** run
+through the `pre-commit` framework and catch work done outside Claude
+Code. The full catalogue, with every tuning variable, is in
+[`hooks/README.md`](../../hooks/README.md); the ones you will meet first:
 
-- **`code-review-trailer`** (commit-msg) — blocks ≥5-file commits
-  without a `Code-reviewed:` or `Code-skip-reason:` trailer
-- **`docs-updated-trailer`** (commit-msg) — blocks commits to
-  structural files (CLAUDE.md, README, schema) without a
-  `Docs-updated:` trailer
-- **`design-review-trailer`** (commit-msg) — blocks commits to UI
-  files without a `Design-reviewed:` trailer
-- **`claude-md-size`** (pre-commit) — warns when CLAUDE.md > 40 KB
-- **`research-index-rebuild`** (pre-commit) — re-embeds the
-  semantic index when `docs/research/*.md` is staged
-- **`stacking-rule-check`** (pre-push) — blocks pushes that bundle
-  ≥2 distinct slot IDs with foundational file changes (Process v2
-  rule: foundational changes always per-slot)
+**Trailer gates** (commit-msg) — each blocks a commit on its own paths
+unless the message carries the trailer, or an explicit skip-reason:
 
-All hooks read tuning env vars. None require Anthropic
-intervention to run.
+- **`code-review-trailer`** — commits over the file threshold, or touching
+  behaviour paths, need `Code-reviewed:` / `Code-skip-reason:`
+- **`security-review-trailer`** — auth / payment / webhook / jwt / session
+  paths need `Security-reviewed:`; money paths also need co-staged tests
+- **`design-review-trailer`** — template / JS / CSS changes need
+  `Design-reviewed:`
+- **`perf-gate`** — ORM / query / serializer / migration paths need
+  `Perf-tested:`
+- **`docs-updated-trailer`** — CLAUDE.md / README / schema changes need
+  `Docs-updated:`
+
+**Deterministic gates** (pre-commit) — no agent, no API, no tokens:
+
+- **`secrets-scan`** — gitleaks / detect-secrets over staged files
+- **`sast-scan`** — semgrep / bandit / gosec / eslint-security; blocks on
+  HIGH+ when a tool ran
+- **`complexity-gate`** — ruff C901/PLR, xenon, vulture
+- **`size-budget`** — file (default 800 lines) and function (50) budgets
+- **`duplication-gate`** — jscpd ratchet; a commit must not raise the baseline
+- **`claude-md-size`** — warns above 12,000 bytes, **blocks** above 20,000
+- **`design-lint`**, **`motion-lint`**, **`signature-lint`**,
+  **`copy-lint`**, **`migration-lint`**, **`api-contract-check`**,
+  **`deps-audit`**, **`test-run`**, **`research-index-rebuild`**
+- **`stacking-rule-check`** (pre-push) — blocks pushes bundling ≥2 slot IDs
+  with foundational changes
+
+**In-session hooks** — `pre-commit-envelope-check` blocks `git commit`
+unless a validated gate envelope matches the staged diff;
+`transcript-guard` scans tool output for prompt-injection markers and
+secret-shaped strings; `ponytail-preflight`, `post-edit-lint`,
+`cache-hygiene-warn`, `stop-uncommitted-reminder` are advisory.
+
+All hooks read tuning env vars. None require Anthropic intervention to
+run. `pe doctor <project>` reports how many of the 29 your project is
+actually wired for — and whether they can run at all.
 
 ### Semantic search over `docs/research/`
 
@@ -241,11 +287,32 @@ pe eject <project>        # remove engine-managed symlinks
 pe version                # print engine version
 ```
 
-Advanced (mostly for engine developers, not adopters):
-`pe baseline capture …` (slot baselines), `pe gate parse <file>`
-(validate gate envelope JSON), `pe shadow decide` / `shadow reconcile`
-(Phase 3 escalation-router tooling — enforce gated by `--enforce`;
-graduated 2026-06-28).
+Day-to-day beyond install:
+
+```
+pe agent run <name>       # invoke ONE agent headlessly via `claude -p`
+                          #   --brief <file>|-   what to work on
+                          #   --dry-run          show what would be sent, spend nothing
+                          # See docs/RUNNING_AGENTS.md
+pe gate parse <file>      # extract + validate a gate envelope
+                          #   0 PASS · 1 FAIL/worker_quality · 2 FAIL/non-escalatable
+                          #   3 WARN · 4 did not parse or validate
+pe audit                  # run the gates across the WHOLE repo, not just staged
+pe verify                 # are the engine's own files unmodified?
+pe recall <query>         # search past decisions + reconciliations
+pe memory ls|show|rm|verify|stale     # auto-memory governance
+pe collect                # git-derived dev-log digest (zero tokens)
+pe telemetry collect|summary          # transcripts → usage records + cost
+```
+
+Advanced, mostly for engine developers: `pe new <name>` (project
+scaffold), `pe module add <name>` (reusable domain modules),
+`pe pin show|verify|bump` (per-project engine version pin),
+`pe incident propose` (synthesize a gate proposal from an incident —
+proposes, never applies), `pe baseline capture`, `pe shadow decide` /
+`shadow reconcile`.
+
+`pe help <subcommand>` prints the detail for any of them.
 
 ---
 
@@ -253,9 +320,10 @@ graduated 2026-06-28).
 
 New in v0.7-v0.8, and the piece I'd most like beta feedback on.
 
-Gate agents (code-reviewer, security-reviewer, database-reviewer,
-tdd-guide, e2e-runner) each emit a **gate envelope** — a
-machine-parseable JSON block with:
+The 7 gate agents (`code-reviewer`, `security-reviewer`,
+`database-reviewer`, `performance-reviewer`, `tdd-guide`, `e2e-runner`,
+`design-critic`) each emit a **gate envelope** — a machine-parseable JSON
+block with:
 
 - `verdict`: PASS / FAIL / WARN
 - `failure_class`: `worker_quality` / `task_underspecified` /
@@ -291,8 +359,19 @@ kind of tuning I need to know about.
 - **Brief before code is required**, not optional. The `brief-writer`
   agent is in the engine's invocation rules; agents that skip it get
   flagged.
-- **Code review at every commit** is enforced by a pre-commit hook
-  that blocks commits ≥5 files without a trailer.
+- **Code review at every commit** is enforced by a commit-msg hook that
+  blocks commits over the file threshold, or touching behaviour paths,
+  without a trailer. Threshold and paths are tunable
+  (`ENGINE_REVIEW_THRESHOLD`, `ENGINE_REVIEW_BEHAVIOR_PATHS`).
+- **`CLAUDE.md` has a hard ceiling.** `claude-md-size` warns above 12,000
+  bytes and **blocks above 20,000**. It is re-read into every session turn,
+  so it is the most expensive file in your repository. Raise it with
+  `ENGINE_CLAUDE_MD_FAIL` if you must, but the number is deliberate.
+- **`pre-commit install` needs both hook types.** Bare `pre-commit install`
+  writes only `.git/hooks/pre-commit`, so every trailer gate is configured
+  and never runs — silently. Use
+  `pre-commit install --hook-type pre-commit --hook-type commit-msg`, and
+  confirm with `pe doctor`.
 - **Tests-first** is the documented stance for new features. If your
   project's culture is "tests after," you'll fight the engine.
 - **`docs/research/`** is treated as a first-class data store. If
@@ -333,8 +412,8 @@ esac
 # 3. Install into a target project
 pe install /path/to/your/project
 # or, for a leaner install:
-#   pe install --subset gate-only /path/to/your/project   # 5 gate agents only
-#   pe install --subset core /path/to/your/project        # 8 agents
+#   pe install --subset gate-only /path/to/your/project   # 7 gate agents only
+#   pe install --subset core /path/to/your/project        # 10 agents
 
 # 4. Restart Claude Code in the target project.
 
@@ -510,8 +589,15 @@ A sample first session that touches the most pieces:
 If you want the full experience, also:
 
 - Set up a `.pre-commit-config.yaml` with the engine hooks
-  (`cp <engine>/hooks/.pre-commit-config.yaml.template .pre-commit-config.yaml`)
-  and try committing without trailers — see what blocks.
+  (`cp <engine>/hooks/.pre-commit-config.yaml.template .pre-commit-config.yaml`,
+  then `pre-commit install --hook-type pre-commit --hook-type commit-msg`)
+  and try committing without trailers — see what blocks. Run
+  `pe doctor .` afterwards: it tells you how many of the engine's 29 hooks
+  your project is actually wired for, and whether they can run at all.
+- **Run a single agent without installing anything** —
+  `git diff --cached | pe agent run security-reviewer --brief - --dry-run`
+  shows exactly what would be sent, for free. Drop `--dry-run` to do it.
+  Any agent works this way; see `docs/RUNNING_AGENTS.md`.
 - Run `pe launchd` and `--force` the weekly retro to see what the
   CEO agent produces for your project.
 - Trigger a gate to fail on purpose (e.g. commit something with a
@@ -547,6 +633,13 @@ Open issues at <https://github.com/sanishsk/8colors-process-engine/issues>
 
 ## Reference docs (in-repo, worth skimming)
 
+- **`docs/RUNNING_AGENTS.md`** — how to run one agent, or only some,
+  without adopting the whole engine. Start here if you want to try a
+  single reviewer against your code.
+- **`docs/ADOPTION_AUDIT.md`** — which of the engine's 29 hooks and 21
+  agents has actually been run anywhere, which have never been wired, and
+  the 16 defects that answering that question found. Unusually candid for
+  a project's own docs; read it before you trust any other number here.
 - `docs/CAPABILITY_CATALOG.md` — single reference of every tool +
   agent evaluated, with adopt/reject/defer rationale
 - `docs/COUPLING_MAP.md` — module coupling analysis across the two
@@ -585,10 +678,18 @@ Open issues at <https://github.com/sanishsk/8colors-process-engine/issues>
 - **Anthropic doesn't ship embedding models.** Default RAG provider
   is `fastembed` (BAAI/bge-small-en-v1.5), which runs locally.
   Voyage / Gemini / OpenAI are optional upgrades.
-- **The engine will never auto-modify itself.** No self-detected,
-  self-committed "improvements." Every engine change is human-
-  reviewed, versioned, and pulled by adopters. `pe sync` is the
-  pull mechanism.
+- **The engine will never auto-modify itself.** Since v0.51.0 an agent
+  *can* propose a change — `pe incident propose` synthesizes a gate
+  proposal from a real incident and materializes it under
+  `.pe/incident-proposals/` **in your project**, never in the engine repo.
+  There is no `--auto-apply` mode and there will not be one. Every engine
+  change is human-reviewed on a PR, versioned, and pulled by adopters via
+  `pe sync`.
+- **No CI existed until 2026-09-04.** 45 test scripts sat in `tests/` with
+  nothing running them, and three were failing. There is CI now, and the
+  audit that found it is in `docs/ADOPTION_AUDIT.md`. Mentioned because you
+  should calibrate how much to trust the rest of this document — the
+  numbers in it are now test-enforced; they were not before.
 
 ---
 
@@ -608,48 +709,83 @@ The eject is reversible — `pe install` restores the symlinks.
 
 ---
 
-## What shipped in v0.8.0 (2026-06-30)
+## Where the engine is now (v0.51.11, 2026-09-04)
 
-The distribution bundle: making "everyone gets engine improvements"
-real without the engine ever self-modifying.
+The v0.8.0 bundle that this brief originally described — `pe sync`,
+install presets, `pe doctor` — all still there. What has been added since,
+grouped by what it changes for you:
 
-- **`pe sync <project>`** — diff-before-clobber re-pointer (details
-  above). Ships with a safety-contract smoke test.
-- **`pe install --subset {gate-only|core|full}`** — install presets.
-  Choice persisted to `.process-engine.yaml` so re-runs honor it.
-- **INSTALL.md PATH check** — quick-install now probes `$PATH` and
-  prints the exact export line for `~/.zshrc` if `~/.local/bin`
-  isn't on PATH (stock macOS zsh doesn't include it).
-- **`pe doctor` improvements** — reports engine version at the top
-  of self-check + project-check; adds an always-on per-agent
-  freshness summary (`N/M up to date`) so the check is visible
-  even on a clean install.
-- **CHANGELOG discipline** — every code change lands with a
-  changelog entry.
+**Enforcement got deterministic.** SAST, secrets, complexity, duplication
+and size budgets became hooks that run without an agent, an API key or a
+token. `sast-scan` blocks on HIGH+ when a scanner actually ran and skips
+*loudly* when none is installed.
 
-## What's next (v0.9+ candidates, shaped by beta feedback)
+**More gates.** `design-critic` (UI floor and ceiling), `performance-reviewer`
+(N+1, unbounded endpoints, blocking work in a request path),
+`tenant-isolation-auditor`, `data-model-auditor`, `incident-synthesizer`. The
+gate set went from 5 to 7.
 
-- **`docs/COUPLING_MAP.md` for your project** — the doctrine of
-  "split sessions by coupling cluster, not by module name" (§5 of
-  the map). If it clicks for you, tell me; if it's too abstract,
-  also tell me.
-- **Auto-update suggestion surfacer** — engine LOGS improvement
-  candidates (based on retro trends) without APPLYING them; you
-  review and apply via normal flow. Blocked on real adopter
-  signal for what "recurring pattern" looks like in the wild.
-- **Multi-project portfolio mode** — single dashboard / CEO across
-  projects you maintain. Blocked on ≥2 multi-project adopters.
-- **Anthropic Skills directory + Claude Code plugin marketplace
-  submission** — planned once v0.9 stabilizes.
+**One agent at a time became a real thing.** `pe agent run <name>` invokes
+any agent headlessly through `claude -p`, with `--dry-run` to see the cost
+before you pay it. See `docs/RUNNING_AGENTS.md`.
 
-Explicitly NOT on the runway:
-- **Dependency-aware DAG scheduler (Phase 4).** The Stage A
-  coupling map for both current adopters shows clean clusters, not
-  pervasive tangle — so session-per-cluster is the answer and no
-  scheduler build is justified today. Re-evaluation triggers in
-  `docs/COUPLING_MAP.md §7`.
-- **Engine self-improvement / auto-commit.** Never. One bad
-  auto-commit would propagate to every adopter via `pe sync`.
+**Supply chain and prompt-injection.** `pe verify` checks the engine's own
+files against a manifest; `transcript-guard` scans tool output for
+injection markers and secret-shaped strings before an agent consumes them.
+
+**Reusable domain modules.** `pe module add auth|tenancy|api-credentials|billing`
+materializes a working, tested module into your project.
+
+### An honest note on the last three days
+
+On 2026-09-04 a project wired the engine's hooks in for the first time, and
+one afternoon surfaced four defects — including a hook that had **rejected
+every commit it ever saw, silently, for two months**, because no project had
+ever run it.
+
+That prompted an audit of the whole engine, asking which of its surfaces has
+ever actually run anywhere. It found **sixteen more defects**: a catalogue
+documenting 14 of 29 hooks, a size limit documented at 40 KB that had been
+12/20 KB since v0.12.0, `pe help` executing a subprocess it meant to quote,
+three of the engine's own tests red at HEAD with nothing running them, and an
+install preset that had been missing two of its seven gate agents for a year.
+
+Fifteen are fixed. The audit is in **`docs/ADOPTION_AUDIT.md`**, including
+what is *still* not covered.
+
+The engine now has CI — it had none — running the test suite, executing every
+one of the 29 hooks against a fixture, and running the engine's own gates on
+its own commits. `pe doctor` reports how many of the 29 hooks your project
+actually wires, because the previous answer to "is this working?" was
+"probably".
+
+**Why this is in the beta brief:** you are being asked to trust a quality
+engine. The most useful thing I can tell you about it is what happened when
+it was pointed at itself.
+
+## What's next
+
+- **`/gate-review` as a Claude Code dynamic workflow** — the parallel gate
+  pattern is currently prose that Claude follows turn by turn. Making it a
+  script guarantees all gates run every time, validates envelopes at the
+  call site, and gives a bounded fix → re-review loop with a circuit breaker.
+- **Eval corpora for the remaining agents.** Five gates have seeded fixtures;
+  the other sixteen agents have none, so a prompt regression in them is
+  invisible. This is the largest known hole.
+- **Wiring `boot-smoke`.** A "fresh clone boots" gate that ships and is
+  called by nothing. Audit finding, still open.
+- **Anthropic Skills directory + plugin marketplace submission** — once the
+  above settles.
+
+Explicitly **not** on the runway:
+
+- **Dependency-aware DAG scheduler.** The coupling map for both current
+  adopters shows clean clusters, not pervasive tangle, so session-per-cluster
+  is the answer. Re-evaluation triggers in `docs/COUPLING_MAP.md §7`.
+- **Engine self-improvement that writes.** An agent may *propose*
+  (`pe incident propose`, materialized in your project, never in the engine).
+  There is no auto-apply mode and there will not be one — one bad auto-commit
+  would propagate to every adopter through `pe sync`.
 
 ---
 

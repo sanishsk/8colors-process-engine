@@ -7,6 +7,131 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.11] — 2026-09-04
+
+### Fixed — `size-budget`'s escape hatch could not be used, and fired on the wrong commit
+
+Found by following the hook's own instructions and watching them not work.
+It refuses an over-budget commit with "Add trailer `Size-justified:
+<reason>` to the commit message". Adding it changed nothing.
+
+The hook runs at the **pre-commit** stage, where the message being written
+does not exist yet. It guessed at `.git/COMMIT_EDITMSG`, which at that
+moment holds the **previous** commit's message. Two faults at once:
+
+1. The trailer never worked for `git commit -m` or `-F` — git writes
+   `COMMIT_EDITMSG` only after the pre-commit hook has run. The hook printed
+   instructions that could not be followed, so the only way past it was
+   `PE_SKIP_SIZE_BUDGET`. That is how a bypass becomes routine.
+2. When the *previous* commit carried `Size-justified:`, the *next* commit
+   passed the net-lines gate without one. A gate that lets a change through
+   because of something the last change said is worse than no gate — and
+   this one **fails open**, so nothing ever looks wrong.
+
+Two honest inputs now, no guessing at files: `$1` when the hook is wired at
+commit-msg stage, and `PE_SIZE_JUSTIFIED="<reason>"` which works at any
+stage. The stale-file read is gone, and the refusal names a way out that
+exists.
+
+`tests/test_size_budget_justify.sh` covers both mechanisms, the unjustified
+refusal, and the fail-open regression. Verified against the old hook: 4 of 6
+assertions red.
+
+### Fixed — `--subset gate-only` had been missing two of its gates for a year
+
+The preset promises "the gate agents". It was written in v0.8.0 with the
+five that existed then and never revisited: `design-critic` arrived in
+v0.18.0 and `performance-reviewer` in v0.37.0, both emitting gate envelopes,
+and neither was added. An adopter who chose the leanest install for review
+discipline silently got **five of seven gates** — no design gate, no
+performance gate — and `docs/CAPABILITY_CATALOG.md` agreed with the roster,
+so nothing looked wrong.
+
+`gate-only` is now *defined* as "every agent whose prompt sources
+`agents/_gate-contract.md`", and `tests/test_subset_rosters.sh` fails if the
+roster drifts from that definition. `core` is stated as a relationship —
+gate-only plus the three planning agents — so growing the gate set grows
+core with it. Presets are 7 and 10 agents; the catalogue's counts were
+corrected to match.
+
+**If you installed `--subset gate-only` before this release, re-run
+`pe install --subset gate-only` to pick up the two you were missing.**
+
+### Added — `docs/RUNNING_AGENTS.md`
+
+A beta tester asked how to test only security vulnerabilities without
+adopting the whole engine. There was no answer written down anywhere. The
+mechanism is general, so the document is: how to run **any** one agent, or
+only some.
+
+Four levels, in order of how much you have to adopt: the deterministic hooks
+from a clone (no install, no tokens); `pe agent run <name>` headless with
+`--dry-run` to see the cost first; naming an agent in a session; and
+`--subset`. Plus a catalogue of all 21 agents by the question each answers,
+a table of which hook *enforces* which concern rather than merely running
+it, and worked examples for security, code review, performance and
+data-model auditing.
+
+`tests/test_agent_docs_complete.sh` fails when an agent has no catalogue
+row, when a row names a deleted agent, or when the gate table disagrees with
+`_gate-contract.md`.
+
+### Fixed — the beta tester brief, in full
+
+The document written to be handed to people outside the project had not been
+re-read since v0.8.0. The 0.51.9 pass corrected its countable claims and left
+a do-not-send banner. This is the content pass; the banner is gone.
+
+What was wrong, beyond the counts:
+
+- **Four of fifteen model tiers.** `code-reviewer`, `researcher` and
+  `build-error-resolver` were listed as Haiku (all Sonnet);
+  `retrospective-agent` as Sonnet (Opus). The brief was telling adopters that
+  the mandatory review gate ran on Haiku while
+  `docs/AGENT_INVOCATION_RULES.md` said Sonnet and explained why gates never
+  run lower.
+- **Six agents missing entirely** — `design-critic`, `performance-reviewer`,
+  `tenant-isolation-auditor`, `project-kickstarter`, `project-onboarder`,
+  `incident-synthesizer`.
+- **"5 slash commands"** — there are 10. `/new-feature`, `/pre-commit`,
+  `/simplify`, `/retro` and `/design-scan` went unmentioned.
+- **"6 hooks"** — there are 29, and the six it listed included the 40 KB
+  `claude-md-size` claim that has been 12/20 KB since v0.12.0.
+- **The `pe` CLI section** omitted `pe agent run`, `pe gate parse`,
+  `pe audit`, `pe verify`, `pe recall`, `pe memory`, `pe collect` and
+  `pe telemetry` — including the one command that answers "how do I run just
+  one agent".
+- **"What shipped" / "What's next"** described v0.8.0 and a roadmap 43
+  minors old.
+- **"The engine will never auto-modify itself"** needed the v0.51.0 nuance:
+  an agent may now *propose* via `pe incident propose`, materialized in the
+  operator's project and never in the engine repo. There is still no
+  auto-apply mode.
+
+It also now points at `docs/ADOPTION_AUDIT.md` and says plainly that the
+engine had no CI until 2026-09-04 — because a document asking people to
+trust a quality engine should say what happened when it was pointed at
+itself.
+
+### Changed — `tests/test_docs_version_claims.sh`
+
+Extended from versions and counts to the brief's substance: every agent must
+appear in it, and **every model tier it quotes must match the agent's
+frontmatter**. Verified red against a single wrong tier. Also pins the
+command count and the gate-agent count.
+
+Three tests now hold the brief to the repository:
+`test_docs_version_claims.sh`, `test_agent_docs_complete.sh`,
+`test_subset_rosters.sh`. It cannot go stale without CI going red.
+
+**Value bar:** V1 — `--subset gate-only` shipped two gates short for a year.
+V3 for every false claim in a document written to be sent to people outside
+the project. V2 for `RUNNING_AGENTS.md`: the "how do I run just one agent"
+question arrived from a beta tester and had no written answer, so it would
+have been answered by hand every time.
+
+---
+
 ## [0.51.10] — 2026-09-04
 
 ### Changed — `docs/ADOPTION_AUDIT.md` brought to its finished state
