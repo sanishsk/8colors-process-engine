@@ -3,12 +3,69 @@
 > This engine is opinionated. Contributions are welcome, but the bar
 > is "this generalizes the doctrine without watering it down".
 
+## The value bar
+
+The engine is MIT and shared. An improvement found while working on one
+project should reach every other project — that is the point. Until
+2026-09-04 the engine was closed to its own agents entirely, and the
+cost of that was real: fixes discovered in a project died as notes in a
+transcript because there was no path from "we learned something" to "the
+engine knows it".
+
+The path is open now. The bar is what keeps it from becoming churn, and
+it applies to **humans and agents alike** — `incident-synthesizer`
+enforces the same four criteria in its Proposal Envelope.
+
+A change earns a place in the engine only if it can name one of these,
+with the evidence attached:
+
+| # | Criterion | Evidence required |
+|---|---|---|
+| **V1** | Prevents a class of defect that **actually happened** | the incident — date, project, what shipped |
+| **V2** | Removes work **provably repeated** across projects | at least two projects doing it by hand |
+| **V3** | Corrects something the engine **states that is false** | the false line, quoted |
+| **V4** | Closes a gap a **review or gate found and could not act on** | the envelope or gate output |
+
+**Not qualifying, however well argued:** style preferences; rewording
+that changes no behaviour; a new agent overlapping an existing one
+(extend the existing agent's prompt instead); tightening a threshold
+with no incident behind it; anything whose justification reduces to
+"this would be nicer".
+
+**Generalisability is a separate test, applied after the value bar.** A
+rule naming one project's section numbers, paths or vocabulary is local
+— ship the *mechanism*, leave the specifics behind. When in doubt it
+stays local: a wrong local file costs one project an afternoon, a wrong
+engine file costs every project quietly.
+
+**Every change carries a CHANGELOG entry and a VERSION bump.** A change
+nobody can see landing is a change nobody can roll back.
+
+**Never commit to `master`.** Branch, PR, human merge — including for
+agent-authored proposals, which reach the engine as a branch via
+`pe incident open-pr` and never as a direct write.
+
 ## Quick start
 
 ```bash
 git clone https://github.com/sanishsk/8colors-process-engine.git
 cd 8colors-process-engine
+pre-commit install                               # REQUIRED — see below
 ./scripts/pe install ~/code/some-test-project    # smoke-test your changes locally
+```
+
+**`pre-commit install` is not optional and is easy to skip**, because
+nothing complains when you do. `.git/hooks/` is not tracked, so a fresh
+clone has no hook at all and the five gates in `.pre-commit-config.yaml`
+simply never run — silently, on every commit. Until 2026-09-04 this
+repository itself was in exactly that state, which `pe doctor` found on
+its first run.
+
+Check any project, including this one:
+
+```bash
+pe doctor .          # does this project actually RUN the engine's hooks?
+pe verify            # are the engine's files unmodified? (a different question)
 ```
 
 ## Adding a new agent

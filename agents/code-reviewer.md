@@ -20,8 +20,16 @@ When invoked:
 1. **Gather context** — Run `git diff --staged` and `git diff` to see all changes. If no diff, check recent commits with `git log --oneline -5`.
 2. **Understand scope** — Identify which files changed, what feature/fix they relate to, and how they connect.
 3. **Read surrounding code** — Don't review changes in isolation. Read the full file and understand imports, dependencies, and call sites.
-4. **Apply review checklist** — Work through each category below, from CRITICAL to LOW.
-5. **Report findings** — Use the output format below. Only report issues you are confident about (>80% sure it is a real problem).
+4. **Enumerate call sites repo-wide when the diff touches a shared helper.** If the change routes callers through a common function — a formatter, a validator, a query builder — search the WHOLE repository for the pattern it replaces, not the directory the diff happens to live in. Report every site still doing it by hand, and say which are in scope.
+
+   *Incident, Origyn 2026-09-04:* a fix routed three screens through one
+   formatter. The author grepped `Views/` and shipped; a fourth screen in
+   `Models/` kept its own copy and rendered the same workout differently.
+   The review that found it only did so because a follow-up question asked
+   for a whole-codebase sweep. **A partial consolidation is worse than
+   none** — it looks finished, so nobody looks again.
+5. **Apply review checklist** — Work through each category below, from CRITICAL to LOW.
+6. **Report findings** — Use the output format below. Only report issues you are confident about (>80% sure it is a real problem).
 
 ## Confidence-Based Filtering
 
@@ -34,6 +42,26 @@ When invoked:
 - **Prioritize** issues that could cause bugs, security vulnerabilities, or data loss
 
 ## Review Checklist
+
+### Presentation correctness (HIGH when it reaches a user)
+
+A test suite asserts what a function returns. It rarely asserts what a
+person reads, and that gap is where formatting defects live untouched by
+a green build.
+
+- **A change to a formatter, unit, label or number needs a test on the
+  rendered string**, not on the value behind it.
+- **A helper that owns its unit must not have one appended by its
+  caller.** Check both halves of every `f"{fmt(x)} kg"`-shaped
+  expression.
+- **When several screens report the same fact, they must agree.** Look
+  for the second and third formatter of the same quantity.
+
+*Incident, Origyn 2026-09-04:* 149 iOS tests and 594 backend tests were
+green while the workout screen's largest text read **"280 kg kg"** — the
+caller appended a unit the helper already owned. Three other screens
+rendered the same number three more ways. No test asserted the string a
+client sees, so nothing was red.
 
 ### Security (CRITICAL)
 
