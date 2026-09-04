@@ -100,6 +100,45 @@ The split surfaced a real coupling bug: `_INVOKER_OVERRIDE` was a module global
 the tests set on one module and the loop read from another's namespace, which
 fails silently across a file boundary. The loop now takes `invoker=`.
 
+### Added — the audit trail's first step: gate verdicts that survive
+
+`--record` writes one fixed filename, so every review overwrote the last.
+Right for the commit hook, useless for every other question — yesterday's
+verdicts were gone, and `dev-log-collect.sh` reported "0 gate verdicts" for a
+day with three reviews. `.claude/gates/history.jsonl` now takes one line per
+verdict: when, which gate, what verdict, which diff sha, findings by
+severity, model, failure class.
+
+This was logged in ADOPTION_AUDIT.md as deliberately not fixed, because the
+engine "had nowhere to express" whether records are tracked or ignored. It
+did: `pe install` has gitignored `.claude/gates/` since v0.13. What hid that
+was the engine's own .gitignore carrying `.pe/` and not `.claude/gates/`,
+while `install.sh` had the mirror image — so the engine's runtime writes were
+already dirtying every adopter tree. Both now ignore both, and `--record`
+additionally drops a self-ignoring `.gitignore` into the gates directory so
+it holds without `pe install` having run.
+
+### Added — `pe telemetry context`, and cache tokens made visible
+
+Measured on this project's own 2,231-turn ledger: 356,681 tokens of context
+replayed per turn against 968 generated. Context replay plus cache writes is
+97.8% of input-side billed-equivalent tokens; generation is 2.0%.
+
+The per-model table computed `cache_read` and printed input, output and cost
+— hiding 97% of the bill. It now shows both cache columns and ends with a
+weighted "Where the tokens go" ranking. An unpriced model no longer reads as
+free: `$0.00` printed beside 1,390 turns of the most expensive model in the
+ledger, so unpriced models are flagged, named, and the totals declared
+understated.
+
+`pe telemetry context` inventories what is paid per turn (the CLAUDE.md
+chain) versus on demand (agents, commands, skills, workflows) — and
+reconciles it against the ledger, because the files are only 2% of the
+replay. The other 98% is conversation history, which no file edit touches.
+Wired into the retrospective agent's mandatory Step 0, whose Token Efficiency
+section had been treating cache hit ratio as a score to maximise — a metric
+that reads best exactly when the context is largest.
+
 ---
 
 ## [0.51.16] — 2026-09-04
