@@ -293,11 +293,27 @@ const recorded = await agent(
   `Persist this gate envelope so the engine's commit hook can read it.\n\n` +
   `Envelope:\n\`\`\`json\n${JSON.stringify(envelope, null, 2)}\n\`\`\`\n\n` +
   `Steps, in order:\n` +
-  `1. Write a transcript file to .pe/gate-review-transcript.md containing ` +
-  `an "Envelope key values" block listing schema_version, gate_name, ` +
-  `verdict, failure_class, model_used and timestamp one per line, then the ` +
-  `envelope inside a fenced \`\`\`json gate-envelope block. Both are required ` +
-  `by pe gate parse in transcript mode.\n` +
+  // Shown, not described. This prompt used to say "an 'Envelope key values'
+  // block listing … one per line", which omits the one thing the parser
+  // actually requires: CROSSCHECK_KV_RE in scripts/pe_gate.py matches only
+  // lines indented by two spaces or a tab. A transcript written to the
+  // letter of that sentence is rejected with "missing required field" six
+  // times over — which reads as a broken envelope, not a broken heading.
+  // agents/_gate-contract.md gets this right by showing the block, which is
+  // why every gate agent produces one the parser accepts.
+  `1. Write a transcript file to .pe/gate-review-transcript.md in EXACTLY ` +
+  `this shape — the two-space indent on the key lines is required, not ` +
+  `cosmetic:\n\n` +
+  `Envelope key values\n` +
+  `  schema_version: ${envelope.schema_version}\n` +
+  `  gate_name: ${envelope.gate_name}\n` +
+  `  verdict: ${envelope.verdict}\n` +
+  `  failure_class: ${envelope.failure_class}\n` +
+  `  model_used: ${envelope.model_used}\n` +
+  `  timestamp: ${envelope.timestamp}\n\n` +
+  `\`\`\`json gate-envelope\n<the envelope above, verbatim>\n\`\`\`\n\n` +
+  `Both blocks are required by pe gate parse in transcript mode, and the ` +
+  `six values must match the envelope exactly.\n` +
   `2. Compute the staged-diff sha: ` +
   `\`git diff --cached | git hash-object --stdin\`\n` +
   `3. Run: pe gate parse --record .claude/gates/last-gate.json ` +
