@@ -54,7 +54,10 @@ import sys
 from pathlib import Path
 
 FRAMEWORK_MARKERS = ("pre-commit.run", "pre_commit", "INSTALL_PYTHON", "pre-commit run")
-HOOK_REF = re.compile(r"(?:[\w./~{}-]*/)?hooks/([a-z0-9_-]+\.sh)")
+# `entry:` values only. Free-text matching pulled hook names out of YAML
+# comments and out of shim invocations, and reported both as missing files.
+ENTRY_LINE = re.compile(r"^\s*entry:\s*(.+?)\s*$", re.M)
+HOOK_NAME = re.compile(r"([a-z0-9_-]+\.sh)")
 
 
 class Result:
@@ -138,30 +141,90 @@ def _check_tracked(r: Result, project: Path, cfg: Path) -> None:
               "clone, a teammate, or CI, and no review ever sees it change")
 
 
+def _entries(cfg_text: str) -> list[str]:
+    """The command each hook actually runs, as pre-commit will run it.
+
+    Line-based on purpose. A regex that joined every indented
+    continuation swallowed the sibling keys (`language:`, `stages:`) into
+    the entry and matched nothing — so only a line more indented than the
+    `entry:` key itself, and not another `key:`, counts as continuation.
+    """
+    out: list[str] = []
+    lines = cfg_text.split("\n")
+    i = 0
+    while i < len(lines):
+        m = re.match(r"^(\s*)entry:\s*(.*?)\s*$", lines[i])
+        if not m:
+            i += 1
+            continue
+        indent, value = len(m.group(1)), m.group(2)
+        i += 1
+        while i < len(lines):
+            nxt = lines[i]
+            if not nxt.strip():
+                break
+            nxt_indent = len(nxt) - len(nxt.lstrip())
+            if nxt_indent <= indent or re.match(r"^\s*[\w-]+:\s", nxt) \
+                    or re.match(r"^\s*-\s", nxt):
+                break
+            value += " " + nxt.strip()
+            i += 1
+        if value:
+            out.append(value)
+    return out
+
+
+def _entry_script(entry: str) -> str:
+    """The script pre-commit will exec, ignoring an `env VAR=x` prefix."""
+    for tok in entry.split():
+        if "=" in tok and "/" not in tok:
+            continue          # env assignment
+        if tok in ("env", "bash", "sh", "python3"):
+            continue          # interpreter
+        return tok
+    return ""
+
+
 def _check_paths(r: Result, project: Path, engine: Path | None,
-                 cfg_hooks: list[str], settings: Path) -> None:
-    """4 — every referenced hook file exists."""
-    refs: list[tuple[str, str]] = [(".pre-commit-config.yaml", h) for h in cfg_hooks]
+                 entries: list[str], settings: Path) -> None:
+    """4 — every referenced hook file exists.
+
+    pre-commit resolves `entry:` against the REPO ROOT, so that is where a
+    relative path is checked. Resolving it against the engine instead was
+    the bug this function shipped with: it reported a project's paths as
+    fine when pre-commit would not have found them, and as missing once
+    the project pointed at a local shim.
+    """
+    missing: list[str] = []
+    checked = 0
+    for entry in entries:
+        script = _entry_script(entry)
+        if not script or not script.endswith(".sh"):
+            continue
+        checked += 1
+        cand = Path(script) if script.startswith("/") else project / script
+        if not cand.exists():
+            missing.append(f".pre-commit-config.yaml → {script}")
+
     for m in re.finditer(r'"command"\s*:\s*"([^"]+)"', _read(settings)):
-        if "/hooks/" in m.group(1):
-            refs.append((".claude/settings.json", m.group(1)))
-    if not refs:
-        return
-    missing = []
-    for source, ref in refs:
-        cand = ref
-        if not cand.startswith("/"):
-            cand = (str(engine / "hooks" / cand) if engine and "/" not in cand
-                    else str((project / ref.lstrip("./")).resolve()))
-        cand = cand.replace("{{ENGINE_DIR}}", str(engine) if engine else "").split()[0]
+        cmdline = m.group(1)
+        if "/hooks/" not in cmdline:
+            continue
+        checked += 1
+        cand = cmdline.split()[0].replace("{{ENGINE_DIR}}",
+                                          str(engine) if engine else "")
         if cand and not Path(cand).exists():
-            missing.append(f"{source} → {ref}")
+            missing.append(f".claude/settings.json → {cand}")
+
+    if not checked:
+        return
     if missing:
         r.add("FAIL", "hook paths resolve",
-              f"{len(missing)} referenced hook file(s) do not exist: "
+              f"{len(missing)} of {checked} referenced hook file(s) do not exist "
+              "(pre-commit resolves `entry:` from the repo root): "
               + "; ".join(missing[:3]) + ("…" if len(missing) > 3 else ""))
     else:
-        r.add("OK", "hook paths resolve", f"{len(refs)} reference(s) all exist")
+        r.add("OK", "hook paths resolve", f"{checked} reference(s) all exist")
 
 
 def _check_engine(r: Result, engine: Path | None) -> None:
@@ -182,12 +245,14 @@ def check_project(project: Path, engine: Path | None) -> Result:
     githooks = project / ".git" / "hooks" / "pre-commit"
     cfg = project / ".pre-commit-config.yaml"
     cfg_text = _read(cfg)
-    cfg_hooks = sorted(set(HOOK_REF.findall(cfg_text))) if cfg_text else []
+    entries = _entries(cfg_text)
+    cfg_hooks = sorted({m.group(1) for e in entries
+                        for m in [HOOK_NAME.search(_entry_script(e))] if m})
 
     _check_git_hook(r, githooks, cfg_hooks)
     _check_bypass(r, githooks, cfg_hooks)
     _check_tracked(r, project, cfg)
-    _check_paths(r, project, engine, cfg_hooks, project / ".claude" / "settings.json")
+    _check_paths(r, project, engine, entries, project / ".claude" / "settings.json")
     _check_engine(r, engine)
     return r
 
