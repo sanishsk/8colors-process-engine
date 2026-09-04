@@ -169,8 +169,9 @@ Six fixed, two open.
 | 11 | `test_incident_synth.py` red at HEAD: the proposal schema made `value_bar` + `generalisable` required in 0.51.0, the fixture was never updated | V1 | fixed 0.51.5 |
 | 12 | `pe doctor` counted shim-routed hooks as one hook named `engine.sh` — it reported "2 hook(s)" for Origyn, which runs six | V1 | fixed 0.51.6 |
 | 13 | `pe doctor --json` was advertised by `pe_doctor.py --help` and rejected by the CLI | V3 | fixed 0.51.6 |
-| 14 | `perf-gate`'s path regex anchors `/models?/`, `/db/`, `/orm/`, `/repositor`, `/schema\.py` with a leading slash, so a repo-root `models/user.py` does not match. The two 8colors projects that would trip it both use a top-level `models/`. | V3 | **open** |
-| 15 | `pe gate parse --record` prints a well-formed envelope on stdout, then exits 4 without writing, with the reason on stderr | V1 | **open** |
+| 14 | `perf-gate`'s path regex anchored `/models?/`, `/db/`, `/orm/`, `/repositor`, `/schema\.py` with a leading slash, so a repo-root `models/user.py` did not match. The two 8colors projects that would trip it both use a top-level `models/` — the gate was off for the layout it was written for. | V3 | fixed 0.51.7 |
+| 15 | `pe gate parse --record` printed a well-formed envelope on stdout, then exited 4 without writing, with the reason on stderr | V1 | fixed 0.51.7 |
+| 16 | `--record` writes one fixed filename, so a project has a one-slot gate history — while `scripts/dev-log-collect.sh`, shipped by this engine, globs the directory and reported "0 gate verdicts" for a day with three reviews | V4 | **open, see below** |
 
 Defects 5–7 were all red in the engine's own test suite at HEAD. Nothing ran it.
 
@@ -232,6 +233,22 @@ Informational, never a failure: a project with no UI has no business wiring
 the design hooks. The number is the point. A project reading "6 of 29" is a
 project that can ask which of the other 23 it wanted — which is the question
 Origyn never got asked before hand-rolling a gate the engine already had.
+
+### The one thing found and deliberately not fixed
+
+Finding 16: the engine ships a writer that keeps one slot and a reader that
+globs a directory, and they do not fit. The obvious fix — have `--record`
+also drop a timestamped sibling — was written, and removed before it
+shipped. `tests/test_hooks.sh` caught the consequence within a minute: the
+engine would be creating untracked files in every adopter's working tree,
+which then never comes clean, and `stop-uncommitted-reminder` — also shipped
+by this engine — would nag on every turn, forever.
+
+Whether gate records are tracked, ignored or pruned is the adopting
+project's policy. The engine has nowhere to express that today, so it does
+not get to assume one. The local wrapper a project already wrote stays local
+until it does. That is the CONTRIBUTING rule applied against a change that
+looked like a clean V4 right up until a test disagreed.
 
 ### What is still not covered
 

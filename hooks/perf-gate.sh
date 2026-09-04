@@ -25,7 +25,15 @@ MSG_FILE="${1:?Usage: $0 <commit-msg-file>}"
 # files. Reviewer caught the false-positive class (openapi.json,
 # json-schema-validator.js, user.proto). Adjust via ENGINE_PERF_PATHS
 # for stacks that use different conventions.
-DEFAULT_RE='(models?\.py|/models?/|/db/|/orm/|/repositor|serializer|query_?count|migrations?/|_schema\.py|/schema\.py|schema\.sql)'
+# `(^|/)` where the old regex had a bare `/`. Anchoring a directory
+# segment with a leading slash alone silently exempts the repo ROOT: a
+# top-level models/user.py did not match `/models?/`, while
+# app/models/user.py did. Both 8colors projects that would trip this gate
+# keep their ORM layer in a top-level models/ — so the gate was off for
+# exactly the layout it was written for. Found by the 2026-09-04 adoption
+# audit; `migrations?/` was already correct because it has no leading
+# slash, which is why nobody noticed the others were different.
+DEFAULT_RE='(models?\.py|(^|/)models?/|(^|/)db/|(^|/)orm/|(^|/)repositor|serializer|query_?count|(^|/)migrations?/|_schema\.py|(^|/)schema\.py|schema\.sql)'
 PERF_RE="${ENGINE_PERF_PATHS:-$DEFAULT_RE}"
 
 STAGED=$(git diff --cached --name-only)
