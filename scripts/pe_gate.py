@@ -46,7 +46,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -342,33 +342,41 @@ def validate_awwwards_consistency(envelope: dict) -> list[str]:
     except (KeyError, TypeError, ValueError):
         return []  # schema layer will have already errored.
 
-    expected = d * 0.4 + u * 0.3 + c * 0.2 + con * 0.1
-    if abs(total - expected) > 0.05:
-        errs.append(
-            f"$.awwwards_score.total: {total} does not match weighted sum "
-            f"(design*0.4 + usability*0.3 + creativity*0.2 + content*0.1 "
-            f"= {expected:.3f}). Difference {abs(total - expected):.3f} "
-            f"exceeds ±0.05 tolerance."
-        )
-
-    surface = score.get("surface_class")
-    verdict = envelope.get("verdict")
-    bar = 8.0 if surface == "client_facing" else 7.0 if surface == "internal" else None
-    if bar is not None and verdict is not None:
-        if total < bar and verdict != "FAIL":
-            errs.append(
-                f"$.awwwards_score: total {total} is below the {surface} "
-                f"pass bar ({bar}); verdict must be FAIL but is {verdict!r}. "
-                f"The pass-bar contract is agent-enforced and parser-verified."
-            )
-        if total >= bar and verdict == "FAIL":
-            # Above the bar with FAIL is legal only if the fail was
-            # driven by a per-dimension floor (archetype-specific).
-            # We don't have the archetype floors in-parser, so warn
-            # softly via the message — this is not a schema breach,
-            # just an audit surface.
-            pass
+    errs.extend(_awwwards_arithmetic(d, u, c, con, total))
+    errs.extend(_awwwards_pass_bar(score.get("surface_class"),
+                                   envelope.get("verdict"), total))
     return errs
+
+
+def _awwwards_arithmetic(d: float, u: float, c: float, con: float,
+                         total: float) -> list[str]:
+    """Invariant 1 — `total` is the weighted sum, within rounding."""
+    expected = d * 0.4 + u * 0.3 + c * 0.2 + con * 0.1
+    if abs(total - expected) <= 0.05:
+        return []
+    return [
+        f"$.awwwards_score.total: {total} does not match weighted sum "
+        f"(design*0.4 + usability*0.3 + creativity*0.2 + content*0.1 "
+        f"= {expected:.3f}). Difference {abs(total - expected):.3f} "
+        f"exceeds ±0.05 tolerance."
+    ]
+
+
+def _awwwards_pass_bar(surface: object, verdict: object,
+                       total: float) -> list[str]:
+    """Invariant 2 — a below-bar total must carry verdict=FAIL.
+
+    Above the bar WITH a FAIL is legal: the fail may have been driven by a
+    per-dimension archetype floor the parser does not hold. Not checked.
+    """
+    bar = 8.0 if surface == "client_facing" else 7.0 if surface == "internal" else None
+    if bar is None or verdict is None or total >= bar or verdict == "FAIL":
+        return []
+    return [
+        f"$.awwwards_score: total {total} is below the {surface} "
+        f"pass bar ({bar}); verdict must be FAIL but is {verdict!r}. "
+        f"The pass-bar contract is agent-enforced and parser-verified."
+    ]
 
 
 def classify_exit(envelope: dict) -> int:
@@ -392,6 +400,137 @@ def classify_exit(envelope: dict) -> int:
 # ────────────────────────────────────────────────────────────────────
 # CLI entrypoint
 # ────────────────────────────────────────────────────────────────────
+
+def _crosscheck_errors(envelope: dict, text: str) -> list[str]:
+    """E1.d cross-check — transcript mode only.
+
+    Exists to force the agent to literally enumerate the envelope's
+    required field values in prose BEFORE the fence, a behavioural step
+    E1.a's bare-JSON self-validation could not catch when skipped.
+    """
+    crosscheck = extract_crosscheck(text)
+    if crosscheck is None:
+        return ["cross-check: 'Envelope key values' block not found in transcript "
+                "(must appear before the fenced envelope; see CRITICAL OUTPUT "
+                "CONTRACT §'Pre-emission cross-check')"]
+    return verify_crosscheck(envelope, crosscheck)
+
+
+def collect_validation_errors(envelope: dict, schema: dict, text: str,
+                              *, bare: bool) -> list[str]:
+    """Every reason this envelope is not acceptable, in reporting order.
+
+    Extracted from main() (v0.51.7), which had grown to 164 lines against
+    the engine's own max_function_lines=50 and only tripped the gate when
+    someone next edited the file. Pure: no printing, no exits.
+    """
+    validation_errors = _validate(envelope, schema, schema)
+
+    # Verdict/failure_class coherence — the hand-rolled validator has no
+    # if/then support, so enforce the schema's prose rule here: FAIL must
+    # carry a real failure_class (FAIL+none would route to 'continue'
+    # downstream), and PASS/WARN must carry 'none'.
+    verdict = envelope.get("verdict")
+    failure_class = envelope.get("failure_class")
+    if verdict == "FAIL" and failure_class == "none":
+        validation_errors.append(
+            "$.failure_class: 'none' is invalid when verdict=FAIL — pick "
+            "worker_quality / task_underspecified / blocked / out_of_scope"
+        )
+    elif verdict in ("PASS", "WARN") and failure_class not in ("none", None):
+        validation_errors.append(
+            f"$.failure_class: must be 'none' when verdict={verdict} "
+            f"(got {failure_class!r})"
+        )
+
+    # D5 (v0.38.0) — awwwards_score semantic checks. See
+    # validate_awwwards_consistency docstring for the two invariants.
+    validation_errors.extend(validate_awwwards_consistency(envelope))
+
+    # Major version gate — pinned to ENGINE_SCHEMA_MAJOR const (P2.11).
+    # Previously read schema.properties.schema_version.examples[0]
+    # with a naked [0]; an empty examples array would IndexError here
+    # and the whole validator would crash before reporting anything.
+    schema_version = envelope.get("schema_version", "0.0.0")
+    schema_major = schema_version.split(".", 1)[0] if isinstance(schema_version, str) else "0"
+    if schema_major != ENGINE_SCHEMA_MAJOR:
+        validation_errors.insert(
+            0,
+            f"$.schema_version: envelope major {schema_major} != engine major {ENGINE_SCHEMA_MAJOR}",
+        )
+
+    if not bare:
+        validation_errors.extend(_crosscheck_errors(envelope, text))
+
+    return validation_errors
+
+
+def report_invalid(envelope: dict, errors: list[str],
+                   record_path: Path | None) -> int:
+    """Say what is wrong, and that nothing was written.
+
+    The envelope goes to STDERR, not stdout. It used to be printed to
+    stdout BEFORE validation ran, so an invalid envelope produced a clean
+    PASS-looking document on stdout, exit 4, and the reason on stderr where
+    a redirect loses it. An operator reading stdout saw success. Reported
+    2026-09-04 as "printed the parsed envelope, exited 4, left the target
+    file holding the previous envelope" — all three true, and the first is
+    why the other two were a surprise.
+
+    Nothing pipes the stdout of a failed parse: the suite consumes it on
+    the success path only.
+    """
+    print("ENVELOPE INVALID — nothing was written:", file=sys.stderr)
+    for err_msg in errors:
+        print(f"  - {err_msg}", file=sys.stderr)
+    if record_path is not None:
+        print(f"  --record {record_path} left unchanged.", file=sys.stderr)
+    print("\nThe envelope as parsed, for reference:", file=sys.stderr)
+    print(json.dumps(envelope, indent=2, sort_keys=True), file=sys.stderr)
+    return EXIT_PARSE_ERROR
+
+
+def write_record(record_path: Path, envelope: dict, *, diff_sha: str | None,
+                 source: Path) -> None:
+    """Write the evidence sidecar the pre-commit hook verifies.
+
+    One file, atomically: tempfile + replace, so a concurrent gate never
+    sees a torn write.
+
+    NOT two. A timestamped sibling was written here and then removed before
+    this shipped. The motivation was real — `--record` writes ONE filename,
+    so every review overwrites the last, while scripts/dev-log-collect.sh
+    (shipped by this same engine) globs .claude/gates/*.json to count
+    verdicts into the digest the retrospective agent reads, and reported
+    "0 gate verdicts" for a project with three reviews that day. But the
+    engine cannot start creating untracked files in an adopter's working
+    tree on its own: tests/test_hooks.sh caught the consequence immediately
+    — the tree never comes clean again, and stop-uncommitted-reminder, also
+    shipped by this engine, then nags every turn forever.
+
+    Whether gate records are tracked, ignored, or pruned is the adopting
+    project's policy, not the engine's to assume. Origyn's local wrapper is
+    the right home for it until that policy has somewhere to live. Logged
+    open in docs/ADOPTION_AUDIT.md.
+    """
+    record = {
+        "envelope": envelope,
+        "verdict": envelope.get("verdict"),
+        "gate_name": envelope.get("gate_name"),
+        "diff_sha": diff_sha,
+        # utcnow() is deprecated in 3.12 and emitted a DeprecationWarning on
+        # stderr on every successful record — noise in the same channel the
+        # recorded / NOT-recorded lines use.
+        "recorded_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": str(source),
+    }
+    blob = json.dumps(record, indent=2, sort_keys=True)
+
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = record_path.with_suffix(record_path.suffix + ".tmp")
+    tmp.write_text(blob, encoding="utf-8")
+    tmp.replace(record_path)
+
 
 def _build_parser() -> "argparse.ArgumentParser":
     """argparse-based CLI (P2.11).
@@ -432,6 +571,37 @@ def _build_parser() -> "argparse.ArgumentParser":
     return parser
 
 
+def _load(target: Path, *, bare: bool
+          ) -> tuple[str, dict, dict] | None:
+    """Read the transcript and the schema, or explain why not.
+
+    Returns (text, envelope, schema), or None after printing the reason —
+    every failure here is EXIT_PARSE_ERROR at the call site.
+    """
+    if not target.exists():
+        print(f"ERROR: file not found: {target}", file=sys.stderr)
+        return None
+
+    # utf-8-sig transparently strips a UTF-8 BOM if the transcript was
+    # saved by an editor that added one (Windows Notepad, some Mac editors
+    # under certain settings). Files without a BOM decode identically to
+    # utf-8. P2.11 fix.
+    text = target.read_text(encoding="utf-8-sig")
+    envelope, err = extract_envelope(text, bare=bare)
+    if envelope is None:
+        print(f"ERROR: {err}", file=sys.stderr)
+        return None
+
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"ERROR: failed to load schema at {SCHEMA_PATH}: {exc}",
+              file=sys.stderr)
+        return None
+
+    return text, envelope, schema
+
+
 def main(argv: list[str]) -> int:
     # argparse handles both `--flag path` and `path --flag` (P2.11).
     if len(argv) > 1 and argv[1] in ("-h", "--help"):
@@ -448,103 +618,33 @@ def main(argv: list[str]) -> int:
     diff_sha = args.diff_sha
 
     target = Path(args.path)
-    if not target.exists():
-        print(f"ERROR: file not found: {target}", file=sys.stderr)
+    loaded = _load(target, bare=bare)
+    if loaded is None:
         return EXIT_PARSE_ERROR
+    text, envelope, schema = loaded
 
-    # utf-8-sig transparently strips a UTF-8 BOM if the transcript was
-    # saved by an editor that added one (Windows Notepad, some Mac
-    # editors under certain settings). Files without a BOM decode
-    # identically to utf-8. P2.11 fix.
-    text = target.read_text(encoding="utf-8-sig")
-    envelope, err = extract_envelope(text, bare=bare)
-    if envelope is None:
-        print(f"ERROR: {err}", file=sys.stderr)
-        return EXIT_PARSE_ERROR
-
-    try:
-        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"ERROR: failed to load schema at {SCHEMA_PATH}: {exc}", file=sys.stderr)
-        return EXIT_PARSE_ERROR
-
-    validation_errors = _validate(envelope, schema, schema)
-
-    # Verdict/failure_class coherence — the hand-rolled validator has no
-    # if/then support, so enforce the schema's prose rule here: FAIL must
-    # carry a real failure_class (FAIL+none would route to 'continue'
-    # downstream), and PASS/WARN must carry 'none'.
-    verdict = envelope.get("verdict")
-    failure_class = envelope.get("failure_class")
-    if verdict == "FAIL" and failure_class == "none":
-        validation_errors.append(
-            "$.failure_class: 'none' is invalid when verdict=FAIL — pick "
-            "worker_quality / task_underspecified / blocked / out_of_scope"
-        )
-    elif verdict in ("PASS", "WARN") and failure_class not in ("none", None):
-        validation_errors.append(
-            f"$.failure_class: must be 'none' when verdict={verdict} "
-            f"(got {failure_class!r})"
-        )
-
-    # D5 (v0.38.0) — awwwards_score semantic checks. See
-    # validate_awwwards_consistency docstring for the two invariants.
-    validation_errors.extend(validate_awwwards_consistency(envelope))
-
-    # Major version gate — pinned to ENGINE_SCHEMA_MAJOR const (P2.11).
-    # Previously read schema.properties.schema_version.examples[0]
-    # with a naked [0]; an empty examples array would IndexError here
-    # and the whole validator would crash before reporting anything.
-    schema_version = envelope.get("schema_version", "0.0.0")
-    schema_major = schema_version.split(".", 1)[0] if isinstance(schema_version, str) else "0"
-    if schema_major != ENGINE_SCHEMA_MAJOR:
-        validation_errors.insert(
-            0,
-            f"$.schema_version: envelope major {schema_major} != engine major {ENGINE_SCHEMA_MAJOR}",
-        )
-
-    # E1.d cross-check (transcript mode only). The cross-check exists to
-    # force the agent to literally enumerate the envelope's required
-    # field values in prose BEFORE the fence — a behavioural step that
-    # E1.a's bare-JSON self-validation could not catch when skipped.
-    if not bare:
-        crosscheck = extract_crosscheck(text)
-        if crosscheck is None:
-            validation_errors.append(
-                "cross-check: 'Envelope key values' block not found in transcript "
-                "(must appear before the fenced envelope; see CRITICAL OUTPUT "
-                "CONTRACT §'Pre-emission cross-check')"
-            )
-        else:
-            validation_errors.extend(verify_crosscheck(envelope, crosscheck))
-
-    # Always print the envelope to stdout so callers can pipe it.
-    print(json.dumps(envelope, indent=2, sort_keys=True))
+    validation_errors = collect_validation_errors(
+        envelope, schema, text, bare=bare)
 
     if validation_errors:
-        print("ENVELOPE INVALID:", file=sys.stderr)
-        for err_msg in validation_errors:
-            print(f"  - {err_msg}", file=sys.stderr)
-        return EXIT_PARSE_ERROR
+        return report_invalid(envelope, validation_errors, record_path)
 
-    # --record: on PASS/WARN, write evidence sidecar for pre-commit hook
-    # to verify. Never write on FAIL — a failed envelope is not proof of
-    # review. Atomic tempfile+replace so concurrent gates never see a
-    # torn write.
+    # Valid: print to stdout so callers can pipe it.
+    print(json.dumps(envelope, indent=2, sort_keys=True))
+
     exit_code = classify_exit(envelope)
     if record_path is not None and exit_code in (EXIT_PASS, EXIT_WARN):
-        record = {
-            "envelope": envelope,
-            "verdict": envelope.get("verdict"),
-            "gate_name": envelope.get("gate_name"),
-            "diff_sha": diff_sha,
-            "recorded_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "source": str(target),
-        }
-        record_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = record_path.with_suffix(record_path.suffix + ".tmp")
-        tmp.write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.replace(record_path)
+        write_record(record_path, envelope, diff_sha=diff_sha, source=target)
+        print(f"gate: recorded {record_path} "
+              f"(verdict={envelope.get('verdict')}, diff_sha={diff_sha})",
+              file=sys.stderr)
+    elif record_path is not None:
+        # A FAIL verdict is a legitimate not-written; silence about it is
+        # not. The caller asked for a file — say whether it got one.
+        print(f"gate: NOT recorded — {record_path} left unchanged. "
+              f"verdict={envelope.get('verdict')} (exit {exit_code}); "
+              f"--record writes on PASS/WARN only, because a failed "
+              f"envelope is not proof of review.", file=sys.stderr)
 
     return exit_code
 

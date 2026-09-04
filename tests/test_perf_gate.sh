@@ -237,6 +237,34 @@ else
     record_fail ".proto false-positived"
 fi
 
+# ─── 14. a REPO-ROOT data layer is gated, not just a nested one ─────
+# The path regex anchored its directory segments with a bare leading `/`,
+# so models/user.py did not match while app/models/user.py did — the gate
+# was off for exactly the layout it was written for. Found 2026-09-04 by
+# the adoption audit. One case per exempted-by-accident directory.
+for d in models db orm repositories; do
+    new_repo "$TMP/s14-$d"
+    mkdir -p "$d"
+    echo 'x = 1' > "$d/thing.py"
+    git add "$d/thing.py"
+    MSG=$(msg_file "feat: touch the data layer")
+    if bash "$HOOK" "$MSG" >/dev/null 2>&1; then
+        record_fail "repo-root $d/ did NOT trigger perf-gate (leading-slash anchor)"
+    else
+        record_pass "repo-root $d/ triggers perf-gate"
+    fi
+done
+
+new_repo "$TMP/s14-schema"
+echo 'TABLES = {}' > schema.py
+git add schema.py
+MSG=$(msg_file "feat: schema")
+if bash "$HOOK" "$MSG" >/dev/null 2>&1; then
+    record_fail "repo-root schema.py did NOT trigger perf-gate"
+else
+    record_pass "repo-root schema.py triggers perf-gate"
+fi
+
 # ─── summary ────────────────────────────────────────────────────────
 echo ""
 echo "─────────────────────────────────────"

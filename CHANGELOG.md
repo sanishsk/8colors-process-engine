@@ -7,6 +7,98 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.7] — 2026-09-04
+
+### Fixed — `pe gate parse --record` failed to write, and looked like it hadn't
+
+Reported as: "it printed the parsed envelope, exited 4, and left the target
+file holding the previous envelope." All three were true. The first is why
+the other two were a surprise.
+
+`main()` printed the envelope to **stdout** before running the validation
+block. So a transcript whose envelope was well-formed JSON but failed a
+transcript-level check — most commonly a missing E1.d "Envelope key values"
+cross-check — produced a clean, PASS-looking document on stdout, exit 4, and
+the actual reason on stderr, where a redirect loses it. An operator reading
+stdout saw success. The record was correctly not written, and nothing said
+so. It was hand-written from Python twice instead.
+
+Exit 4 does mean "did not write". Three changes make that audible:
+
+- An invalid envelope now prints **nothing** to stdout. The envelope goes to
+  stderr under "The envelope as parsed, for reference", after the errors.
+  Nothing pipes stdout on the failure path.
+- The failure names the record it did not touch:
+  `--record <path> left unchanged.`
+- A FAIL verdict is a legitimate not-written — but no longer a silent one:
+  `gate: NOT recorded — <path> left unchanged. verdict=FAIL (exit 1);
+  --record writes on PASS/WARN only, because a failed envelope is not proof
+  of review.` The success path says `gate: recorded <path> (verdict=…)`.
+
+`datetime.utcnow()` was emitting a `DeprecationWarning` on stderr on every
+successful record — noise in the exact channel those lines use. Replaced
+with a timezone-aware call.
+
+### Not fixed, deliberately — the one-slot gate history
+
+`--record` writes one fixed filename, so every review overwrites the
+previous one. `scripts/dev-log-collect.sh` — shipped by this engine — globs
+`.claude/gates/*.json` to count verdicts into the daily digest the
+retrospective agent reads, and reported "0 gate verdicts" for a project with
+three reviews that day. The engine ships both halves and they do not fit.
+
+A timestamped sibling was written, and removed before shipping.
+`tests/test_hooks.sh` caught the consequence within a minute: the engine
+would be creating untracked files in every adopter's working tree, which
+never comes clean again, and `stop-uncommitted-reminder` — also shipped by
+this engine — would then nag on every turn, forever.
+
+Whether gate records are tracked, ignored or pruned is the adopting
+project's policy, not the engine's to assume. The local wrapper one project
+already wrote is the right home for it until that policy has somewhere to
+live. Logged open in `docs/ADOPTION_AUDIT.md` §6.
+
+### Changed — `scripts/pe_gate.py` split into named functions
+
+`main()` was 164 lines against the engine's own `max_function_lines=50`,
+and `validate_awwwards_consistency()` was 61. Neither was new; `size-budget`
+only inspects staged files, so both sat unflagged until someone next edited
+the file — which is what happened here. Extracted `_load`,
+`collect_validation_errors`, `_crosscheck_errors`, `report_invalid`,
+`write_record`, `_awwwards_arithmetic` and `_awwwards_pass_bar`. Behaviour
+unchanged; `main()` is now 44 lines and the gate passes without a bypass.
+
+### Fixed — `perf-gate` was off for the layout it was written for
+
+The path regex anchored its directory segments with a bare leading slash:
+`/models?/`, `/db/`, `/orm/`, `/repositor`, `/schema\.py`. A leading slash
+alone exempts the repository **root** — `app/models/user.py` matched,
+`models/user.py` did not. Both 8colors projects that would trip this gate
+keep their ORM layer in a top-level `models/`.
+
+`migrations?/` was already correct, having no leading slash, which is
+probably why the difference went unnoticed. Anchors are now `(^|/)`. The
+false-positive class an earlier review caught — `openapi.json`,
+`json-schema-validator.js`, `user.proto` — still does not match; there are
+tests for both directions.
+
+### Added
+
+- `tests/test_gate_record.sh` — 14 assertions across the write, the
+  invalid-envelope and the FAIL paths, plus the history glob and the absence
+  of a DeprecationWarning on the happy path.
+- `tests/test_perf_gate.sh` gains five repo-root cases. Verified red against
+  the old regex, green against the new one.
+
+**Value bar:** V1 — both defects reproduced at HEAD; the gate one cost an
+operator two hand-written records in a single afternoon, and `perf-gate` has
+been inert for the repository layout it was written to protect. The one-slot
+history is a real V4 and is recorded as open, not shipped — the fix the
+evidence pointed at would have made every adopter's tree permanently
+dirty.
+
+---
+
 ## [0.51.6] — 2026-09-04
 
 ### Added — the adoption audit, and the machinery that keeps it honest
