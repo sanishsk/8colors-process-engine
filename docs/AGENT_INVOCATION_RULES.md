@@ -8,7 +8,7 @@
 | Auth/multi-tenancy | brief-writer → security-reviewer (mandatory) + database-reviewer + code-reviewer in parallel |
 | Bug fix | tdd-guide (regression test first) → code-reviewer |
 | Build error | build-error-resolver |
-| UI change | brief-writer → ui-ux-design-agent (max 1 v0 prompt/module) → code-reviewer |
+| UI change | brief-writer → design-critic (mandatory) → code-reviewer |
 | **Before any commit on a slot** | **code-reviewer (mandatory) — reads staged files, blocks on CRITICAL findings, HIGH addressed before commit unless explicit skip-reason logged** |
 | Weekly retro | ceo |
 | Phase boundary | /lock-backlog → ceo |

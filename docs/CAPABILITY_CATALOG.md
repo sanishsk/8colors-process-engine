@@ -155,15 +155,18 @@ All 5 emit the **gate envelope** (machine-parseable JSON block with `verdict`, `
 
 ### Project-domain-specific agents (8CStudio-only, not generic)
 
-These live in `.claude/agents/` on 8CStudio but are NOT installed by `pe install` because they assume 8CStudio-specific architecture:
+These are NOT installed by `pe install`:
 
-| Agent | Why 8CStudio-only |
+| Agent | Why not in the engine |
 |---|---|
-| `data-model-auditor` | Generic in concept, but its current ruleset assumes Python/SQLite/PG models. Could be promoted to engine catalog if generalized. |
-| `tenant-isolation-auditor` | Assumes company-as-tenant + RLS PERMISSIVE (per 8CStudio `docs/MULTI_TENANCY_USERS_ROLES_DESIGN.md`). Reusable for any project with the same multi-tenancy model. |
-| `ui-ux-design-agent` | Assumes Tailwind + Alpine + Jinja stack + v0 budget discipline (Design Engine). Reusable for projects with the same stack. |
-| `project-kickstarter` / `project-onboarder` | Meta-agents that scaffold projects + audit existing ones against standard rules. Could be promoted to engine catalog. |
-| `claude-code-guide` / `statusline-setup` | Pure Claude Code UX agents — already user-global. |
+| `ui-ux-design-agent` | 8CStudio-local. Assumes Tailwind + Alpine + Jinja + v0 budget discipline. The engine's equivalent is `design-critic`, which is stack-agnostic and emits a gate envelope. |
+| `claude-code-guide` / `statusline-setup` | Pure Claude Code UX agents — already user-global, nothing to install. |
+
+**Promoted since this table was written** — `data-model-auditor`,
+`tenant-isolation-auditor`, `project-kickstarter` and `project-onboarder`
+were all listed above as 8CStudio-only. All four now ship in `agents/` and
+are installed by `pe install`. `tests/test_agent_refs.sh` fails if this
+table names an agent the engine actually ships.
 
 ---
 
