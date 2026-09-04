@@ -45,8 +45,20 @@ fi
 MSG=$(cat "$MSG_FILE")
 
 # Read the trailer value (strip 'Code-reviewed:' prefix, trim whitespace).
-TRAILER=$(echo "$MSG" | grep -E '^Code-reviewed:' | head -1 | sed -E 's/^Code-reviewed:[[:space:]]*//' | tr -d '\r' | sed -E 's/[[:space:]]+$//')
-SKIP=$(echo "$MSG" | grep -E '^Code-skip-reason:' | head -1 | sed -E 's/^Code-skip-reason:[[:space:]]*//' | tr -d '\r')
+# `|| true` is load-bearing, not defensive noise. Under `set -euo pipefail`
+# (line 25) a grep that legitimately matches nothing fails the whole command
+# substitution and kills the script — silently, exit 1, no message.
+#
+# The absent trailer is the NORMAL case for at least one of these two on
+# every commit, so this hook rejected every message that did not carry BOTH
+# a Code-reviewed and a Code-skip-reason trailer. It died at line 49 before
+# it could read the valid Code-reviewed trailer sitting at line 48.
+#
+# Found 2026-09-04, the first time this hook was wired into a project. It
+# emitted no diagnostic, which is why it read as "the trailer did not
+# resolve" rather than "the hook cannot run".
+TRAILER=$(echo "$MSG" | grep -E '^Code-reviewed:' | head -1 | sed -E 's/^Code-reviewed:[[:space:]]*//' | tr -d '\r' | sed -E 's/[[:space:]]+$//' || true)
+SKIP=$(echo "$MSG" | grep -E '^Code-skip-reason:' | head -1 | sed -E 's/^Code-skip-reason:[[:space:]]*//' | tr -d '\r' || true)
 
 if [ -n "$SKIP" ]; then
     exit 0

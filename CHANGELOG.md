@@ -7,6 +7,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.2] — 2026-09-04
+
+### Fixed — `code-review-trailer.sh` rejected every commit, silently
+
+The hook runs under `set -euo pipefail`. Its `Code-skip-reason` grep
+legitimately matches nothing on almost every commit; unguarded, that
+failed the command substitution and killed the script at exit 1 **with
+no diagnostic** — one line after it had already read a perfectly valid
+`Code-reviewed:` trailer.
+
+The hook therefore passed only when a message carried **both** a
+`Code-reviewed:` and a `Code-skip-reason:` trailer, which no documented
+workflow produces. It was unusable as shipped, and the silence made it
+read as "the sha did not resolve" rather than "the hook cannot run".
+
+It went unnoticed because it had never run: this repo's own
+`.pre-commit-config.yaml` does not include the trailer hooks, and the
+first project to wire them in did so on 2026-09-04.
+
+`security-review-trailer.sh` already guarded its two greps with
+`|| true`; `code-review-trailer.sh` had four unguarded. Now guarded,
+with a comment saying why the `|| true` is load-bearing rather than
+defensive noise.
+
+`tests/test_trailer_pipefail.sh` — 7 cases. The last four assert that
+**no** trailer hook may exit non-zero without saying something: a silent
+failure is indistinguishable from a crash, and that is what hid this for
+as long as it did.
+
+---
+
 ## [0.51.1] — 2026-09-04
 
 ### Fixed — `pe doctor` check 4 resolved `entry:` from the wrong root
