@@ -7,6 +7,61 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.8] — 2026-09-04
+
+### Changed — `scripts/pe` split, so its own gate stops being bypassed
+
+`scripts/pe` was **1506 lines** against the engine's own
+`size-budget` limit of `max_file_lines=800`. It had been over since well
+before this release cycle, which means the gate had been *failing on every
+change to the engine's main dispatcher*, and every such change was made with
+`PE_SKIP_SIZE_BUDGET=1` — three times in one afternoon, each honestly noted
+in its commit message.
+
+A bypass reached for routinely is a gate that has stopped working. That is
+the same failure this cycle keeps finding, wearing different clothes.
+
+Split by lifecycle stage, not by line count:
+
+| File | Lines | Holds |
+|---|---|---|
+| `scripts/pe` | **112** | self-locate, `pe_python()`, sourcing, dispatch |
+| `scripts/_cmd_help.sh` | 265 | `usage()`, `help_subcommand()` |
+| `scripts/_cmd_lifecycle.sh` | 598 | install, launchd, sync, upgrade, status, doctor, eject |
+| `scripts/_cmd_ops.sh` | 471 | collect, skills-audit, baseline, shadow, telemetry, agent, incident, memory, new, module, pin, recall, verify, gate |
+| `scripts/_cmd_docs.sh` | 130 | docs check, audit |
+
+Sourced, not executed — the same `. "$ENGINE_DIR/scripts/_lib.sh"` pattern
+`install.sh` already uses for `_subset.sh`, `_yaml.sh` and `_hooks.sh`. No
+subcommand moved, no behaviour changed; `tests/test_a4_cli.sh` and
+`tests/test_pe_sync.sh` are the guardrails and both pass, along with the
+other 45.
+
+### Added — `tests/test_size_budget_repo.sh`
+
+`hooks/size-budget.sh` reads the **staged** diff, so a file already over the
+limit is invisible until someone next edits it. `pre-commit run --all-files`
+does not help either: the engine's hooks are `pass_filenames: false` and read
+the index themselves, so with nothing staged that command exercises the
+loaders and not the files. The `self-gate` CI job added in 0.51.6 was close
+to a no-op for exactly that reason, which is worth saying plainly.
+
+The new test walks the *tracked* files instead. It also asserts that
+`scripts/pe` stays under budget, so the split cannot quietly regress.
+
+`KNOWN_OVER` is an explicit, dated list rather than a wildcard —
+`scripts/pe_orchestrator.py` (1202) and `scripts/research_index.py` (1027)
+are over and stay visible until they are split. The test fails if an entry
+becomes *stale*, too, so the list cannot outlive its reason.
+
+`PE_SKIP_SIZE_BUDGET` is gone from `.github/workflows/ci.yml`.
+
+**Value bar:** V1 — the gate was inert on the engine's most-edited file, and
+the bypass had become routine. V3 for the CI job that claimed more than it
+checked.
+
+---
+
 ## [0.51.7] — 2026-09-04
 
 ### Fixed — `pe gate parse --record` failed to write, and looked like it hadn't
