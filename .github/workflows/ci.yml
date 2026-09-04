@@ -70,10 +70,13 @@ jobs:
           python-version: '3.12'
       - name: Install pre-commit
         run: pip install --quiet pre-commit
+      # No PE_SKIP_SIZE_BUDGET here any more: scripts/pe was split in
+      # 0.51.8 and the repo is inside its own budget.
+      #
+      # Note what this job does and does not prove. The engine's hooks are
+      # `pass_filenames: false` and read the STAGED diff themselves, so with
+      # nothing staged `--all-files` exercises the loaders, not the files.
+      # The budget is checked for real by tests/test_size_budget_repo.sh in
+      # the suite job, which walks the tracked files instead.
       - name: Run the engine's gates over the whole repo
         run: pre-commit run --all-files --show-diff-on-failure
-        env:
-          # scripts/pe is over its own 800-line file budget. The split is
-          # tracked; until it lands, the gate would fail every run and get
-          # ignored, which is how a gate stops working.
-          PE_SKIP_SIZE_BUDGET: '1'
