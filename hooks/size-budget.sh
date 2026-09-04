@@ -7,7 +7,7 @@
 #   1. NET LINES of this commit's staged diff:
 #      WARN >warn_net_lines  (default 250)
 #      FAIL >fail_net_lines  (default 600)   unless the commit message
-#                                            carries a `Size-justified:` trailer.
+#                                            is justified (see below).
 #
 #   2. PER-FILE line count of any source file staged for commit:
 #      FAIL >max_file_lines (default 800)
@@ -19,7 +19,8 @@
 #      Best-effort AST-lite for Python; regex-based scan for JS/TS.
 #
 # Bypass one commit:
-#   Add trailer `Size-justified: <one-line reason>` to the commit message
+#   Justify with PE_SIZE_JUSTIFIED="<reason>" in the environment (works at
+#   any stage), or a `Size-justified:` trailer at commit-msg stage
 #   OR: PE_SKIP_SIZE_BUDGET=1 git commit ...
 
 set -euo pipefail
@@ -72,25 +73,45 @@ NET=$(printf '%s\n' "$NUMSTAT" | awk '
 NF >= 3 && $1 != "-" && $2 != "-" { ins += $1; dels += $2 }
 END { print (ins - dels) }' 2>/dev/null || echo 0)
 
-# Check commit message for Size-justified trailer
+# Is the net-lines overage justified?
+#
+# This hook runs at the PRE-COMMIT stage, where the commit message does not
+# exist yet. It used to guess at `.git/COMMIT_EDITMSG`, which at that moment
+# holds the PREVIOUS commit's message — so the escape hatch it advertises
+# had two faults at once:
+#
+#   * it never worked for `git commit -m` or `-F`, because git writes
+#     COMMIT_EDITMSG after the pre-commit hook runs; and
+#   * when the PREVIOUS commit happened to carry `Size-justified:`, the NEXT
+#     commit sailed through the net-lines gate without one. A gate that lets
+#     a change through because of something the last change said is worse
+#     than no gate.
+#
+# Found 2026-09-04 by following the hook's own instructions and watching
+# them not work. Two honest inputs now, no guessing:
+#
+#   $1                     the commit-msg file, when wired at commit-msg
+#                          stage (pre-commit passes it there)
+#   PE_SIZE_JUSTIFIED=...  an explicit env var, which works at any stage:
+#                          PE_SIZE_JUSTIFIED="two docs" git commit ...
 JUSTIFIED=0
-MSG_FILE=""
-for candidate in .git/COMMIT_EDITMSG COMMIT_EDITMSG; do
-    if [ -f "$candidate" ]; then
-        MSG_FILE="$candidate"
-        break
-    fi
-done
-if [ -n "$MSG_FILE" ] && grep -qiE '^Size-justified:' "$MSG_FILE" 2>/dev/null; then
+MSG_FILE="${1:-}"
+if [ -n "$MSG_FILE" ] && [ -f "$MSG_FILE" ] \
+   && grep -qiE '^Size-justified:' "$MSG_FILE" 2>/dev/null; then
+    JUSTIFIED=1
+elif [ -n "${PE_SIZE_JUSTIFIED:-}" ]; then
     JUSTIFIED=1
 fi
 
 if [ "$NET" -gt "$fail_net" ]; then
     if [ "$JUSTIFIED" -eq 1 ]; then
-        echo "[size-budget] net +${NET} lines (>fail=$fail_net) — allowed via Size-justified: trailer" >&2
+        echo "[size-budget] net +${NET} lines (>fail=$fail_net) — allowed: justified" >&2
     else
         echo "[size-budget] FAIL: net +${NET} lines exceeds fail_net_lines=${fail_net}." >&2
-        echo "  Add trailer 'Size-justified: <reason>' to the commit message, or split the commit." >&2
+        echo "  Justify it or split the commit:" >&2
+        echo "    PE_SIZE_JUSTIFIED=\"<reason>\" git commit ...   (any stage)" >&2
+        echo "    Size-justified: <reason>   trailer, if this hook is also" >&2
+        echo "                               wired at the commit-msg stage" >&2
         fail=1
     fi
 elif [ "$NET" -gt "$warn_net" ]; then
@@ -217,8 +238,12 @@ if [ "$fail" -ne 0 ]; then
 
 Options:
   1. Split the file / extract the function.
-  2. Add trailer 'Size-justified: <reason>' to the commit message (only
-     affects the net-lines gate; file/function gates always block).
+  2. Justify the net-lines overage — PE_SIZE_JUSTIFIED="<reason>" in the
+     environment, or a 'Size-justified: <reason>' trailer if this hook is
+     also wired at the commit-msg stage. A pre-commit hook cannot read the
+     message being written, so the env var is the one that always works.
+     Either way this affects ONLY the net-lines gate; the per-file and
+     per-function gates always block.
   3. Raise the config value in .process-engine.yaml:
        size_budget:
          max_file_lines: <n>
