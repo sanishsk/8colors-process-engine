@@ -55,7 +55,18 @@ SURFACE_GLOBS: tuple[str, ...] = (
     "hooks/*.sh",
     "hooks/hooks.json",
     "scripts/pe",
+    # Everything `scripts/pe` and the hooks source at runtime. `pe` was a
+    # single 1506-line file when this tuple was written, so "scripts/pe" was
+    # the whole CLI. v0.51.8 split it into scripts/_cmd_*.sh and left the
+    # manifest behind: the dispatcher stayed checksummed while the ~1400
+    # lines it sources — every command body — became invisible to
+    # `pe verify`. A manifest that covers the entry point and not the code
+    # it runs verifies almost nothing.
+    "scripts/_*.sh",
     "scripts/pe_*.py",
+    # /gate-review is executable gate logic that decides what reaches
+    # .claude/gates/last-gate.json, and it ships with the plugin.
+    "workflows/*.js",
     "plugin.json",
     "VERSION",
 )
@@ -235,6 +246,51 @@ def _json_report(engine: Path, changed, missing, extra) -> None:
     print(json.dumps(payload, indent=2))
 
 
+def _run_update(engine: Path, as_json: bool) -> int:
+    """Regenerate MANIFEST.sha256. Release-time only, doubly gated.
+
+    Split out of main() because main() was 68 lines and the size gate
+    blocks per-function overages without an escape hatch — deliberately,
+    since "the function is long for a good reason" is what every long
+    function says. The two refusals below are the whole reason this path
+    is not a one-liner, and they read better with a name on them.
+    """
+    # --update rewrites the ground truth. In an adopter tree, a
+    # compromised agent could run `pe verify --update` to whitewash its
+    # own poisoning. Gate on an explicit env var AND require the caller
+    # to be inside the engine's own tree (the engine repo itself, not an
+    # install target).
+    if os.environ.get("PE_VERIFY_ALLOW_UPDATE") != "1":
+        raise SystemExit(
+            "pe verify --update is release-time only. Set "
+            "PE_VERIFY_ALLOW_UPDATE=1 to acknowledge you are "
+            "regenerating the manifest in the engine repo."
+        )
+    script_home = Path(__file__).resolve().parent.parent
+    if engine.resolve() != script_home:
+        raise SystemExit(
+            f"pe verify --update refuses to overwrite a manifest "
+            f"outside the engine source tree.\n"
+            f"  script parent: {script_home}\n"
+            f"  engine target: {engine}\n"
+            "If you really need to regenerate an adopter manifest, "
+            "run this script from that engine's own scripts/ dir."
+        )
+
+    manifest = _compute_manifest(engine)
+    path = _write_manifest(engine, manifest)
+    if as_json:
+        print(json.dumps({
+            "action": "update",
+            "manifest": str(path),
+            "entries": len(manifest),
+        }, indent=2))
+    else:
+        print(f"pe verify --update — wrote {len(manifest)} entries to")
+        print(f"  {path}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="pe verify")
     parser.add_argument("--engine", help="path to engine repo")
@@ -253,43 +309,7 @@ def main(argv: list[str]) -> int:
     engine = _resolve_engine(args.engine)
 
     if args.update:
-        # --update rewrites the ground truth. In an adopter tree, a
-        # compromised agent could run `pe verify --update` to
-        # whitewash its own poisoning. Gate on an explicit env var
-        # AND require the caller to be inside the engine's own git
-        # tree (i.e., the engine repo itself, not an install target).
-        if os.environ.get("PE_VERIFY_ALLOW_UPDATE") != "1":
-            raise SystemExit(
-                "pe verify --update is release-time only. Set "
-                "PE_VERIFY_ALLOW_UPDATE=1 to acknowledge you are "
-                "regenerating the manifest in the engine repo."
-            )
-        # Refuse to --update inside an adopter tree — if the resolved
-        # engine dir is NOT the same as this script's own parent
-        # directory tree, it means we're regenerating a manifest for
-        # something other than the source of truth.
-        script_home = Path(__file__).resolve().parent.parent
-        if engine.resolve() != script_home:
-            raise SystemExit(
-                f"pe verify --update refuses to overwrite a manifest "
-                f"outside the engine source tree.\n"
-                f"  script parent: {script_home}\n"
-                f"  engine target: {engine}\n"
-                "If you really need to regenerate an adopter manifest, "
-                "run this script from that engine's own scripts/ dir."
-            )
-        manifest = _compute_manifest(engine)
-        path = _write_manifest(engine, manifest)
-        if args.json:
-            print(json.dumps({
-                "action": "update",
-                "manifest": str(path),
-                "entries": len(manifest),
-            }, indent=2))
-        else:
-            print(f"pe verify --update — wrote {len(manifest)} entries to")
-            print(f"  {path}")
-        return 0
+        return _run_update(engine, args.json)
 
     on_disk = _compute_manifest(engine)
     manifest = _load_manifest(engine)

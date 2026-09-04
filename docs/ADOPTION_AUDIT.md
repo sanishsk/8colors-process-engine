@@ -289,16 +289,26 @@ that were not true, that is where the leverage was.
   over the file budget. Listed explicitly in `test_size_budget_repo.sh`'s
   `KNOWN_OVER`, which also fails if an entry goes stale, so neither can
   quietly become fine or quietly stay forgotten.
-- **`pe verify` is red, and nothing runs it.** 21 files have drifted from
-  `MANIFEST.sha256` — expected, since the manifest is a release-time artifact
-  and this cycle changed 21 files. The problem is not the drift, it is that
-  no check would have told anyone. CI now runs `pe verify` **advisory** so
-  the drift is at least visible on every push; regenerating the manifest
-  (`pe verify --update`) remains a release step someone has to remember.
-- **`workflows/` is not in `pe_verify.py`'s `SURFACE_GLOBS`**, so
-  `workflows/gate-review.js` is the one installed engine surface with no
-  checksum. Adding the glob and regenerating the manifest belong to the same
-  release.
+- ~~**`pe verify` is red, and nothing runs it.**~~ **Closed in v0.51.17.**
+  CI runs `pe verify` advisory on every push, and the manifest has been
+  regenerated — 84 entries, clean. Regenerating (`pe verify --update`)
+  remains a release step someone has to remember; CI now makes forgetting
+  visible rather than silent.
+- ~~**`workflows/` is not in `pe_verify.py`'s `SURFACE_GLOBS`.**~~
+  **Closed in v0.51.17, along with a larger gap it was hiding.** Adding
+  `workflows/*.js` surfaced that `scripts/_*.sh` was missing too — and that
+  one mattered more. `SURFACE_GLOBS` was written when `scripts/pe` was a
+  single 1506-line file, so `"scripts/pe"` covered the whole CLI. The
+  v0.51.8 split left the manifest behind: the 112-line dispatcher stayed
+  checksummed while the ~1400 lines of command bodies it sources became
+  invisible. A manifest covering the entry point but not the code it runs
+  verifies almost nothing, and nothing failed, because a glob that matches
+  nothing looks exactly like a glob with nothing to match.
+
+  `tests/test_pe_verify.sh` now derives the requirement from the dispatcher
+  itself — whatever `scripts/pe` sources must be in the manifest — rather
+  than from a list someone maintains. Verified red against all six
+  uncovered files before the globs were added.
 
 ## The pilot, run for real
 
