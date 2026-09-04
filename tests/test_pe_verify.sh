@@ -184,6 +184,22 @@ else
     record_fail "scripts/pe sources files the manifest does not cover:$uncovered"
 fi
 
+# Every python file in scripts/ is engine code that something runs — the CLI
+# modules, the agent runner, the research indexer that `pe install` symlinks
+# into adopter projects. The glob was "scripts/pe_*.py", which looked
+# deliberate and silently excluded the rest. Derive the requirement from the
+# directory rather than from a list someone maintains.
+py_missing=""
+for f in "$ENGINE_DIR"/scripts/*.py; do
+    [ -f "$f" ] || continue
+    rel="scripts/$(basename "$f")"
+    grep -qE "[[:space:]]$rel\$" "$ENGINE_DIR/MANIFEST.sha256" 2>/dev/null \
+        || py_missing="$py_missing $rel"
+done
+[ -z "$py_missing" ] \
+    && record_pass "every scripts/*.py is in MANIFEST.sha256" \
+    || record_fail "python file(s) in scripts/ not covered by the manifest:$py_missing"
+
 # The workflow decides what reaches .claude/gates/last-gate.json.
 if [ -d "$ENGINE_DIR/workflows" ]; then
     wf_missing=""

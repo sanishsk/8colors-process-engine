@@ -76,7 +76,7 @@ cmd_shadow() {
     local sub="${1:-}"
     shift || true
     case "$sub" in
-        decide|reconcile)
+        decide|reconcile|reset)
             local py; py="$(pe_python)" || exit 1
             exec "$py" "$ENGINE_DIR/scripts/pe_orchestrator.py" "$sub" "$@"
             ;;
@@ -105,6 +105,14 @@ SUBCOMMANDS
         Reads the outcome JSON object from stdin (keys: merge_commit,
         ultimate_outcome, actual_iterations_used,
         actual_tier_progression, router_correctness).
+
+    reset      [--decisions-log .pe/decisions.jsonl] [--campaign-id <id>]
+
+        Removes the cumulative breaker sidecar for a campaign, so token
+        budgets start fresh. Idempotent. The subcommand existed in
+        pe_orchestrator.py from P2.11 but this dispatcher only routed
+        decide and reconcile, so it was unreachable through `pe` until
+        v0.52.0.
 
 SEE ALSO
     docs/PHASE_3_ESCALATION_ROUTER.md   Design, graduation criteria, schema

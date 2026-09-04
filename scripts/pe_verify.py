@@ -63,7 +63,13 @@ SURFACE_GLOBS: tuple[str, ...] = (
     # `pe verify`. A manifest that covers the entry point and not the code
     # it runs verifies almost nothing.
     "scripts/_*.sh",
-    "scripts/pe_*.py",
+    # Was "scripts/pe_*.py", which covered the CLI's own modules and missed
+    # every other python file in the directory — including research_index.py,
+    # which `pe install` SYMLINKS into adopter projects, and agent_runner.py,
+    # which spawns agents. Same shape as the _cmd_*.sh gap above: a glob
+    # narrow enough to look deliberate, quietly excluding load-bearing code.
+    # The whole directory is engine code; checksum the whole directory.
+    "scripts/*.py",
     # /gate-review is executable gate logic that decides what reaches
     # .claude/gates/last-gate.json, and it ships with the plugin.
     "workflows/*.js",

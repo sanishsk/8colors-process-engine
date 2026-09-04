@@ -41,10 +41,16 @@ if [ -z "$MAX" ]; then
 fi
 ok "budget read from the hook itself (max_file_lines=$MAX)"
 
-# Pre-existing, over the limit as of 2026-09-04, each tracked separately.
-# Splitting them is its own change with its own tests; leaving them silent
-# is not an option.
-KNOWN_OVER=" scripts/pe_orchestrator.py scripts/research_index.py "
+# Empty, and the check below fails if an entry goes stale, so it stays
+# empty until something genuinely needs an exemption.
+#
+# It held scripts/pe_orchestrator.py (1202 lines) and scripts/research_index.py
+# (1027) — the engine's two largest modules, exempted by name from the 800-line
+# budget the engine holds adopters to. Split in v0.52.0 along seams that were
+# already there: pe_orchestrator into pe_routing (decisions), pe_escalation
+# (the A4 loop) and itself (argv); research_index into research_embed
+# (chunking + providers) and itself (storage, rebuild, query).
+KNOWN_OVER=" "
 
 over=""
 stale=""
