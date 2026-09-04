@@ -7,6 +7,116 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.0] — 2026-09-04
+
+> **The engine opens to its own improvement, and learns to check that
+> it is actually running.** Two findings from Origyn drove this release,
+> and the second one is the reason the first matters.
+
+### Changed — engine self-modification is now allowed, and calibrated
+
+`incident-synthesizer` said *"engine self-modification stays forbidden by
+design"*. The intent was sound — the thing that governs every project
+should not be edited by the thing being governed — but the rule was
+absolute, and an absolute ban has a cost that only shows up over time:
+an improvement found while working on one project had nowhere to go. It
+died as a note in a transcript.
+
+The engine is MIT and shared. What the ban was protecting against was
+never *improvement*; it was **unreviewed** and **unjustified** change.
+Those two stay forbidden, and only those:
+
+- the agent still has **no Write/Edit tool** — that stays absolute
+- a proposal may now become a **branch and a PR** against the engine
+  (`pe incident open-pr`), never a commit to `master`, never an in-place
+  edit of a consumer project's symlink target
+- every proposal must clear a **value bar** and name which criterion:
+  **V1** prevents a defect class that actually happened · **V2** removes
+  provably repeated work · **V3** corrects something the engine states
+  that is false · **V4** closes a gap a review found and could not act on
+- **generalisability** is a separate test applied after the bar — a rule
+  naming one project's section numbers is local; ship the mechanism
+- CHANGELOG entry + VERSION bump required
+
+`value_bar` and `generalisable` are now required fields in
+`schemas/proposal-envelope.schema.json`. The same bar is in
+CONTRIBUTING.md, so humans and agents are held to one standard.
+
+### Added — `pe doctor` checks that the engine's hooks actually RUN (V1, V3)
+
+`pe verify` is a supply-chain check: it proves the engine's files match
+`MANIFEST.sha256`. It is entirely silent about whether any of them
+execute. A project can pass it while running none of them.
+
+**The incident (Origyn, 2026-09-04):**
+
+| | |
+|---|---|
+| `.pre-commit-config.yaml` | listed **10** engine hooks |
+| `.git/hooks/pre-commit` | → `../../scripts/pre-commit.sh` |
+| `pre-commit` framework | installed, on PATH |
+| engine hooks executed | **0** |
+
+The project had hand-rolled a pre-commit script and symlinked it into
+`.git/hooks`, silently replacing the framework's dispatcher. Among the
+ten decorative hooks was `claude-md-size.sh`, which blocks a CLAUDE.md
+over 20,000 bytes. That project's CLAUDE.md reached **80,437 bytes** —
+four times the engine's own hard limit — while the guard against exactly
+that sat configured and unreachable.
+
+Nobody was careless. The failure is invisible by construction: both
+mechanisms are called "pre-commit", both look installed, and the one
+that runs never mentions the one that doesn't.
+
+`pe doctor <project>` now also reports:
+
+1. `.git/hooks/pre-commit` exists at all
+2. **the bypass** — config lists engine hooks but the installed hook is
+   not the framework dispatcher, so none of them run
+3. `.pre-commit-config.yaml` is tracked by git (untracked config never
+   reaches a fresh clone, a teammate, or CI)
+4. every referenced hook path resolves to a file that exists
+5. the engine dir the project points at is the one `pe` resolves
+
+Folded into the existing `cmd_doctor` rather than shipped as a second
+command — a first draft added a duplicate `cmd_doctor()` which, in bash,
+would have silently shadowed the original and removed its symlink and
+agent-shadowing checks.
+
+**On its first run it failed the engine's own repo**, which has
+`.pre-commit-config.yaml` listing 5 hooks and no `.git/hooks/pre-commit`
+at all. The engine was not running its own hooks either.
+
+Fixture: `tests/test_pe_doctor_hooks.sh` — 6 cases, including the exact
+Origyn arrangement. If it ever passes, the check has regressed.
+
+### Changed — `code-reviewer` (V1, two real defects)
+
+- **Enumerate call sites repo-wide when the diff touches a shared
+  helper.** Origyn 2026-09-04: a fix routed three screens through one
+  formatter; the author grepped `Views/` and a fourth screen in
+  `Models/` kept its own copy. A partial consolidation is worse than
+  none — it looks finished, so nobody looks again.
+- **New checklist section: presentation correctness.** A change to a
+  formatter, unit or label needs a test on the *rendered string*, not
+  the value behind it. Origyn shipped **"280 kg kg"** in the largest
+  text on a screen with 149 iOS and 594 backend tests green, because no
+  test asserted what a person reads.
+
+### Changed — `doc-updater` gains a truth-check (V1, V2)
+
+Does the documentation still tell the truth after this diff? Claims the
+diff contradicts, numbers that drift (checked by running the command
+that produces them, not trusted), paths that moved, the header block.
+
+Explicitly told **not** to duplicate a deterministic gate: size limits
+and "a DONE row is still in the live table" are exact string conditions
+that belong in a hook, where they cost nothing and cannot be forgotten.
+Added here rather than as a new agent, per CONTRIBUTING's no-overlapping-
+agents bar.
+
+---
+
 ## [0.50.0] — 2026-07-10
 
 > **ENGINE_360 close-out.** The v0.45.0 360° review's fix-list had

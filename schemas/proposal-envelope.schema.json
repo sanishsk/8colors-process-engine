@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://8colors.dev/schemas/proposal-envelope.schema.json",
   "title": "ProposalEnvelope",
-  "description": "Output contract for the incident-synthesizer agent (A3). One envelope proposes one gate synthesized from one incident. Materialized to .pe/incident-proposals/<slug>/ for operator review. The engine NEVER auto-applies these — human writes the PR against the engine repo.",
+  "description": "Output contract for the incident-synthesizer agent (A3). One envelope proposes one gate synthesized from one incident. Materialized to .pe/incident-proposals/<slug>/ for operator review. The engine NEVER auto-applies these \u2014 human writes the PR against the engine repo.",
   "type": "object",
   "required": [
     "schema_version",
@@ -13,7 +13,9 @@
     "proposed_gate_kind",
     "confidence",
     "proposed_files",
-    "validation_plan"
+    "validation_plan",
+    "value_bar",
+    "generalisable"
   ],
   "additionalProperties": false,
   "properties": {
@@ -29,11 +31,14 @@
     "incident_summary": {
       "type": "string",
       "minLength": 20,
-      "description": "One-paragraph plain-English description of what went wrong. Cited, not paraphrased — the operator must be able to trace this back to the source."
+      "description": "One-paragraph plain-English description of what went wrong. Cited, not paraphrased \u2014 the operator must be able to trace this back to the source."
     },
     "incident_source": {
       "type": "object",
-      "required": ["kind", "ref"],
+      "required": [
+        "kind",
+        "ref"
+      ],
       "additionalProperties": false,
       "properties": {
         "kind": {
@@ -54,7 +59,7 @@
     },
     "failure_class": {
       "type": "string",
-      "description": "Free-form short slug for the failure pattern (e.g. 'sql-injection', 'unbounded-query', 'missing-tenant-filter', 'ai-aesthetic-drift', 'missing-transaction'). NOT constrained to the gate-envelope failure_class enum — that is per-invocation; this is per-pattern.",
+      "description": "Free-form short slug for the failure pattern (e.g. 'sql-injection', 'unbounded-query', 'missing-tenant-filter', 'ai-aesthetic-drift', 'missing-transaction'). NOT constrained to the gate-envelope failure_class enum \u2014 that is per-invocation; this is per-pattern.",
       "minLength": 3,
       "maxLength": 60,
       "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
@@ -68,20 +73,25 @@
         "policy_toml",
         "agent_revision"
       ],
-      "description": "Which layer of the engine gets the new gate. sast_rule → templates/perf/*.yml or hooks/sast-scan.sh; hook → hooks/*.sh; test_fixture → evals/fixtures/<gate>/<slug>/; policy_toml → policy/*.toml; agent_revision → edit to an existing agents/*.md."
+      "description": "Which layer of the engine gets the new gate. sast_rule \u2192 templates/perf/*.yml or hooks/sast-scan.sh; hook \u2192 hooks/*.sh; test_fixture \u2192 evals/fixtures/<gate>/<slug>/; policy_toml \u2192 policy/*.toml; agent_revision \u2192 edit to an existing agents/*.md."
     },
     "confidence": {
       "type": "number",
       "minimum": 0.0,
       "maximum": 1.0,
-      "description": "The synthesizer's own confidence that this proposal, if merged, would catch a recurrence. LOW confidence (<0.5) MUST still be emitted — the operator decides whether to escalate to a manual RFC."
+      "description": "The synthesizer's own confidence that this proposal, if merged, would catch a recurrence. LOW confidence (<0.5) MUST still be emitted \u2014 the operator decides whether to escalate to a manual RFC."
     },
     "proposed_files": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["path", "action", "content", "rationale"],
+        "required": [
+          "path",
+          "action",
+          "content",
+          "rationale"
+        ],
         "additionalProperties": false,
         "properties": {
           "path": {
@@ -91,7 +101,10 @@
           },
           "action": {
             "type": "string",
-            "enum": ["create", "modify"]
+            "enum": [
+              "create",
+              "modify"
+            ]
           },
           "content": {
             "type": "string",
@@ -107,13 +120,20 @@
     },
     "validation_plan": {
       "type": "object",
-      "required": ["corpus_fixture", "regression_check"],
+      "required": [
+        "corpus_fixture",
+        "regression_check"
+      ],
       "additionalProperties": false,
       "properties": {
         "corpus_fixture": {
           "type": "object",
           "description": "The A2 fixture that must be added alongside the gate so the shape runner proves the gate catches the incident class. Directory prefix (pass-/fail-escalate-/adversarial-) implied by the fixture's expected verdict.",
-          "required": ["gate", "slug", "expected_verdict"],
+          "required": [
+            "gate",
+            "slug",
+            "expected_verdict"
+          ],
           "additionalProperties": false,
           "properties": {
             "gate": {
@@ -123,24 +143,74 @@
             "slug": {
               "type": "string",
               "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
-              "description": "Directory slug WITHOUT the verdict prefix — the runner assembles it (e.g. 'sql-injection-string-format')."
+              "description": "Directory slug WITHOUT the verdict prefix \u2014 the runner assembles it (e.g. 'sql-injection-string-format')."
             },
             "expected_verdict": {
               "type": "string",
-              "enum": ["pass", "fail-escalate", "fail-halt", "warn", "adversarial"]
+              "enum": [
+                "pass",
+                "fail-escalate",
+                "fail-halt",
+                "warn",
+                "adversarial"
+              ]
             }
           }
         },
         "regression_check": {
           "type": "string",
           "minLength": 10,
-          "description": "One-sentence description of how the operator should verify, after merging the proposal, that a recurrence of the original incident would now be caught. Concrete: 'run pe gate parse against evals/fixtures/security-reviewer/fail-escalate-<slug>/expected-envelope.json — exit 1.'"
+          "description": "One-sentence description of how the operator should verify, after merging the proposal, that a recurrence of the original incident would now be caught. Concrete: 'run pe gate parse against evals/fixtures/security-reviewer/fail-escalate-<slug>/expected-envelope.json \u2014 exit 1.'"
         }
       }
     },
     "notes": {
       "type": "string",
       "description": "Optional freeform. Caveats, alternative approaches considered, or 'confidence LOW because...'."
+    },
+    "value_bar": {
+      "type": "object",
+      "description": "Which criterion of the A3 value bar this change clears, and the evidence that criterion demands. A proposal without this is not opened as a PR.",
+      "properties": {
+        "criterion": {
+          "type": "string",
+          "enum": [
+            "V1",
+            "V2",
+            "V3",
+            "V4"
+          ],
+          "description": "V1 prevents a defect class that actually happened; V2 removes provably repeated work; V3 corrects a false statement in the engine; V4 closes a gap a review or gate found and could not act on"
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 20,
+          "description": "The proof the criterion demands \u2014 incident date+project, the two projects, the false line quoted, or the envelope cited"
+        }
+      },
+      "required": [
+        "criterion",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "generalisable": {
+      "type": "object",
+      "description": "Whether this belongs in the shared engine at all. false means emit it in the operator's project instead.",
+      "properties": {
+        "value": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 10
+        }
+      },
+      "required": [
+        "value",
+        "reason"
+      ],
+      "additionalProperties": false
     }
   }
 }

@@ -598,6 +598,7 @@ EOF
 cmd_doctor() {
     local target="${1:-}"
     local broken=0
+    local hooks_unreachable=0
 
     if [ -z "$target" ]; then
         echo "Engine self-check at $ENGINE_DIR"
@@ -738,6 +739,22 @@ cmd_doctor() {
         fi
     fi
 
+    # Hook reachability (v0.51.0). `pe verify` proves the engine's files
+    # are unmodified; it is silent about whether any of them RUN. A project
+    # that hand-rolls .git/hooks/pre-commit silently replaces the framework
+    # dispatcher, and every hook in .pre-commit-config.yaml becomes
+    # decoration. Origyn 2026-09-04: 10 engine hooks configured, 0 executed,
+    # and CLAUDE.md reached 80,437 B against claude-md-size.sh's own 20,000 B
+    # hard limit — the guard was configured and unreachable the whole time.
+    if [ -f "$ENGINE_DIR/scripts/pe_doctor.py" ]; then
+        local dpy; dpy="$(pe_python 2>/dev/null)" || dpy=""
+        if [ -n "$dpy" ]; then
+            echo ""
+            "$dpy" "$ENGINE_DIR/scripts/pe_doctor.py" "$target" \
+                --engine "$ENGINE_DIR" || hooks_unreachable=1
+        fi
+    fi
+
     # launchd check (macOS only)
     if [ "$(uname)" = "Darwin" ] && [ -f "$target/.process-engine.yaml" ]; then
         local org_tag
@@ -759,9 +776,14 @@ cmd_doctor() {
 
     echo ""
     if [ $broken -eq 0 ]; then
+        if [ "$hooks_unreachable" -eq 1 ]; then
+            echo "✗ Symlinks are fine, but the engine's hooks do not run (see above)."
+            return 1
+        fi
         echo "✓ No broken symlinks. Project install is healthy."
     else
         echo "✗ $broken broken symlink(s). Run 'pe install $target' to repair."
+        [ "$hooks_unreachable" -eq 1 ] && echo "✗ The engine's hooks also do not run (see above)."
         return 1
     fi
 }
