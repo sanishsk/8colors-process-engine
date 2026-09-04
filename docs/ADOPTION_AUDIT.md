@@ -130,15 +130,30 @@ persisted gate envelopes.
 | Signal | Count |
 |---|---|
 | Installed into a project (`Origyn`, `8CStudio`) | **21 of 21**, both projects |
-| Has eval fixtures under `evals/fixtures/` | **6 of 21** — `code-reviewer` (3), `database-reviewer` (3), `design-critic` (7), `performance-reviewer` (5), `security-reviewer` (5), `tdd-guide` (3) |
+| Has eval fixtures under `evals/fixtures/` | **7 of 21** — `code-reviewer` (3), `database-reviewer` (3), `design-critic` (7), `e2e-runner` (5), `performance-reviewer` (6), `security-reviewer` (5), `tdd-guide` (3). This read 6 of 21 until v0.51.17, when `e2e-runner` was seeded — see below |
 | Named in a consuming project's `CLAUDE.md` | 8 of 21 |
 | **Left a gate envelope on disk anywhere** | **2 of 21** — `code-reviewer` (Origyn ×3, 8CStudio ×1) and one design review (8CStudio) |
 
-Fifteen agents have no eval fixture and no envelope anywhere:
+Fourteen agents have no eval fixture and no envelope anywhere:
 `architect`, `brief-writer`, `build-error-resolver`, `ceo`,
-`data-model-auditor`, `doc-updater`, `e2e-runner`, `incident-synthesizer`,
+`data-model-auditor`, `doc-updater`, `incident-synthesizer`,
 `memory-consolidator`, `planner`, `project-kickstarter`, `project-onboarder`,
 `researcher`, `retrospective-agent`, `tenant-isolation-auditor`.
+
+**This list needs reading carefully, and the original framing of it was
+misleading.** It first ran to fifteen and included `e2e-runner` — the only
+name on it that was actionable, because `e2e-runner` is a *gate*: it emits
+an envelope, `test_gate_efficacy.sh` could have exercised it, and nothing
+did. That is now fixed (five fixtures, v0.51.17), and
+`test_gate_fixture_coverage.sh` makes a gate shipping without a corpus a
+red test rather than a line in this document.
+
+The remaining fourteen are **advisory agents that emit no envelope at
+all**. The eval harness is built around envelopes, so "has no fixture" is
+not a gap in coverage for them — it is a statement that the harness does
+not model what they do. Counting them alongside `e2e-runner` made a
+one-gate hole look like a fifteen-agent one, and buried the single
+actionable item in a list of thirteen non-items.
 
 This is weaker evidence than the hook table — an agent can be invoked usefully
 without persisting anything, and several of these are one-shot (a kickstarter
@@ -275,9 +290,12 @@ that were not true, that is where the leverage was.
 
 ### What is still not covered
 
-- **Agent behaviour.** `test_gate_efficacy.sh` seeds five gates. Fifteen
-  agents have no corpus, so a prompt regression in any of them is invisible.
-  This is the largest remaining hole, and the one this audit is weakest on:
+- **Agent behaviour.** `test_gate_efficacy.sh` now covers all seven gates
+  (32 fixtures). The remaining fourteen agents emit no envelope, so the
+  harness cannot model them at all and a prompt regression in any of them is
+  invisible. That is a real hole, but a different one from the gate corpus —
+  closing it needs a different mechanism, not more fixtures.
+  This is the one this audit is weakest on:
   every claim in §3 is inferred from fixtures and envelopes on disk, because
   the engine has no telemetry that would settle whether an agent ran.
 - **`boot-smoke`.** Still wired nowhere. Calling it from `pe doctor` when a
