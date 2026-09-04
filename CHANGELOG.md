@@ -7,6 +7,63 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.14] — 2026-09-04
+
+### Fixed — a routing table that sent work to an agent which does not exist
+
+`docs/AGENT_INVOCATION_RULES.md:11` routed every UI change to
+`ui-ux-design-agent`. There is no such file in `agents/`. That table is what
+Claude reads to pick an agent for a slot, so the row was live and dead at the
+same time — a UI change would follow it to nothing.
+
+The engine's actual UI gate is `design-critic`, which is stack-agnostic and
+emits a gate envelope. The row now routes there.
+
+**It had already been found.** `docs/IMPROVEMENT_PLAN.md:327` reads "fix
+dangling references (ui-ux-design-agent in AGENT_INVOCATION_RULES ...) — ship
+or de-reference". Nobody acted on it, because nothing checked. That is the
+V4 case exactly: a review found it and could not act on it.
+
+### Fixed — four agents listed as "not installed" that the engine ships
+
+`docs/CAPABILITY_CATALOG.md` carried a table of agents that "live in
+`.claude/agents/` on 8CStudio but are NOT installed by `pe install`". Of its
+seven entries, **four were wrong**: `data-model-auditor`,
+`tenant-isolation-auditor`, `project-kickstarter` and `project-onboarder`
+have all since been promoted into the engine and are installed by default.
+
+An adopter reading it would have concluded they had to hand-build four agents
+they already had. The table now lists only what is genuinely not installed,
+and records the promotion.
+
+### Fixed — the eval corpus grew by ten fixtures and a whole gate, silently
+
+`evals/README.md` claimed "Total: 16 fixtures across 5 gates". The disk holds
+**26 across 6**. `security-reviewer` was listed at 4 (has 5), `design-critic`
+at 3 (has 7, grown through the D5–D8 design-ceiling work), and
+`performance-reviewer` — added in v0.37.0 with 5 fixtures — was absent from
+the page entirely.
+
+### Added — `tests/test_agent_refs.sh`
+
+Four assertions, all verified red against the state above:
+
+- the slot matrix may name only agents that exist in `agents/`;
+- the "not installed" table may not name an agent the engine ships;
+- `evals/README.md`'s corpus total must match `evals/fixtures/`;
+- every seeded gate's per-gate fixture count must match the disk.
+
+The second assertion caught its own first draft: scanning a whole table row
+flagged `design-critic` as a defect, because the `ui-ux-design-agent` row
+legitimately names it as the engine's equivalent. It reads the Agent column
+only.
+
+**Value bar:** V4 for the dangling agent reference — `IMPROVEMENT_PLAN.md`
+found it and could not act on it, and it sat there. V3 for the other two:
+documents stating things about this repository that are not true.
+
+---
+
 ## [0.51.13] — 2026-09-04
 
 ### Added — the `/gate-review` workflow slot, briefed and architected (no code yet)

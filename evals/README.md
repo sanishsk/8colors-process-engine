@@ -117,18 +117,25 @@ fixture from someone other than the change author.
 
 ## Seeded gates
 
-- **security-reviewer** — 4 fixtures (pass, fail-escalate, fail-halt,
-  adversarial). Introduced in v0.19.0.
+- **security-reviewer** — 5 fixtures. Introduced in v0.19.0.
 - **code-reviewer** — 3 fixtures (pass, fail-escalate, adversarial).
   Introduced in v0.20.0.
 - **database-reviewer** — 3 fixtures. Introduced in v0.20.0.
 - **tdd-guide** — 3 fixtures. Introduced in v0.20.0.
-- **design-critic** — 3 fixtures. Introduced in v0.20.0.
+- **design-critic** — 7 fixtures. Introduced in v0.20.0, grown through the
+  D5–D8 design-ceiling work.
+- **performance-reviewer** — 5 fixtures. Introduced in v0.37.0.
 
-Total: 16 fixtures across 5 gates. Every gate has at minimum one
+Total: 26 fixtures across 6 gates. Every gate has at minimum one
 adversarial safe-lookalike — the corpus is deliberately balanced so
 "catch the failures" and "don't false-positive on the lookalikes"
 carry equal weight.
+
+These counts are checked against `evals/fixtures/` by
+`tests/test_agent_refs.sh`. They read "16 fixtures across 5 gates" until
+2026-09-04, with `performance-reviewer` absent entirely — the corpus grew
+by ten fixtures and a whole gate without the page that describes it
+changing.
 
 Additional gates (e2e-runner, merge-gate) get seeded when the
 first live-mode measurement pass is scheduled.
