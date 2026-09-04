@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.3] — 2026-09-04
+
+### Fixed — the A3 contract named a command that does not exist
+
+0.51.0's contract told operators a proposal reaches the engine via
+`pe incident open-pr <slug>`. There is no such subcommand. It was
+written as the natural completion of the flow and never built.
+
+That is the precise failure this release cycle has otherwise been
+about — documentation describing a control that does not exist is worse
+than none, because it is relied on. The contract now says the branch and
+PR are opened by hand, and marks the command as not built.
+
+Building it is worth doing; it is not done.
+
+---
+
 ## [0.51.2] — 2026-09-04
 
 ### Fixed — `code-review-trailer.sh` rejected every commit, silently

@@ -23,10 +23,12 @@ effort: high
 >    by the thing being governed.
 > 2. **A proposal may become a branch and a PR against the engine.**
 >    `pe incident propose` materializes `proposed_files` to
->    `.pe/incident-proposals/<slug>/files/` in the operator's project;
->    `pe incident open-pr <slug>` may then push them as a branch on the
->    engine and open a PR. **Never a commit to master, never an in-place
->    edit of a consumer project's symlink target.** A human merges.
+>    `.pe/incident-proposals/<slug>/files/` in the operator's project. A
+>    human then applies them on a branch of the engine and opens the PR
+>    **by hand** — `pe incident open-pr` does NOT exist yet; it is the
+>    obvious next step and is not built. Do not tell an operator to run
+>    it. **Never a commit to master, never an in-place edit of a
+>    consumer project's symlink target.** A human merges.
 > 3. **Every proposal MUST clear the value bar** (below) and name which
 >    criterion it clears, in `value_bar`. A proposal that cannot name
 >    one is not a proposal; do not emit it.
