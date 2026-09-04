@@ -289,10 +289,16 @@ that were not true, that is where the leverage was.
   over the file budget. Listed explicitly in `test_size_budget_repo.sh`'s
   `KNOWN_OVER`, which also fails if an entry goes stale, so neither can
   quietly become fine or quietly stay forgotten.
-- **`docs/launch/BETA_TESTER_BRIEF.md`** has had its countable claims
-  corrected and carries a do-not-send banner. Its body has not been re-read
-  against the current engine and still contradicts `AGENT_INVOCATION_RULES.md`
-  on at least one model tier.
+- **`pe verify` is red, and nothing runs it.** 21 files have drifted from
+  `MANIFEST.sha256` — expected, since the manifest is a release-time artifact
+  and this cycle changed 21 files. The problem is not the drift, it is that
+  no check would have told anyone. CI now runs `pe verify` **advisory** so
+  the drift is at least visible on every push; regenerating the manifest
+  (`pe verify --update`) remains a release step someone has to remember.
+- **`workflows/` is not in `pe_verify.py`'s `SURFACE_GLOBS`**, so
+  `workflows/gate-review.js` is the one installed engine surface with no
+  checksum. Adding the glob and regenerating the manifest belong to the same
+  release.
 
 ## What changed while this audit was written
 
