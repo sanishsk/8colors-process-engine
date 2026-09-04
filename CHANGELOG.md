@@ -7,6 +7,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.1] — 2026-09-04
+
+### Fixed — `pe doctor` check 4 resolved `entry:` from the wrong root
+
+Shipped in 0.51.0 and wrong within the hour, found by using it.
+
+`pe doctor` matched hook names anywhere in `.pre-commit-config.yaml`
+free text — including inside comments — and resolved bare names against
+the ENGINE dir. **pre-commit resolves `entry:` against the REPO ROOT.**
+
+So the check was wrong in both directions. It passed Origyn's config,
+whose ten `hooks/x.sh` entries were copied verbatim from this repo's
+starter template into a project with no top-level `hooks/` directory —
+they would have failed to resolve even once installed. Then, once that
+project pointed its entries at a local shim, the same check reported the
+shim as missing, because it looked for it under the engine.
+
+Now `entry:` values only, parsed line-based (a regex that joined every
+indented continuation swallowed the sibling `language:` and `stages:`
+keys and matched nothing), with an `env VAR=x` prefix stripped, resolved
+from the repo root exactly as pre-commit does.
+
+`tests/test_pe_doctor_hooks.sh` grows to 8 cases: the fixtures now
+create the scripts they reference, and a new case covers the
+starter-template arrangement — entries that resolve nowhere.
+
+---
+
 ## [0.51.0] — 2026-09-04
 
 > **The engine opens to its own improvement, and learns to check that

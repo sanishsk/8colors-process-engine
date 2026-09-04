@@ -48,6 +48,17 @@ repos:
         entry: hooks/secrets-scan.sh
         language: script
 YAML
+    # pre-commit resolves `entry:` from the repo root, so a realistic
+    # project has the scripts it names. $3=noscripts leaves them absent —
+    # the Origyn starter-template bug, where the engine's bare hooks/x.sh
+    # paths were copied into a project with no top-level hooks/ dir.
+    if [ "${3:-withscripts}" = "withscripts" ]; then
+        mkdir -p "$dir/hooks"
+        printf '#!/bin/sh\nexit 0\n' > "$dir/hooks/claude-md-size.sh"
+        printf '#!/bin/sh\nexit 0\n' > "$dir/hooks/secrets-scan.sh"
+        chmod +x "$dir/hooks"/*.sh
+    fi
+
     case "$kind" in
         handrolled)
             printf '#!/usr/bin/env bash\n# project gates\nexit 0\n' \
@@ -99,7 +110,19 @@ rc=$(run_doctor "$TMP/bare")
 [ "$rc" = "0" ] && ok "no .pre-commit-config.yaml → exit 0" \
                 || bad "bare project wrongly failed (exit $rc, expected 0)"
 
-# 5 — untracked config warns, and does not by itself fail a good install.
+# 5 — entry paths that do not resolve from the repo root. This is the
+#     Origyn starter-template case: the config was copied from the engine,
+#     where `hooks/x.sh` is correct, into a project with no hooks/ dir.
+make_project "$TMP/badpaths" framework noscripts
+rc=$(run_doctor "$TMP/badpaths")
+[ "$rc" = "1" ] && ok "entry: paths that do not resolve from repo root → exit 1" \
+                || bad "unresolvable entry paths NOT detected (exit $rc, expected 1)"
+out=$("$PY" "$DOCTOR" "$TMP/badpaths" --engine "$ENGINE_DIR" 2>&1 || true)
+printf '%s' "$out" | grep -q "from the repo root" \
+    && ok "failure names where pre-commit resolves entry:" \
+    || bad "failure does not explain the resolution rule"
+
+# 6 — untracked config warns, and does not by itself fail a good install.
 out=$("$PY" "$DOCTOR" "$TMP/framework" --engine "$ENGINE_DIR" 2>&1 || true)
 printf '%s' "$out" | grep -q "untracked" \
     && ok "untracked .pre-commit-config.yaml is reported" \
