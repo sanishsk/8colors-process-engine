@@ -54,6 +54,7 @@ fi
 
 # ─── inventory counts ───────────────────────────────────────────────
 agents=$(find agents -name '*.md' -not -name '_*' | wc -l | tr -d ' ')
+cmds=$(find commands -name '*.md' | wc -l | tr -d ' ')
 readme_agents=$(grep -oE '^- [0-9]+ specialist agents' README.md | head -1 | grep -oE '[0-9]+')
 [ "$readme_agents" = "$agents" ] \
     && ok "README says $agents specialist agents, and there are $agents" \
@@ -109,7 +110,6 @@ if [ -f "$brief" ]; then
     [ -z "$absent" ] && ok "every agent appears in the beta brief" \
                      || bad "agents missing from the beta brief:$absent"
 
-    cmds=$(find commands -name '*.md' | wc -l | tr -d ' ')
     brief_cmds=$(grep -oE '^### [0-9]+ slash commands' "$brief" | grep -oE '[0-9]+')
     [ "$brief_cmds" = "$cmds" ] \
         && ok "beta brief says $cmds slash commands" \
@@ -119,6 +119,64 @@ if [ -f "$brief" ]; then
     grep -q "The $gates gate agents" "$brief" \
         && ok "beta brief says $gates gate agents" \
         || bad "beta brief does not say '$gates gate agents'"
+fi
+
+# ─── the README carries the same tables, and drifted the same way ───
+# It said "Agents (19)" with `code-reviewer | Haiku`, `data-model-auditor |
+# Haiku` and `retrospective-agent | Sonnet`, and "Commands (4)" out of 10.
+# The beta brief is what gets sent to people; the README is what they see
+# first on GitHub. Both are held to the repository, by the same rules.
+wrong=""
+checked=0
+while IFS='|' read -r _ name model _; do
+    name=$(printf '%s' "$name" | tr -d ' `')
+    model=$(printf '%s' "$model" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+    [ -f "agents/$name.md" ] || continue
+    real=$(awk -F': *' '/^model:/{print $2; exit}' "agents/$name.md" | tr -d ' ')
+    [ -z "$real" ] && continue
+    checked=$((checked + 1))
+    [ "$model" = "$real" ] || wrong="$wrong $name(doc:$model,real:$real)"
+done < <(grep -E '^\| `[a-z0-9-]+` \| [A-Za-z]+ \|' README.md)
+
+if [ "$checked" -eq 0 ]; then
+    bad "no agent/model rows found in README — has the table moved?"
+elif [ -z "$wrong" ]; then
+    ok "all $checked agent model tiers in README match agents/*.md"
+else
+    bad "README quotes the wrong model for:$wrong"
+fi
+
+absent=""
+for f in agents/*.md; do
+    b=$(basename "$f" .md)
+    case "$b" in _*) continue ;; esac
+    grep -qF "\`$b\`" README.md || absent="$absent $b"
+done
+[ -z "$absent" ] && ok "every agent appears in README" \
+                 || bad "agents missing from README:$absent"
+
+readme_heading=$(grep -oE '^### Agents \([0-9]+\)' README.md | grep -oE '[0-9]+')
+[ "$readme_heading" = "$agents" ] \
+    && ok "README's Agents heading says $agents" \
+    || bad "README's Agents heading says $readme_heading; agents/ holds $agents"
+
+readme_cmds=$(grep -oE '^### Commands \([0-9]+\)' README.md | grep -oE '[0-9]+')
+[ "$readme_cmds" = "$cmds" ] \
+    && ok "README's Commands heading says $cmds" \
+    || bad "README's Commands heading says $readme_cmds; commands/ holds $cmds"
+
+# The one-piece entry point must be reachable from the README, not buried
+# in a doctrine list two thirds of the way down.
+if grep -qE 'RUNNING_AGENTS\.md' README.md; then
+    line=$(grep -nE 'RUNNING_AGENTS\.md' README.md | head -1 | cut -d: -f1)
+    total=$(wc -l < README.md | tr -d ' ')
+    if [ "$line" -le $((total / 3)) ]; then
+        ok "README links RUNNING_AGENTS.md in its first third (line $line of $total)"
+    else
+        bad "README's first RUNNING_AGENTS.md link is at line $line of $total — too far down to find"
+    fi
+else
+    bad "README does not link docs/RUNNING_AGENTS.md at all"
 fi
 
 echo "  ${PASS} passed, ${FAIL} failed"

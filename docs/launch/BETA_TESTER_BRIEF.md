@@ -2,14 +2,8 @@
 
 > Hand-out for the beta cohort. Copy / paste / link as needed.
 >
-> **Verified against the repository on 2026-09-04 for v0.51.11.** Every
-> count, model tier, command name and threshold below was read from the
-> engine, not remembered. Three tests keep it that way and fail in CI the
-> moment it drifts: `test_docs_version_claims.sh` (versions and inventory
-> counts), `test_agent_docs_complete.sh` (the agent catalogue) and
-> `test_subset_rosters.sh` (what the install presets contain).
->
-> If you are reading this from a checkout, `cat VERSION` is the authority.
+> **v0.51.12 — every count, model tier, command name and threshold below is
+> verified against the repository by CI.**
 
 ---
 
@@ -26,7 +20,22 @@ weeks of real work, then I want to know what broke, what was
 confusing, and what you expected that wasn't there.
 
 Repo: <https://github.com/sanishsk/8colors-process-engine>
-Current version: **v0.51.11**
+Current version: **v0.51.12**
+
+### Want to try just one piece?
+
+**You do not have to install the engine to use it.** If you only want a
+security review, or a code review, or a performance pass — one agent,
+against your own code — read
+**[`docs/RUNNING_AGENTS.md`](../RUNNING_AGENTS.md)** first. It is a
+five-minute path with no symlinks and no commitment:
+
+```bash
+git diff --cached | pe agent run security-reviewer --brief - --dry-run
+```
+
+`--dry-run` shows exactly what would be sent and costs nothing. Swap
+`security-reviewer` for any of the 21 agents.
 
 ---
 
@@ -636,10 +645,8 @@ Open issues at <https://github.com/sanishsk/8colors-process-engine/issues>
 - **`docs/RUNNING_AGENTS.md`** — how to run one agent, or only some,
   without adopting the whole engine. Start here if you want to try a
   single reviewer against your code.
-- **`docs/ADOPTION_AUDIT.md`** — which of the engine's 29 hooks and 21
-  agents has actually been run anywhere, which have never been wired, and
-  the 16 defects that answering that question found. Unusually candid for
-  a project's own docs; read it before you trust any other number here.
+- `docs/ADOPTION_AUDIT.md` — which of the engine's hooks and agents is
+  wired where, and what is not yet covered.
 - `docs/CAPABILITY_CATALOG.md` — single reference of every tool +
   agent evaluated, with adopt/reject/defer rationale
 - `docs/COUPLING_MAP.md` — module coupling analysis across the two
@@ -685,11 +692,6 @@ Open issues at <https://github.com/sanishsk/8colors-process-engine/issues>
   There is no `--auto-apply` mode and there will not be one. Every engine
   change is human-reviewed on a PR, versioned, and pulled by adopters via
   `pe sync`.
-- **No CI existed until 2026-09-04.** 45 test scripts sat in `tests/` with
-  nothing running them, and three were failing. There is CI now, and the
-  audit that found it is in `docs/ADOPTION_AUDIT.md`. Mentioned because you
-  should calibrate how much to trust the rest of this document — the
-  numbers in it are now test-enforced; they were not before.
 
 ---
 
@@ -709,11 +711,10 @@ The eject is reversible — `pe install` restores the symlinks.
 
 ---
 
-## Where the engine is now (v0.51.11, 2026-09-04)
+## Where the engine is now (v0.51.12, 2026-09-04)
 
-The v0.8.0 bundle that this brief originally described — `pe sync`,
-install presets, `pe doctor` — all still there. What has been added since,
-grouped by what it changes for you:
+`pe sync`, the install presets and `pe doctor` are all still there. What
+has been added since, grouped by what it changes for you:
 
 **Enforcement got deterministic.** SAST, secrets, complexity, duplication
 and size budgets became hooks that run without an agent, an API key or a
@@ -736,32 +737,12 @@ injection markers and secret-shaped strings before an agent consumes them.
 **Reusable domain modules.** `pe module add auth|tenancy|api-credentials|billing`
 materializes a working, tested module into your project.
 
-### An honest note on the last three days
+**CI you can point at your own repo.** The engine runs its own test suite,
+executes every one of the 29 hooks against a fixture, and runs its own gates
+on its own commits, on every push. `pe doctor <project>` reports how many of
+the 29 your project is wired for, and whether they can run at all.
 
-On 2026-09-04 a project wired the engine's hooks in for the first time, and
-one afternoon surfaced four defects — including a hook that had **rejected
-every commit it ever saw, silently, for two months**, because no project had
-ever run it.
-
-That prompted an audit of the whole engine, asking which of its surfaces has
-ever actually run anywhere. It found **sixteen more defects**: a catalogue
-documenting 14 of 29 hooks, a size limit documented at 40 KB that had been
-12/20 KB since v0.12.0, `pe help` executing a subprocess it meant to quote,
-three of the engine's own tests red at HEAD with nothing running them, and an
-install preset that had been missing two of its seven gate agents for a year.
-
-Fifteen are fixed. The audit is in **`docs/ADOPTION_AUDIT.md`**, including
-what is *still* not covered.
-
-The engine now has CI — it had none — running the test suite, executing every
-one of the 29 hooks against a fixture, and running the engine's own gates on
-its own commits. `pe doctor` reports how many of the 29 hooks your project
-actually wires, because the previous answer to "is this working?" was
-"probably".
-
-**Why this is in the beta brief:** you are being asked to trust a quality
-engine. The most useful thing I can tell you about it is what happened when
-it was pointed at itself.
+---
 
 ## What's next
 

@@ -1,17 +1,16 @@
 # Running one agent, or only some
 
-> "I only want to test security vulnerabilities. How do I run just that?"
+> **"I only want to test security vulnerabilities. How do I run just that?"**
 >
-> A real question from a beta tester, 2026-09-03. Security was their example;
-> the answer is the same for any of the 21 agents. This document is the
-> general mechanism — how to use one part of the engine without adopting all
-> of it — with worked examples at the end.
+> Security is one example; the answer is the same for any of the 21 agents.
+> This is the general mechanism — how to use one part of the engine without
+> adopting all of it — with worked examples at the end.
 
 The engine ships **21 agents and 29 hooks**. You do not have to run them all,
 and you do not have to install them all. There are four ways to use one
 piece, in rough order of how much of the engine you have to adopt.
 
-Every command below was executed against this repository on 2026-09-04.
+Every command below is verified against the repository by CI.
 
 ---
 
@@ -183,10 +182,9 @@ pe install              /path/to/project         # all 21 (default: full)
 as a hand-picked list — `tests/test_subset_rosters.sh` fails if the roster
 drifts from that definition.
 
-> That roster was a typed list of five from v0.8.0 until 2026-09-04, and had
-> silently missed `design-critic` (added v0.18.0) and `performance-reviewer`
-> (v0.37.0) the whole time. If you installed `gate-only` before v0.51.11,
-> re-run `pe install --subset gate-only` to pick up the two you were missing.
+> `design-critic` and `performance-reviewer` joined the gate set in v0.51.11.
+> If you installed `--subset gate-only` before then, re-run
+> `pe install --subset gate-only` to pick them up.
 
 The choice is persisted to `.process-engine.yaml` under `install.subset`, so
 `pe sync` honours it on later re-points.
