@@ -132,6 +132,23 @@ const scenarios = {
     return envelope(label)
   },
 
+  // What actually happened on the first live run against a real repo:
+  // three gates answered, twelve genuine findings, a correct WARN — and
+  // `pe gate parse` refused the whole envelope because four messages ran
+  // past the canonical schema's 500-char cap, so nothing was recorded and
+  // the commit gate saw no verdict at all.
+  'overlong-message': label => {
+    if (label === 'staged diff') return STAGED
+    if (label === 'aggregate') {
+      return envelope('merge-gate', [
+        { severity: 'HIGH', rule: 'long-message', message: 'x'.repeat(578) },
+        { severity: 'LOW', rule: 'long-suggestion', message: 'short', suggestion: 'y'.repeat(1400) },
+      ], 'WARN')
+    }
+    if (label === 'record') return RECORD_OK
+    return envelope(label)
+  },
+
   'record-fails': label => {
     if (label === 'staged diff') return STAGED
     if (label === 'aggregate') return envelope('merge-gate')
@@ -237,6 +254,24 @@ console.log('gate_review_harness')
   Array.isArray(result.envelopes) && result.envelopes.length === 3
     ? ok('a dead aggregator still surfaces the raw envelopes')
     : bad('the raw envelopes were lost when aggregation failed')
+}
+
+{
+  const { result } = await run('overlong-message')
+  const msgs = result.envelope.findings.map(f => f.message)
+  msgs.every(m => m.length <= 500)
+    ? ok('an over-long finding message is clamped to the schema cap')
+    : bad(`a message survived at ${Math.max(...msgs.map(m => m.length))} chars — pe gate parse will refuse the envelope`)
+  const sugg = result.envelope.findings.map(f => f.suggestion).filter(Boolean)
+  sugg.every(s => s.length <= 1000)
+    ? ok('an over-long suggestion is clamped too')
+    : bad(`a suggestion survived at ${Math.max(...sugg.map(s => s.length))} chars`)
+  msgs.some(m => m.endsWith('…[truncated]'))
+    ? ok('truncation is marked in the text, not silent')
+    : bad('a message was shortened with nothing to say so')
+  result.verdict === 'WARN' && result.envelope.findings.length === 2
+    ? ok('clamping changes the text and nothing else — verdict and findings survive')
+    : bad(`clamping altered the verdict or dropped findings: ${result.verdict}, ${result.envelope.findings.length}`)
 }
 
 {

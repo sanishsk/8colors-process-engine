@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "e2e-runner",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.92,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-09-04T11:08:00Z",
+  "summary": "40/40 passed 3 of 3 attempts, 0 retries consumed, no regression. The new quote-conversion tests are the slowest at ~4s but never failed, so there is no flake evidence. Composition of tests written this session is out of scope here — that is code-reviewer's.",
+  "findings": [],
+  "scope": {
+    "branch": "feat/quote-to-invoice",
+    "commit": "f6a2d19",
+    "files_reviewed": ["tests/e2e/quotes/convert.spec.ts"],
+    "lines_reviewed": 31
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "e2e-runner",
+  "verdict": "PASS",
+  "failure_class": "none",
+  "confidence": 0.95,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-09-04T09:14:00Z",
+  "summary": "14/14 tests passed on the first attempt, 0 retries consumed. Two new journeys cover the mark-as-paid action; no existing journey regressed.",
+  "findings": [],
+  "scope": {
+    "branch": "feat/invoice-mark-as-paid",
+    "commit": "a41c9e2",
+    "files_reviewed": ["tests/e2e/invoices/detail.spec.ts"],
+    "lines_reviewed": 44
+  }
+}

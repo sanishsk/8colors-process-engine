@@ -80,3 +80,16 @@ jobs:
       # the suite job, which walks the tracked files instead.
       - name: Run the engine's gates over the whole repo
         run: pre-commit run --all-files --show-diff-on-failure
+
+      # Advisory, deliberately. MANIFEST.sha256 is a release-time artifact —
+      # it is regenerated with `pe verify --update` when a version ships, not
+      # on every commit, so it is EXPECTED to be behind mid-cycle. Failing the
+      # build on that would train everyone to ignore this job.
+      #
+      # What it buys: the drift is visible on every push instead of invisible
+      # until someone thinks to run it by hand. `pe verify` had been red at
+      # HEAD with 21 drifted files and nothing said so.
+      - name: Supply-chain manifest (advisory — regenerate at release time)
+        continue-on-error: true
+        run: |
+          ./scripts/pe verify || echo "::warning::pe verify reports drift — run 'pe verify --update' at release time"

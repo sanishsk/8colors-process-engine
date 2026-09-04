@@ -7,6 +7,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.51.16] — 2026-09-04
+
+### Added — CI runs `pe verify`, advisory
+
+`pe verify` checks the engine's own files against `MANIFEST.sha256` — the
+supply-chain guarantee an adopter relies on. It was **red at HEAD with 21
+drifted files, and nothing ran it**: not the suite, not CI, not a hook. The
+only way to learn it was red was to type it.
+
+It is wired **advisory** (`continue-on-error`) on purpose. `MANIFEST.sha256`
+is a release-time artifact, regenerated with `pe verify --update` when a
+version ships, so mid-cycle drift is expected and correct. Failing the build
+on it would train everyone to ignore the job — which is how a gate stops
+meaning anything. Advisory makes the drift *visible on every push*;
+regenerating the manifest stays a release step.
+
+### Fixed — the audit had gone stale about itself
+
+`docs/ADOPTION_AUDIT.md`'s "still not covered" list said the beta brief
+"carries a do-not-send banner". It has not since v0.51.12, when the content
+pass landed and the banner came off. The bullet is replaced with what is
+actually open: the `pe verify` drift above, and the fact that `workflows/` is
+absent from `pe_verify.py`'s `SURFACE_GLOBS`, making
+`workflows/gate-review.js` the one installed engine surface with no checksum.
+
+**Value bar:** V3 — a document describing a repository that had moved on,
+which is the class this whole release cycle has been about, this time in the
+document that catalogues it.
+
+---
+
 ## [0.51.15] — 2026-09-04
 
 ### Added — `/gate-review`, the engine's first dynamic workflow

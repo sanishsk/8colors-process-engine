@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "e2e-runner",
+  "verdict": "FAIL",
+  "failure_class": "worker_quality",
+  "confidence": 0.96,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-09-04T10:02:00Z",
+  "summary": "2 of 14 tests regressed. Both passed on the parent commit and now fail 3 of 3 attempts. The new session cache is never invalidated, so logout leaves a live session and a company switch serves the previous company's rows.",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "rule": "test-execution-regression",
+      "message": "auth/switch-company.spec.ts:11 'switches to the second company' failed 3 of 3 attempts (passed on the parent commit). Expected 3 rows for company B, received 7 — the rows belong to company A. The session cache is keyed by session id and survives a company switch, so current_company_id() returns the stale company. This is cross-tenant data exposure reproduced by the suite.",
+      "file": "tests/e2e/auth/switch-company.spec.ts",
+      "line": 11,
+      "suggestion": "Invalidate the cache entry on company switch, or key it by (session id, company id). Trace and video are at test-results/auth-switch-company-11/."
+    },
+    {
+      "severity": "HIGH",
+      "rule": "test-execution-regression",
+      "message": "auth/logout.spec.ts:6 'logs out and clears the session' failed 3 of 3 attempts (passed on the parent commit). Expected a redirect to /login, landed on /invoices — the cached session outlives logout because _session_cache is never evicted.",
+      "file": "tests/e2e/auth/logout.spec.ts",
+      "line": 6,
+      "suggestion": "Evict the cache entry in the logout handler alongside the cookie clear."
+    }
+  ],
+  "scope": {
+    "branch": "refactor/session-cache",
+    "commit": "e90b3fa",
+    "files_reviewed": [
+      "tests/e2e/auth/logout.spec.ts",
+      "tests/e2e/auth/switch-company.spec.ts"
+    ],
+    "lines_reviewed": 0
+  }
+}

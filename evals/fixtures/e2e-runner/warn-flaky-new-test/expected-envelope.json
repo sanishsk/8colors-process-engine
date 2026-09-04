@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "e2e-runner",
+  "verdict": "WARN",
+  "failure_class": "none",
+  "confidence": 0.9,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-09-04T09:41:00Z",
+  "summary": "39/40 attempts green. One new test, invoices/send.spec.ts:28, failed 1 of 3 runs on an unchanged tree and passed on retry — a flake, not a regression. No existing test failed.",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "rule": "test-execution-flaky",
+      "message": "invoices/send.spec.ts:28 'shows a success toast' failed 1 of 3 runs on an unchanged tree and passed on retry 1 (1 retry consumed). The assertion waits on getByRole('status') with a 5s timeout while the toast auto-dismisses, so it races the dismiss timer. Quarantine candidate until the wait is anchored to the toast's appearance rather than its presence.",
+      "file": "tests/e2e/invoices/send.spec.ts",
+      "line": 28,
+      "suggestion": "Assert on the toast appearing (expect(toast).toBeVisible() immediately after the send click) rather than waiting for it to already be present, or freeze the dismiss timer in the test environment."
+    }
+  ],
+  "scope": {
+    "branch": "feat/send-toast",
+    "commit": "7bd4410",
+    "files_reviewed": ["tests/e2e/invoices/send.spec.ts"],
+    "lines_reviewed": 22
+  }
+}

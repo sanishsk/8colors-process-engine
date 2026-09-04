@@ -140,6 +140,45 @@ out.append("OK|finding names no field the canonical schema forbids"
            if not unknown_f else
            f"FAIL|finding declares rejected fields: {unknown_f}")
 
+# 4b. every length/pattern cap the canonical schema sets on a finding field
+# must be RESTATED inline, with the same value.
+#
+# This is the check the first live run needed and did not have. The inline
+# schema carried `message: {type: 'string', description: 'max 500 chars'}` —
+# the cap as prose. The runtime validates against the schema, not against
+# English, so it accepted four messages over the limit; `pe gate parse` then
+# rejected the whole envelope and the entire review went unrecorded after
+# three gates had already run. A constraint the canonical schema enforces
+# and the inline schema merely mentions is a constraint that fails at the
+# last possible moment.
+caps = []
+for field, cspec in cfind["properties"].items():
+    ispec = ifind["properties"].get(field)
+    if ispec is None:
+        continue
+    for key in ("maxLength", "pattern"):
+        if key not in cspec:
+            continue
+        if ispec.get(key) != cspec[key]:
+            caps.append(
+                f"finding.{field}.{key} inline={ispec.get(key)!r} "
+                f"canonical={cspec[key]!r}")
+out.append("OK|every finding maxLength/pattern is declared inline, not described"
+           if not caps else
+           f"FAIL|constraint not enforced inline: {'; '.join(caps)}")
+
+# 4c. the same for the top-level fields the inline schema declares.
+tcaps = []
+for field, ispec in iprops.items():
+    cspec = cprops.get(field, {})
+    for key in ("maxLength", "pattern"):
+        if key in cspec and ispec.get(key) != cspec[key]:
+            tcaps.append(f"{field}.{key} inline={ispec.get(key)!r} "
+                         f"canonical={cspec[key]!r}")
+out.append("OK|every top-level maxLength/pattern is declared inline"
+           if not tcaps else
+           f"FAIL|constraint not enforced inline: {'; '.join(tcaps)}")
+
 # 5. the aggregate's gate_name must be a legal value.
 if "merge-gate" in iprops["gate_name"]["enum"]:
     out.append("OK|the aggregate's gate_name (merge-gate) is in the enum")

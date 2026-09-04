@@ -79,7 +79,9 @@ fi
 gates_disk=$(find evals/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
 fx_disk=$(find evals/fixtures -mindepth 2 -maxdepth 2 -type d | wc -l | tr -d ' ')
 
-claimed=$(grep -oE 'Total: [0-9]+ fixtures across [0-9]+ gates' evals/README.md | head -1)
+# "across 7 gates" and "across all 7 gates" both count — the sentence is
+# allowed to say the corpus now covers every gate.
+claimed=$(grep -oE 'Total: [0-9]+ fixtures across (all )?[0-9]+ gates' evals/README.md | head -1)
 if [ -z "$claimed" ]; then
     bad "evals/README.md states no corpus total"
 else

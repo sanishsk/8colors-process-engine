@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "gate_name": "e2e-runner",
+  "verdict": "FAIL",
+  "failure_class": "blocked",
+  "confidence": 0.97,
+  "model_used": "claude-sonnet-4-6",
+  "tier": "sonnet",
+  "timestamp": "2026-09-04T10:26:00Z",
+  "summary": "0 tests executed. The Playwright Chromium binary is not installed and STRIPE_WEBHOOK_SECRET is absent, so the signature fixture cannot sign a payload. Nothing is known about the diff — this is an environment blocker, not a code verdict, and retrying the worker cannot clear it.",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "rule": "test-environment-unavailable",
+      "message": "browserType.launch failed: Chromium is not present at ms-playwright/chromium-1140. The suite did not start, so 0 of 40 tests ran. No execution evidence exists for this diff in either direction.",
+      "suggestion": "Run `npx playwright install chromium` on the runner, then re-run the gate."
+    },
+    {
+      "severity": "CRITICAL",
+      "rule": "test-fixture-unavailable",
+      "message": "tests/e2e/fixtures/stripe.ts requires STRIPE_WEBHOOK_SECRET to sign webhook payloads; the key is absent from tests/e2e/.env.test. The handler under test rejects unsigned webhooks, so the two new journeys cannot exercise the changed path even once the browser is installed.",
+      "file": "tests/e2e/.env.test",
+      "suggestion": "Add STRIPE_WEBHOOK_SECRET to the test environment from the Stripe CLI's `stripe listen --print-secret`. Do not commit it."
+    }
+  ],
+  "scope": {
+    "branch": "feat/stripe-webhook",
+    "commit": "c17e885",
+    "files_reviewed": [],
+    "lines_reviewed": 0
+  }
+}
