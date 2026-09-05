@@ -62,6 +62,54 @@ fi
 # Project root — the Claude Code cwd. Fall back to git if unset.
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
+# ─── Path exemption — opt-in, fail-closed ───────────────────────────────
+# This hook gates ANY non-empty staged diff, so a CLAUDE.md typo or a plan
+# update waits on a code review of prose. An adopter hit that and wrote a
+# local wrapper re-implementing the block with a path filter; every adopter
+# who cares would write that wrapper and draw the line differently, which is
+# the engine saying its default is wrong.
+#
+# EXEMPT list, not an include list. The wrapper asked "does this commit
+# touch behaviour?" — fail-OPEN, because a source directory nobody added to
+# the regex sails through unreviewed, silently and permanently. This asks
+# "has the operator declared this exempt?", so anything unlisted is still
+# gated and a forgotten path fails closed.
+#
+# Resolution: ENGINE_REVIEW_EXEMPT_PATHS → review_gate.exempt_paths in
+# .process-engine.yaml → unset. Unset means nothing is exempt, so an engine
+# upgrade never narrows a gate the adopter already installed.
+EXEMPT_RE="${ENGINE_REVIEW_EXEMPT_PATHS:-}"
+if [ -z "$EXEMPT_RE" ] && [ -f "$PROJECT_ROOT/.process-engine.yaml" ]; then
+    _ENGINE_DIR="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)" || _ENGINE_DIR=""
+    if [ -n "$_ENGINE_DIR" ] && [ -f "$_ENGINE_DIR/scripts/_yaml.sh" ]; then
+        # shellcheck source=../scripts/_yaml.sh
+        . "$_ENGINE_DIR/scripts/_yaml.sh"
+        EXEMPT_RE=$(yaml_get review_gate.exempt_paths \
+                        "$PROJECT_ROOT/.process-engine.yaml" 2>/dev/null || true)
+    fi
+fi
+
+if [ -n "$EXEMPT_RE" ]; then
+    STAGED_PATHS=$(cd "$PROJECT_ROOT" && git diff --cached --name-only 2>/dev/null || true)
+    if [ -n "$STAGED_PATHS" ]; then
+        # grep: 0 matched, 1 no match, >=2 error. An invalid regex must not
+        # read as "nothing left unexempt" — that is the one way a typo could
+        # open the gate, so the error code is checked separately from the
+        # empty output it also produces.
+        set +e
+        UNEXEMPT=$(printf '%s\n' "$STAGED_PATHS" | grep -vE "$EXEMPT_RE" 2>/dev/null)
+        _grep_rc=$?
+        set -e
+        if [ "$_grep_rc" -lt 2 ] && [ -z "$UNEXEMPT" ]; then
+            # Every staged path is exempt. Note it — a gate that stops
+            # firing should say so, or the next person reads silence as
+            # "reviewed".
+            echo "pre-commit-envelope-check: all staged paths match review_gate.exempt_paths — no review required" >&2
+            exit 0
+        fi
+    fi
+fi
+
 RECORD="$PROJECT_ROOT/.claude/gates/last-gate.json"
 
 deny() {

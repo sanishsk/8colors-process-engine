@@ -106,6 +106,21 @@ hooks:
   # false in projects where per-turn hooks would be too noisy (rare).
   claude_hooks_enabled: true
 
+# Code-review gate (pre-commit-envelope-check). By default EVERY commit with
+# a non-empty staged diff needs a fresh code-reviewer envelope — including a
+# docs typo or a plan update.
+#
+# exempt_paths is an opt-in regex of paths that do NOT require review. It is
+# an EXEMPT list, not an include list: anything you do not name is still
+# gated, so a path you forget fails closed. The exemption is per-COMMIT, not
+# per-file — a commit touching one exempt path and one source file is still
+# gated, because git lands it whole.
+#
+# Unset means nothing is exempt. Override at runtime with
+# ENGINE_REVIEW_EXEMPT_PATHS.
+# review_gate:
+#   exempt_paths: "^(docs/|CLAUDE\\.md$|.*\\.md$)"
+
 # CLAUDE.md size guard. Set these ONLY to raise the limit temporarily while
 # a split is in progress, and lower them as the file shrinks — the engine's
 # standard is 12 KB warn / 20 KB fail, and CLAUDE.md is re-read on every
