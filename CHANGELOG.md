@@ -30,19 +30,36 @@ One compaction cut per-turn cost ~70% in a single step. The other session ran
 telemetry` reported all of this accurately and only *after* the session ended
 — the wrong side of the decision.
 
-The hook fires on two triggers. On `Stop`, once per threshold band, catching a
-session that grew expensive without a natural break. And after a `git commit`
-at half the bar, because a commit is the point at which the preceding context
-has already done its job: the exploration, the failed attempt and the test
-output that led to the fix are now represented by the diff and the message,
-and none of it needs re-reading for the next piece of work.
+The hook fires on two triggers, with deliberately different rules.
+
+On `Stop` it is thresholded and nudges once per band, catching a session that
+grew expensive without a natural break. It fires on every turn, and a per-turn
+warning is one people mute.
+
+After a `git commit` it fires **every time, at any cost**. A commit is the
+point at which the preceding context has already done its job: the
+exploration, the failed attempt and the test output that led to the fix are
+now represented by the diff and the message, and none of it needs re-reading
+for the next piece of work. Making that conditional was the original design
+and it was wrong — compacting is a *practice*, and a practice mentioned only
+once the session is already expensive is one nobody forms, because by then it
+has spent the tokens the habit existed to save. Commits are rare where turns
+are not, so saying it every time costs a line and omitting it costs the table
+above. Under the bar the reminder is one line; over it, it makes the case.
+
+The two triggers keep separate budgets: the commit path touches no dedupe
+state, so landing a commit cannot silence the per-turn warning for the rest of
+the session. The single exception to "every commit" is a session with fewer
+than five turns of history — not a threshold in disguise, but the point below
+which there is no average to report, and this advisory's only claim on
+attention is that its number is real.
 
 **It cannot compact for you, and does not claim to.** A hook returns a
 decision or a message; there is no action that resets a session's context.
 `/compact` stays a keystroke the operator makes — this says when it is worth
 making.
 
-Advisory only, never blocks. One nudge per band per session. Reads only the
+Advisory only, never blocks. Reads only the
 tail of the transcript (0.02s on a non-commit Bash call, 0.18s on a 13.8 MB
 transcript at a commit), because a cost warning that costs is self-defeating.
 Configure via `session_cost.warn_tokens_per_turn` (default 300,000) or silence

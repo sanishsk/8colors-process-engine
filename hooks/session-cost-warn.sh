@@ -29,15 +29,25 @@
 # Two triggers, because "how expensive is this now" and "when is it cheapest
 # to act" are different questions:
 #
-#   Stop         — every turn, warn once per threshold band. Catches a
-#                  session that grew expensive without a natural break.
-#   after commit — a commit is the point at which the preceding context has
-#                  DONE ITS JOB. The exploration, the failed attempt, the
-#                  test output that led to the fix: all of it is now
-#                  represented by the diff and the message, and none of it
-#                  needs re-reading for the next piece of work. So the bar is
-#                  half the Stop bar here — the same tokens are cheaper to
-#                  shed at a boundary than in the middle of something.
+#   Stop         — every turn, warn once per threshold band, above a
+#                  threshold. Catches a session that grew expensive without a
+#                  natural break. Thresholded and deduped because this fires
+#                  on EVERY turn, and a per-turn nag gets switched off.
+#   after commit — EVERY commit, no threshold, no dedupe. A commit is the
+#                  point at which the preceding context has DONE ITS JOB. The
+#                  exploration, the failed attempt, the test output that led
+#                  to the fix: all of it is now represented by the diff and
+#                  the message, and none of it needs re-reading for the next
+#                  piece of work.
+#
+#                  This one is unconditional on purpose. Compaction is a
+#                  PRACTICE, and a practice that only gets mentioned once it
+#                  is already expensive is a practice nobody forms — by then
+#                  the session has spent the tokens the habit existed to
+#                  save. Commits are rare (a handful a session) where turns
+#                  are not, so the cost of saying it every time is a line,
+#                  and the cost of not saying it is measured below. Under the
+#                  bar it is one line; over the bar it makes the case.
 #
 # What this hook CANNOT do is compact for you. A hook returns a decision or a
 # message; there is no action that resets a session's context, and inventing
@@ -45,16 +55,15 @@
 # finishing and starting fresh, stays a keystroke the operator makes. This
 # tells them when it is worth making.
 #
-# Advisory ONLY. Exits 0 always, never blocks a turn or a commit. It nudges
-# at most once per threshold band per session, because a warning that fires
-# every turn is a warning people turn off.
+# Advisory ONLY. Exits 0 always, never blocks a turn or a commit.
 #
 # Config (.process-engine.yaml):
 #     session_cost:
 #       warn_tokens_per_turn: 300000   # default; ~2x a typical opening rate
 #       enabled: true
 #
-# At a commit boundary the effective threshold is half this value.
+# The threshold governs the Stop trigger. The commit trigger ignores it and
+# uses it only to choose how much to say.
 #
 # Bypass: PE_SKIP_SESSION_COST=1
 
@@ -138,12 +147,10 @@ at_commit = (
     and "git commit" in command
     and "--dry-run" not in command
 )
-# The threshold to FIRE at is lower on a commit; the band used for
-# deduplication is always measured against the base, so one session cannot be
-# nudged twice for the same level of cost just because two triggers scale
-# differently.
-base_warn = warn
-fire_at = max(1, warn // 2) if at_commit else warn
+# A commit always speaks. The threshold still decides HOW MUCH is said —
+# under it, one line; over it, the evidence — but never WHETHER, because the
+# habit is the point and a habit is not conditional.
+fire_at = 0 if at_commit else warn
 
 # The event names the transcript; the glob is the fallback for hook runners
 # that do not pass it. Guessing "newest file" is only ever a fallback because
@@ -190,60 +197,85 @@ for line in tail.splitlines():
     )
 
 recent = replays[-WINDOW:]
-if len(recent) < 5:          # too early to say anything useful
+if len(recent) < 5:
+    # Not "too cheap to mention" — too little history to average over. A
+    # number computed from two turns would be the wrong number, and this
+    # advisory's whole claim on the operator's attention is that its number
+    # is real.
     sys.exit(0)
 per_turn = sum(recent) / len(recent)
 if per_turn < fire_at:
     sys.exit(0)
 
-# One nudge per band. Band 1 is the threshold, band 2 is twice it, and so on
-# — so a session that keeps growing is told again, and a session that merely
-# sits above the line is not told every turn.
-band = max(1, int(per_turn // base_warn))
-state_dir = project / ".pe"
-state_file = state_dir / "session-cost.state"
-key = transcript.stem
-seen = {}
-if state_file.exists():
+# One nudge per band, for the Stop trigger only. Band 1 is the threshold,
+# band 2 is twice it, and so on — a session that keeps growing is told again,
+# a session that merely sits above the line is not told every turn.
+#
+# The commit trigger skips this entirely and touches no state: it is meant to
+# fire at every commit, and it must not consume a Stop band either, or one
+# commit would silence the per-turn path for the rest of the session.
+if not at_commit:
+    band = max(1, int(per_turn // warn))
+    state_dir = project / ".pe"
+    state_file = state_dir / "session-cost.state"
+    key = transcript.stem
+    seen = {}
+    if state_file.exists():
+        try:
+            seen = json.loads(state_file.read_text())
+        except Exception:
+            seen = {}
+    if seen.get(key, 0) >= band:
+        sys.exit(0)
+    seen[key] = band
     try:
-        seen = json.loads(state_file.read_text())
-    except Exception:
-        seen = {}
-if seen.get(key, 0) >= band:
-    sys.exit(0)
-seen[key] = band
-try:
-    state_dir.mkdir(parents=True, exist_ok=True)
-    state_file.write_text(json.dumps(seen))
-except OSError:
-    pass                      # advisory; a lost state file only costs a repeat
+        state_dir.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(json.dumps(seen))
+    except OSError:
+        pass                  # advisory; a lost state file only costs a repeat
 
 opening = sum(replays[:WINDOW]) / max(len(replays[:WINDOW]), 1)
-growth = f", about {per_turn/opening:.1f}x the earliest turns in view" if opening else ""
+ratio = per_turn / opening if opening else 0
+# Only when it is actually growing. On a short tail the opening window and
+# the recent window are the same turns, and "about 1.0x the earliest turns"
+# is a clause that carries no information and reads like a measurement.
+growth = f", about {ratio:.1f}x the earliest turns in view" if ratio >= 1.2 else ""
 
-lead = (
-    "Commit landed — a natural boundary. The"
-    if at_commit else
-    "Session cost: the"
+# The case for compacting, stated once, only when the number justifies the
+# room it takes. Under the bar the reminder is a line — the habit does not
+# need re-arguing at every commit, and a paragraph that repeats is the thing
+# operators mute.
+evidence = (
+    "Measured on this engine, one compaction cut per-turn replay from 531k to "
+    "157k — about 70%, in one step. Context replay is ~73% of the bill and "
+    "generation ~2%: dropping an agent from a review or writing terser code "
+    "works on the 2%, and this works on the 73%."
 )
-why_now = (
-    "The work that context was carrying is now in the diff and the message, "
-    "so the next piece of work does not need to re-read it. This is the "
-    "cheapest moment to reset."
-    if at_commit else
-    "Every turn re-reads the whole conversation, so this keeps climbing on "
-    "its own."
-)
-msg = (
-    f"{lead} last {len(recent)} turns each replayed about "
-    f"{per_turn:,.0f} tokens of context{growth}. {why_now}\n"
-    f"Measured on this engine, one compaction cut per-turn replay from 531k "
-    f"to 157k — about 70%, in one step. Generation is ~2% of the bill, so "
-    f"this is worth more than any amount of terser code.\n"
-    f"/compact, or finish here and start fresh. `pe telemetry context` shows "
-    f"the split. Silence with session_cost.enabled=false in "
-    f".process-engine.yaml."
-)
+
+if at_commit:
+    msg = (
+        f"Commit landed. The last {len(recent)} turns each replayed about "
+        f"{per_turn:,.0f} tokens of context{growth}. That work is now in the "
+        f"diff and the message — the next piece does not need to re-read it, "
+        f"so this is the cheapest moment to /compact."
+    )
+    if per_turn >= warn:
+        msg += f"\n{evidence}"
+    msg += (
+        "\nEvery commit says this, on purpose: compacting is a habit, not an "
+        "alarm. `pe telemetry context` shows the split; "
+        "session_cost.enabled=false in .process-engine.yaml silences it."
+    )
+else:
+    msg = (
+        f"Session cost: the last {len(recent)} turns each replayed about "
+        f"{per_turn:,.0f} tokens of context{growth}. Every turn re-reads the "
+        f"whole conversation, so this keeps climbing on its own.\n"
+        f"{evidence}\n"
+        f"/compact, or finish here and start fresh. `pe telemetry context` "
+        f"shows the split. Silence with session_cost.enabled=false in "
+        f".process-engine.yaml."
+    )
 print(json.dumps({"systemMessage": msg}))
 PY
 

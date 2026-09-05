@@ -109,10 +109,15 @@ said '1,200,000' \
     && ok "a session that keeps growing is told again, at the next band" \
     || bad "silence after cost doubled — the dedupe is too aggressive"
 
-# ─── 5. a commit boundary lowers the bar ────────────────────────────
-# 200k/turn is under the 300k Stop bar and over the 150k commit bar. The same
-# session must be silent on Stop and speak after a commit — that difference
-# IS the feature, so both halves are asserted.
+# ─── 5. a commit ALWAYS speaks ──────────────────────────────────────
+# The Stop trigger is thresholded and deduped because it fires every turn.
+# The commit trigger is neither: compacting is a practice, and a practice
+# mentioned only once the session is already expensive is one nobody forms —
+# by then the tokens the habit existed to save are spent. Commits are rare
+# where turns are not, so this is affordable and the omission is not.
+#
+# 200k/turn is under the 300k Stop bar. The same session must be silent on
+# Stop and speak after a commit — that difference IS the feature.
 PROJ2="$TMP/proj2"; mkdir -p "$PROJ2/.pe"
 make_transcript "$T" 200000 30
 run_hook "$PROJ2" "$(stop_event "$T")" PE_SESSION_COST_WARN=300000
@@ -124,12 +129,63 @@ run_hook "$PROJ2" "$(commit_event "$T")" PE_SESSION_COST_WARN=300000
 if said 'Commit landed'; then
     ok "the same cost DOES speak at a commit — the cheapest moment to reset"
 else
-    bad "the commit boundary did not lower the bar: $(cat "$OUT")"
+    bad "the commit boundary did not speak: $(cat "$OUT")"
 fi
 
 said 'does not need to re-read' \
     && ok "the commit message says why a boundary is the moment" \
     || bad "the commit advisory reads the same as the mid-work one"
+
+# The decisive case for "a practice never missed": a session far below every
+# threshold must STILL be reminded at its commit. This is the assertion that
+# separates a habit from an alarm, and it is red against a thresholded hook.
+PROJ2B="$TMP/proj2b"; mkdir -p "$PROJ2B/.pe"
+make_transcript "$T" 40000 30
+run_hook "$PROJ2B" "$(commit_event "$T")" PE_SESSION_COST_WARN=300000
+said 'Commit landed' \
+    && ok "even a cheap session is reminded at its commit — never missed" \
+    || bad "a commit under the bar said nothing — the practice IS missable"
+
+# ...but it must not spend a paragraph doing it. The evidence for compacting
+# is argued once, when the number warrants the room; repeated at every commit
+# it becomes the noise that gets the whole hook muted.
+#
+# Both halves, deliberately: "the evidence is absent" is also true of a hook
+# that said nothing, which is the failure the assertion above is about. Only
+# the pair distinguishes a short reminder from silence.
+if said 'Commit landed' && ! said '531k'; then
+    ok "under the bar the reminder is a line, not the case for it"
+else
+    bad "under the bar the commit reminder is silent or a full paragraph"
+fi
+
+# A flat session is not a growing one. "about 1.0x the earliest turns" is a
+# clause that reads like a measurement and carries nothing; the growth figure
+# earns its place only when there is growth.
+said '1.0x' \
+    && bad "reported 1.0x growth on a flat session — noise dressed as a metric" \
+    || ok "the growth clause is omitted when the cost is not growing"
+
+run_hook "$PROJ2B" "$(commit_event "$T")" PE_SESSION_COST_WARN=300000
+said 'Commit landed' \
+    && ok "the second commit is reminded too — no dedupe on this trigger" \
+    || bad "the commit reminder deduped itself away — one commit, one nudge"
+
+# A commit must not consume a Stop band. They are separate triggers answering
+# separate questions; if the commit path wrote the dedupe state, one commit
+# would silence the per-turn warning for the rest of the session.
+PROJ2C="$TMP/proj2c"; mkdir -p "$PROJ2C/.pe"
+make_transcript "$T" 600000 30
+run_hook "$PROJ2C" "$(commit_event "$T")" PE_SESSION_COST_WARN=300000
+said 'Commit landed' || bad "expensive commit said nothing: $(cat "$OUT")"
+said '531k' \
+    && ok "over the bar, the commit reminder makes the case as well" \
+    || bad "an expensive commit gave the bare reminder with no evidence"
+
+run_hook "$PROJ2C" "$(stop_event "$T")" PE_SESSION_COST_WARN=300000
+said 'Session cost' \
+    && ok "a commit does not silence the Stop trigger — separate budgets" \
+    || bad "the commit consumed the Stop band: $(cat "$OUT")"
 
 # ─── 6. restraint and safety ────────────────────────────────────────
 PROJ3="$TMP/proj3"; mkdir -p "$PROJ3/.pe"
@@ -138,6 +194,15 @@ run_hook "$PROJ3" "$(stop_event "$T")" PE_SESSION_COST_WARN=300000
 silent \
     && ok "a 3-turn session is too early to judge — silence" \
     || bad "advised on a session with almost no history: $(cat "$OUT")"
+
+# The single exception to "every commit". Not a threshold in disguise: with
+# three turns there is no average to report, and this advisory's only claim
+# on attention is that its number is real. Asserted so the exception stays
+# deliberate and visible rather than becoming a quiet second threshold.
+run_hook "$PROJ3" "$(commit_event "$T")" PE_SESSION_COST_WARN=300000
+silent \
+    && ok "a commit with too little history to average is the one exception" \
+    || bad "reported a per-turn figure computed from 3 turns: $(cat "$OUT")"
 
 PROJ4="$TMP/proj4"; mkdir -p "$PROJ4/.pe"
 make_transcript "$T" 600000 30
