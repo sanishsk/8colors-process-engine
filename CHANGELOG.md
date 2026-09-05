@@ -7,6 +7,54 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.54.2] — 2026-09-05
+
+### Fixed — the security gate fired on a workout, and on its own templates
+
+`security-review-trailer` keys on `(auth|login|oauth|session|passwd|
+password|payment|billing|webhook|jwt|token)`, substring-matched against every
+staged path. A live adopter's formatter sweep touched
+`ios/OrigynMobile/Models/SessionDetail.swift` — a training *session* — and
+the gate demanded a security review of indentation. The engine's own tree
+trips the same regex **38 times**, and every `*-security.test.py.template`
+that `pe install` copies into an adopter trips it by name: the engine ships
+files that trigger its own gate on the next commit that touches them.
+
+The obvious tightening is wrong. Word boundaries would stop `auth` matching
+`author` — and `authenticate.py` and `authorization.py`, which are the files
+the gate exists for. The default regex keeps its prefix semantics; both are
+asserted.
+
+What changes is an exempt list, in two layers, both fail-closed:
+
+- **Default** — names the engine chose and nothing else: `*.template`
+  (never executed), `docs/sessions/`, the `start`/`end-session` skills,
+  `design-tokens.*` and the D7 `tokens.json` seed, `session-cost-warn.sh`.
+  This is the engine not tripping over itself, not a narrowing of intent.
+- **Adopter** — `ENGINE_SECURITY_EXEMPT_PATHS` → `security_gate.exempt_paths`
+  in `.process-engine.yaml`. **Added** to the default, never replacing it,
+  or declaring one exemption would re-expose every shipped template.
+
+Per-commit, not per-file: `SessionDetail.swift` plus `auth.py` in one
+commit is still gated. An empty value exempts nothing; an invalid regex
+exempts nothing. The money-path test-evidence gate honours the same
+exemption, so a payment test *template* no longer demands co-staged tests
+for itself.
+
+The mechanism is now shared: `hooks/_exempt-paths.sh` carries the
+resolution and the fail-closed invalid-regex handling once, and both
+`pre-commit-envelope-check` (v0.54.0) and this hook source it.
+
+### Noted — the engine does not run this gate, or any Claude-side hook, on itself
+
+There is no `.claude/settings.json` in the engine repo and no envelope has
+ever been recorded in it. The 38 self-collisions above never hurt anyone
+because the engine has never installed itself. Every "mandatory" in the
+engine is currently mandatory for adopters only. Recorded here; not fixed in
+this release.
+
+---
+
 ## [0.54.1] — 2026-09-05
 
 ### Fixed — the scheduled dev-log collector dirtied every adopter's tree
