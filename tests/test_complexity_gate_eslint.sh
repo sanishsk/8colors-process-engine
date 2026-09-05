@@ -36,7 +36,8 @@ echo "test_complexity_gate_eslint"
 # ─── static: the invocation itself ──────────────────────────────────
 # Executable lines only — the hook's comments quote the broken form on
 # purpose, to explain what was wrong with it.
-grep -vE '^\s*#' "$HOOK" | grep -q -- '--yes --no-install' \
+HOOK_CODE=$(grep -vE '^\s*#' "$HOOK")
+grep -q -- '--yes --no-install' <<<"$HOOK_CODE" \
     && bad "the self-contradictory 'npx --yes --no-install' is back" \
     || ok "no live 'npx --yes --no-install' — the contradiction is gone"
 
@@ -46,7 +47,10 @@ grep -q -- '--no-config-lookup' "$HOOK" && grep -q -- '--no-eslintrc' "$HOOK" \
 
 # The eslint invocation must not discard stderr. Find the line that runs the
 # rules and check it does not end in a stderr redirect.
-if grep -A6 'no_config \\' "$HOOK" | grep -q '2>/dev/null'; then
+# Herestring, not a pipe: a match here means FAILURE, so a SIGPIPE'd writer
+# under pipefail would report "clean" on a hook that still discards stderr.
+INVOCATION=$(grep -A6 'no_config \\' "$HOOK")
+if grep -q '2>/dev/null' <<<"$INVOCATION"; then
     bad "the eslint invocation still discards stderr — failures stay unexplained"
 else
     ok "the eslint invocation lets stderr through"
@@ -74,7 +78,7 @@ git -C "$REPO" add -A
 
 out=$( (cd "$REPO" && bash "$HOOK" 2>&1) ); rc=$?
 
-printf '%s' "$out" | grep -q 'not linting workflow script' \
+grep -q 'not linting workflow script' <<<"$out" \
     && ok "a staged workflow script is excluded, and the exclusion is announced" \
     || bad "the workflow exclusion is silent or absent"
 
@@ -104,7 +108,7 @@ if command -v eslint >/dev/null 2>&1; then
     [ "$rc" -ne 0 ] \
         && ok "a real max-depth violation blocks the commit" \
         || bad "the gate passed a 5-deep nesting — eslint is not actually running"
-    printf '%s' "$out" | grep -qiE 'max-depth|Blocks are nested' \
+    grep -qiE 'max-depth|Blocks are nested' <<<"$out" \
         && ok "the refusal names the rule that fired" \
         || bad "the gate blocked without naming a rule — the silent-fail shape"
 else
