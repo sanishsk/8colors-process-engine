@@ -38,6 +38,15 @@ rule naming one project's section numbers, paths or vocabulary is local
 stays local: a wrong local file costs one project an afternoon, a wrong
 engine file costs every project quietly.
 
+It is also **not binary**, which is where this bar was thin until
+2026-09-05. Most promotions split: the code stays in the project and the
+*lesson* comes to the engine, and most of what does come needs a project
+config key rather than a hardcoded value. Full doctrine with worked
+examples — including why an adopter's wrapper around an engine hook means
+the engine is missing a config knob, not that the adopter was wrong —
+[`docs/PROMOTION_BOUNDARY.md`](docs/PROMOTION_BOUNDARY.md). Read it before
+proposing a promotion; its checklist is the short version.
+
 **Every change carries a CHANGELOG entry and a VERSION bump.** A change
 nobody can see landing is a change nobody can roll back.
 
