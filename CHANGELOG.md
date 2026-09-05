@@ -7,6 +7,65 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.55.1] — 2026-09-05
+
+### Added — `docs/PROMOTION_BOUNDARY.md`: where a thing lives, decided once
+
+Four promotions in one day landed on four different sides of this line, and
+the reasoning was re-derived each time. Written down so it is not re-derived
+a fifth.
+
+CONTRIBUTING's value bar already decided *whether* a change is worth making,
+and carried one paragraph on generalisability. What it treated as binary is
+not:
+
+- **Layer 1 — engine.** The file would be identical in the next project.
+- **Layer 2 — engine mechanism + project config.** The layer that gets
+  forgotten, and the expensive one. Every knob added in v0.53.1–v0.55.0
+  (`claude_md`, `security_gate.exempt_paths`, `review_gate.exempt_paths`)
+  was added *after* an adopter hit its absence. **A wrapper around an engine
+  component is the symptom of a missing layer-2 knob** — the fix is a config
+  key, not a better wrapper.
+- **Layer 3 — project.** What the engine cannot know.
+
+Two rules for layer 2, both learned this week: a dual-mode component's
+config must live where **both** entry points read it (`claude-md-size`
+returned opposite verdicts on one file because only its git-side launcher
+saw the threshold), and adopter config **adds to** the engine default rather
+than replacing it (or one declared exemption silently re-exposes everything
+the engine knew to exclude).
+
+**The split that catches people out:** most features divide — the code stays
+in the project, the *lesson* comes to the engine. The `swift-snapshot-testing`
+adoption promoted **zero lines of code** and three paragraphs of doctrine.
+That is a successful promotion, not a declined one. Ask separately: can the
+code be shared (usually no), can the lesson be shared (almost always yes).
+
+Also recorded: the engine has one agent per *job*, not per *technology*
+(a `swift-design-critic` would fork `design-critic`'s rubric and drift); the
+three sanctioned ways a project gives a shared agent its own knowledge; and
+that the engine's gates **will** fire on promoted code — `measure_screenshot.py`
+had shipped and passed review in its home project and still met the 50-line
+function budget on arrival.
+
+### Added — the doctrine is reachable from where the decision is made
+
+A doctrine doc nothing links to is the same defect wearing the doc's own
+words. `tests/test_promotion_boundary_reachable.sh` asserts it is cited from
+all three decision points — the README's index (what an adopter reads),
+CONTRIBUTING's value bar (where a human decides), and
+`incident-synthesizer`'s `generalisable` field (where an **agent** decides,
+and that agent opens PRs against this repo) — plus that the doc keeps its
+own 200-line budget and carries its checklist.
+
+`incident-synthesizer` now treats `generalisable` as a summary of a
+three-way call rather than the call itself, and gains the error that was
+missing: **do not mark it `false` just because the code cannot move.** That
+is the more common mistake and it is silent — the code stays, nobody writes
+the lesson down, and the next project rediscovers it.
+
+---
+
 ## [0.55.0] — 2026-09-05
 
 ### Added — `measure_screenshot.py`: the number is measured, not reasoned about

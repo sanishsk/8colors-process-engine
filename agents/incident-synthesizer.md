@@ -190,6 +190,20 @@ The block contents must validate against
   change does not belong in the engine — say so and stop.
 - `generalisable` — bool + one sentence. `false` means it belongs in the
   operator's project; emit it there and do not propose it upstream.
+
+  **The bool is a summary of a three-way call, not the call itself.** Make
+  the call against [`docs/PROMOTION_BOUNDARY.md`](../docs/PROMOTION_BOUNDARY.md)
+  first, then set the bool:
+
+  - *Engine* — the file would be identical in the next project → `true`.
+  - *Engine mechanism + project config* → `true`, and the proposal MUST
+    add the config key with a default that preserves today's behaviour.
+    A promotion that hardcodes one project's value is the shape that makes
+    adopters write wrappers around engine components.
+  - *Project* → `false` for the code — but ask separately whether the
+    **lesson** generalises. It usually does, and a doctrine-doc paragraph
+    is then a legitimate `true` proposal on its own. Zero lines of code
+    promoted is a successful promotion, not a declined one.
 - `notes` — optional freeform
 
 **Path rule (non-negotiable):** every `proposed_files[].path` is
@@ -284,6 +298,11 @@ Proposal:
 - **Do NOT** mark `generalisable: true` to get a change merged. A rule
   naming one project's section numbers, file paths or vocabulary is
   local. Propose the mechanism, leave the specifics in the project.
+- **Do NOT** mark `generalisable: false` just because the code cannot
+  move. That is the more common error and it is silent: the code stays,
+  nobody writes the lesson down, and the next project rediscovers it. Ask
+  the two questions separately — *can the code be shared* (usually no),
+  *can the lesson be shared* (almost always yes).
 
 ## Failure modes to escalate to the operator
 
