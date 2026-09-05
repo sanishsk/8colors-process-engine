@@ -65,7 +65,7 @@ rc=$(run code-review-trailer.sh 'x\n\nCode-skip-reason: hotfix\n')
 # ─── 3. neither trailer on a 6-file commit must be rejected, WITH a message.
 printf 'x\n' > "$TMP/msg"
 out=$(cd "$REPO" && "$HOOKS/code-review-trailer.sh" "$TMP/msg" 2>&1)
-printf '%s' "$out" | grep -q "Code-reviewed" \
+grep -q "Code-reviewed" <<<"$out" \
     && ok "missing trailer is refused with a diagnostic" \
     || bad "refusal is silent — indistinguishable from a crash"
 
@@ -94,8 +94,12 @@ for h in code-review-trailer docs-updated-trailer security-review-trailer \
     [ -f "$HOOKS/$h.sh" ] || continue
     printf 'x\n\nCode-reviewed: %s\n' "$SHA" > "$TMP/msg"
     out=$(cd "$REPO" && "$HOOKS/$h.sh" "$TMP/msg" 2>&1 || true)
-    if printf '%s' "$out" | grep -qE 'integer expression expected|unary operator expected|: \[: '; then
-        bad "$h emits a shell diagnostic on an empty staged set: $(printf '%s' "$out" | head -1)"
+    # Herestring, not a pipe: `grep -q` exits at the first match and would
+    # SIGPIPE the writer, and pipefail turns that 141 into "no match" — which
+    # HERE means "no diagnostic found", i.e. a silent pass on the exact bug
+    # this file is named for.
+    if grep -qE 'integer expression expected|unary operator expected|: \[: ' <<<"$out"; then
+        bad "$h emits a shell diagnostic on an empty staged set: $(head -1 <<<"$out")"
     else
         ok "$h is quiet on an empty staged set"
     fi
