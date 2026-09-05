@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.54.2-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.55.0-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -374,7 +374,8 @@ See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
   agentless aggregation in `/gate-review`, verdict tests for the last eight
   untested hooks, and the engine finally meeting its own size budget ✅
 - v0.53.0 — `session-cost-warn`: the compaction advisory. Context replay is ~73% of the bill and grows within a session; this reports it while it can still be acted on — thresholded at turn end, and unconditionally after every commit, so compacting becomes a practice rather than a rescue ✅
-- **v0.54.x (current)** — four defaults corrected by a live adopter rather than a test: `claude-md-size` thresholds readable by both its launchers (0.53.1); the review gate takes an opt-in `review_gate.exempt_paths` so narrowing it no longer means a local wrapper (0.54.0); the scheduled dev-log collector no longer dirties the adopter's tree (0.54.1); and the security gate stops firing on a workout "session" or its own shipped templates, via the same fail-closed exempt mechanism, now shared in `hooks/_exempt-paths.sh` (0.54.2) ✅
+- **v0.55.0 (current)** — `measure_screenshot.py`, promoted from a live adopter: `design-critic` now measures colours, gaps, rules and ink extents instead of estimating them, and reports `null` rather than a wrong point value when it cannot know the device scale. `pe install` finally creates `docs/design/reference/`, the path the engine has documented since D3 and never scaffolded ✅
+- v0.54.x — four defaults corrected by a live adopter rather than a test: `claude-md-size` thresholds readable by both its launchers (0.53.1); the review gate takes an opt-in `review_gate.exempt_paths` so narrowing it no longer means a local wrapper (0.54.0); the scheduled dev-log collector no longer dirties the adopter's tree (0.54.1); and the security gate stops firing on a workout "session" or its own shipped templates, via the same fail-closed exempt mechanism, now shared in `hooks/_exempt-paths.sh` (0.54.2) ✅
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
 ---
