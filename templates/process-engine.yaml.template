@@ -121,6 +121,20 @@ hooks:
 # review_gate:
 #   exempt_paths: "^(docs/|CLAUDE\\.md$|.*\\.md$)"
 
+# Security-review gate (security-review-trailer). Fires when a staged path
+# matches (auth|login|oauth|session|passwd|password|payment|billing|webhook|
+# jwt|token) as a SUBSTRING — deliberately, so authenticate.py and
+# authorization.py are caught. The cost is words that mean something else in
+# your codebase: a workout "session", a design "token".
+#
+# exempt_paths names those. It ADDS to the engine's own default exemption
+# (its shipped *.template files, session docs and skills, design-token files)
+# and never replaces it. Per-commit: one exempt path plus one auth path is
+# still gated. An invalid regex exempts nothing. Override at runtime with
+# ENGINE_SECURITY_EXEMPT_PATHS.
+# security_gate:
+#   exempt_paths: '^ios/.*Session[A-Za-z]*\.swift$'
+
 # CLAUDE.md size guard. Set these ONLY to raise the limit temporarily while
 # a split is in progress, and lower them as the file shrinks — the engine's
 # standard is 12 KB warn / 20 KB fail, and CLAUDE.md is re-read on every

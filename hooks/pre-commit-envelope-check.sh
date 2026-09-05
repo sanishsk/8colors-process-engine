@@ -77,30 +77,19 @@ PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null 
 #
 # Resolution: ENGINE_REVIEW_EXEMPT_PATHS → review_gate.exempt_paths in
 # .process-engine.yaml → unset. Unset means nothing is exempt, so an engine
-# upgrade never narrows a gate the adopter already installed.
-EXEMPT_RE="${ENGINE_REVIEW_EXEMPT_PATHS:-}"
-if [ -z "$EXEMPT_RE" ] && [ -f "$PROJECT_ROOT/.process-engine.yaml" ]; then
-    _ENGINE_DIR="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)" || _ENGINE_DIR=""
-    if [ -n "$_ENGINE_DIR" ] && [ -f "$_ENGINE_DIR/scripts/_yaml.sh" ]; then
-        # shellcheck source=../scripts/_yaml.sh
-        . "$_ENGINE_DIR/scripts/_yaml.sh"
-        EXEMPT_RE=$(yaml_get review_gate.exempt_paths \
-                        "$PROJECT_ROOT/.process-engine.yaml" 2>/dev/null || true)
-    fi
-fi
+# upgrade never narrows a gate the adopter already installed. The mechanism
+# — and the fail-closed handling of an invalid regex — is shared with
+# security-review-trailer in hooks/_exempt-paths.sh.
+_HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./_exempt-paths.sh
+. "$_HOOK_DIR/_exempt-paths.sh"
 
+EXEMPT_RE=$(pe_exempt_regex ENGINE_REVIEW_EXEMPT_PATHS review_gate.exempt_paths)
 if [ -n "$EXEMPT_RE" ]; then
     STAGED_PATHS=$(cd "$PROJECT_ROOT" && git diff --cached --name-only 2>/dev/null || true)
     if [ -n "$STAGED_PATHS" ]; then
-        # grep: 0 matched, 1 no match, >=2 error. An invalid regex must not
-        # read as "nothing left unexempt" — that is the one way a typo could
-        # open the gate, so the error code is checked separately from the
-        # empty output it also produces.
-        set +e
-        UNEXEMPT=$(printf '%s\n' "$STAGED_PATHS" | grep -vE "$EXEMPT_RE" 2>/dev/null)
-        _grep_rc=$?
-        set -e
-        if [ "$_grep_rc" -lt 2 ] && [ -z "$UNEXEMPT" ]; then
+        UNEXEMPT=$(pe_unexempt_paths "$EXEMPT_RE" <<<"$STAGED_PATHS")
+        if [ -z "$UNEXEMPT" ]; then
             # Every staged path is exempt. Note it — a gate that stops
             # firing should say so, or the next person reads silence as
             # "reviewed".

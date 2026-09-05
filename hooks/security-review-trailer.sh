@@ -20,7 +20,38 @@ DEFAULT_RE='(auth|login|oauth|session|passwd|password|payment|billing|webhook|jw
 SECURITY_RE="${ENGINE_SECURITY_PATHS:-$DEFAULT_RE}"
 
 STAGED=$(git diff --cached --name-only)
-HITS=$(echo "$STAGED" | grep -iE "$SECURITY_RE" || true)
+
+# ─── Path exemption — fail-closed, shared with the review gate ──────────
+# The regex above is a substring match on paths, and that is deliberate: a
+# word-boundary version would stop catching authenticate.py and
+# authorization.py, which are the files this gate exists for. The cost is
+# false positives on words that mean something else in a given codebase —
+# "session" is a workout in a fitness app, "token" is a design token in a
+# CSS file — and on the engine's OWN files: every *-security.test.py.template
+# `pe install` copies into an adopter trips this regex by name, so the engine
+# ships files that trigger its own gate on the next commit that touches them.
+#
+# Two layers, both exempt-lists (anything unlisted is still gated):
+#   DEFAULT  — names the ENGINE chose. Templates are never executed; the
+#              session docs, session skills and design-token files are
+#              engine conventions. This is the engine not tripping over
+#              itself, not a narrowing of intent.
+#   ADOPTER  — ENGINE_SECURITY_EXEMPT_PATHS → security_gate.exempt_paths in
+#              .process-engine.yaml. ADDED to the default, never replacing
+#              it, or declaring one exemption would re-expose every template.
+#
+# Per-commit, not per-file: one exempt path plus one auth path is gated.
+# An invalid adopter regex exempts nothing (hooks/_exempt-paths.sh).
+_HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./_exempt-paths.sh
+. "$_HOOK_DIR/_exempt-paths.sh"
+DEFAULT_EXEMPT_RE='(\.template$|(^|/)docs/(process-engine/)?sessions/|design-tokens?\.|(^|/)templates/design/tokens\.json|(^|/)skills/(start|end)-session/|session-cost-warn\.sh$)'
+ADOPTER_EXEMPT_RE=$(pe_exempt_regex ENGINE_SECURITY_EXEMPT_PATHS security_gate.exempt_paths)
+EXEMPT_RE="$DEFAULT_EXEMPT_RE"
+[ -n "$ADOPTER_EXEMPT_RE" ] && EXEMPT_RE="($DEFAULT_EXEMPT_RE|$ADOPTER_EXEMPT_RE)"
+STAGED=$(pe_unexempt_paths "$EXEMPT_RE" <<<"$STAGED")
+
+HITS=$( { echo "$STAGED" | grep -iE "$SECURITY_RE"; } 2>/dev/null || true)
 if [ -z "$HITS" ]; then
     exit 0
 fi
@@ -95,6 +126,13 @@ Recommended: run the security-reviewer agent, then:
                 <transcript>
 
 Override the path regex via ENGINE_SECURITY_PATHS.
+If a matched word means something else in this codebase (a workout
+"session", a design "token"), declare it — this narrows the gate to
+the paths you name and nothing else:
+
+  security_gate:
+    exempt_paths: '^ios/.*Session[A-Za-z]*\\.swift$'   # .process-engine.yaml
+
 To bypass for a hotfix: git commit --no-verify
 EOF
     exit 1
