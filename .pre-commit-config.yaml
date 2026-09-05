@@ -57,6 +57,7 @@
 #     cache-hygiene-warn
 #     transcript-guard
 #     stop-uncommitted-reminder
+#     session-cost-warn
 #
 # One-time:  pip install pre-commit && pre-commit install
 #            (REQUIRED — .git/hooks is not tracked, so a fresh clone has no

@@ -6,7 +6,7 @@
 > This is the general mechanism — how to use one part of the engine without
 > adopting all of it — with worked examples at the end.
 
-The engine ships **21 agents and 29 hooks**. You do not have to run them all,
+The engine ships **21 agents and 30 hooks**. You do not have to run them all,
 and you do not have to install them all. There are four ways to use one
 piece, in rough order of how much of the engine you have to adopt.
 
@@ -367,7 +367,7 @@ Wire `security-review-trailer` as above, then confirm with `pe doctor`.
   which kind of change, and the chains they run in
 - [`E1_GATE_ENVELOPE.md`](E1_GATE_ENVELOPE.md) — the envelope contract and
   what each exit code means
-- [`../hooks/README.md`](../hooks/README.md) — all 29 hooks and every tuning
+- [`../hooks/README.md`](../hooks/README.md) — all 30 hooks and every tuning
   variable
 - [`ADOPTION_AUDIT.md`](ADOPTION_AUDIT.md) — which of these surfaces has
   actually been run anywhere, and which have not
