@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.52.0-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.53.0-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -370,9 +370,10 @@ See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
   [`CHANGELOG.md`](CHANGELOG.md), which is the maintained record. This
   line is a summary written in 0.52.0; the roadmap below it had said
   "v0.9 (current)" for forty-two releases.
-- **v0.52.0 (current)** — Parallel test suite (105s → 25s), `/parallel-fix`,
+- v0.52.0 — Parallel test suite (105s → 25s), `/parallel-fix`,
   agentless aggregation in `/gate-review`, verdict tests for the last eight
   untested hooks, and the engine finally meeting its own size budget ✅
+- **v0.53.0 (current)** — `session-cost-warn`: the compaction advisory. Context replay is ~73% of the bill and grows within a session; this reports it while it can still be acted on — thresholded at turn end, and unconditionally after every commit, so compacting becomes a practice rather than a rescue ✅
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
 ---

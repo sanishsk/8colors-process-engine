@@ -2,7 +2,7 @@
 
 > Hand-out for the beta cohort. Copy / paste / link as needed.
 >
-> **v0.52.0 — every count, model tier, command name and threshold below is
+> **v0.53.0 — every count, model tier, command name and threshold below is
 > verified against the repository by CI.**
 
 ---
@@ -12,7 +12,7 @@
 I built **`8colors-process-engine`** — a portable Claude Code plugin
 that drops **21 specialist agents**, semantic search over your research
 docs, a weekly retro cron job, 10 slash commands, 2 session skills,
-29 governance hooks (git-side and Claude Code-side), and a
+30 governance hooks (git-side and Claude Code-side), and a
 **verdict-blind gate escalation router** into any project in **one
 install command**. Defaults need
 **zero API keys**. MIT-licensed. I want your hands on it for 2–4
@@ -20,7 +20,7 @@ weeks of real work, then I want to know what broke, what was
 confusing, and what you expected that wasn't there.
 
 Repo: <https://github.com/sanishsk/8colors-process-engine>
-Current version: **v0.52.0**
+Current version: **v0.53.0**
 
 ### Want to try just one piece?
 
@@ -711,7 +711,7 @@ The eject is reversible — `pe install` restores the symlinks.
 
 ---
 
-## Where the engine is now (v0.52.0, 2026-09-04)
+## Where the engine is now (v0.53.0, 2026-09-04)
 
 `pe sync`, the install presets and `pe doctor` are all still there. What
 has been added since, grouped by what it changes for you:

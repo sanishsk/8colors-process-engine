@@ -62,6 +62,15 @@
           "command": "{{ENGINE_DIR}}/hooks/transcript-guard.sh"
         }
       ]
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/session-cost-warn.sh"
+        }
+      ]
     }
   ],
   "Stop": [
@@ -70,6 +79,10 @@
         {
           "type": "command",
           "command": "{{ENGINE_DIR}}/hooks/stop-uncommitted-reminder.sh"
+        },
+        {
+          "type": "command",
+          "command": "{{ENGINE_DIR}}/hooks/session-cost-warn.sh"
         }
       ]
     }
