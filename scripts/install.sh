@@ -270,7 +270,7 @@ fi
 # who ran `pe shadow decide` or `pe telemetry collect` got a permanently
 # dirty working tree — and stop-uncommitted-reminder, shipped by this same
 # engine, then nagged about it every turn.
-for pattern in "*.research-index.sqlite" ".process-engine.local.yaml" ".claude/gates/" ".pe/"; do
+for pattern in "*.research-index.sqlite" ".process-engine.local.yaml" ".claude/gates/" ".pe/" "docs/dev-log/"; do
     if ! grep -qF -- "$pattern" "$TARGET/.gitignore" 2>/dev/null; then
         echo "$pattern" >> "$TARGET/.gitignore"
     fi

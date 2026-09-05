@@ -2,7 +2,7 @@
 # Regenerated at release time via `pe verify --update`.
 # Format: <sha256> <relative path>
 
-1eadf6791d9bd68338a407523c62f74c66ea6619c226dba7ccf0ffa9f056e6f3  VERSION
+c8a1574b8ffc0b2d05edd0ad04998c3010f32cb27fc3ec21a491a9b709a29399  VERSION
 4a6351f631bda4df2fcda49a48ab2413850f6753b9441101e790bf5ca98a405f  agents/_gate-contract.md
 1ff6d1d57e33f5a9ae6c6388839742de938646e0db53db43c3860ce381c43198  agents/architect.md
 375249c1d5b4a936dd75f77bff498beaee94778c462a16ba7c620086ceb29d5f  agents/brief-writer.md
@@ -67,7 +67,7 @@ d099f4f15196cbdd3f2d39f36ffe80ef4584e1e0d95a26cb775bd624669ebd6c  hooks/stop-unc
 e7c4de433ce0525dbf28334ba5180ab3f554ac5c7e80e1c8853ce5c190304f9a  hooks/test-run.sh
 27c00433563e8d4c184b43330e9ce929033b3fef88adac8f828a4bdfaee3d520  hooks/transcript-guard.sh
 e98c2b4f46c08c87ad4f412d0f1675b44562fbf38da57f69773e490193002a51  hooks/visual-baseline-guard.sh
-46dd6d95c64fe6e7c574a88146dfd30766995d8f74c576e23cae69c41fdfb49f  plugin.json
+89cc7270a1a6a1d559b6d75952e1380b189bacc9d3cbbc9f99b63f9513f52609  plugin.json
 5f6b5d37f2b0dd60cbf8664f57806b2faa4595dc2b8f9cde36e6d7cffdfd3a39  scripts/_cmd_docs.sh
 a65b3293c83c73008ee3626e03b3e53d716fd1e169a9b7a0d35d9e7aa1dd6fa8  scripts/_cmd_help.sh
 bdfdf55d5005a880f3768ad19e422baeccc2352facccc7f0d9a497c090448be1  scripts/_cmd_lifecycle.sh

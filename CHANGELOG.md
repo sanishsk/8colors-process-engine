@@ -7,6 +7,42 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.54.1] — 2026-09-05
+
+### Fixed — the scheduled dev-log collector dirtied every adopter's tree
+
+`dev-log-collect.sh` writes `docs/dev-log/daily/<date>.{json,md}` into the
+adopter project, and `pe install` schedules it via launchd / systemd / cron.
+The engine's own `.gitignore` has ignored `docs/dev-log/{daily,weekly,monthly}/`
+since the collector shipped; `install.sh` propagates four ignore patterns to
+adopters and this was not among them — the same mirror-image gap fixed for
+`.claude/gates/` in v0.52.0, one directory over.
+
+**Why it is not cosmetic.** `pre-commit` stashes unstaged tracked changes
+before running hooks and restores them after. A writer that appends inside
+that window makes the restore conflict, and pre-commit rolls the whole commit
+back. The operator sees a failed commit immediately after `lint ok / tests ok
+/ secrets ok` — it reads as a gate failure and is not one. Because this
+collector is on a timer, it fires at a moment nobody chose, including during
+a commit.
+
+Diagnosed in a live adopter against a subagent-completion log with exactly
+this signature; the engine's own collector is the same shape, scheduled.
+
+Two independent guarantees, since either alone has a hole: `install.sh` now
+propagates `docs/dev-log/`, and the collector drops a self-ignoring
+`.gitignore` into the directory it writes — so it holds in a project that
+never ran `pe install`, and after a fresh clone.
+
+**Adopters with the file already tracked need one command**, because
+`.gitignore` does not untrack:
+
+```bash
+git rm -r --cached docs/dev-log/ && git commit -m "chore: untrack regenerable dev-log digests"
+```
+
+---
+
 ## [0.54.0] — 2026-09-05
 
 ### Added — `review_gate.exempt_paths`: narrow the review gate without re-writing it
