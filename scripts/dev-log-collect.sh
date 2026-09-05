@@ -85,6 +85,23 @@ UNTIL="${DATE}T23:59:59"
 
 OUT_DIR="docs/dev-log/daily"
 mkdir -p "$OUT_DIR"
+
+# Make docs/dev-log/ ignore its own contents. Everything here is a digest
+# regenerated from git, never source, so none of it should be committed.
+#
+# `pe install` adds the path to the adopter's root .gitignore, but this
+# collector is SCHEDULED — launchd / systemd / cron — so it fires at a moment
+# nobody chose, including in the middle of a `pre-commit` run. pre-commit
+# stashes unstaged tracked changes and restores them afterwards; a write
+# landing inside that window makes the restore conflict and rolls the whole
+# commit back, which the operator reads as a gate failure directly after
+# "lint ok / tests ok / secrets ok". A self-ignoring directory does not
+# depend on an install step having run, and holds when someone clones the
+# project fresh.
+if [ ! -e "docs/dev-log/.gitignore" ]; then
+    printf '# Dev-log digests — regenerated from git, never committed.\n*\n' \
+        > "docs/dev-log/.gitignore" 2>/dev/null || true
+fi
 JSON_OUT="$OUT_DIR/${DATE}.json"
 MD_OUT="$OUT_DIR/${DATE}.md"
 
