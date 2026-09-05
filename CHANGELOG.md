@@ -7,6 +7,44 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.54.0] — 2026-09-05
+
+### Added — `review_gate.exempt_paths`: narrow the review gate without re-writing it
+
+`pre-commit-envelope-check` blocks any commit with a non-empty staged diff,
+so a CLAUDE.md typo, a plan update or a release-build commit all wait on a
+code review of prose. A live adopter hit this and wrote a local wrapper that
+re-implements the block and filters by path. That wrapper is the engine
+saying its default is wrong: every adopter who cares will write one, and each
+will draw the behaviour line slightly differently.
+
+The gate now takes an exemption regex, resolving
+`ENGINE_REVIEW_EXEMPT_PATHS` → `review_gate.exempt_paths` in
+`.process-engine.yaml` → unset.
+
+**Exempt list, not an include list — the polarity is the design.** The
+adopter's wrapper asks "does this commit touch behaviour?", which fails
+*open*: a source directory nobody added to the regex sails through
+unreviewed, silently and permanently. This asks "has the operator declared
+this exempt?", so anything unlisted is still gated and a forgotten path fails
+closed.
+
+Every ambiguity resolves to BLOCKED, and each is asserted:
+
+- unset → nothing exempt, so upgrading never narrows a gate already installed
+- a regex matching nothing → exempts nothing
+- an empty value → exempts nothing, rather than everything
+- an unparseable config → gates everything
+- an **invalid** regex → gates everything; `grep`'s error exit is checked
+  separately from the empty output it also produces, which is the one path by
+  which a typo could have opened the gate
+
+The exemption is per-commit, not per-file: docs plus source in one commit is
+still gated, because git lands the commit whole. When it does apply it says
+so on stderr — a gate that stops firing should not do it silently.
+
+---
+
 ## [0.53.1] — 2026-09-05
 
 ### Fixed — `claude-md-size` could not honour a raised limit in both its modes

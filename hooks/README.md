@@ -25,7 +25,7 @@ of 29 hooks, and the drift went unnoticed because nothing checked it.
 
 | Hook | Stage | What it does |
 |---|---|---|
-| `pre-commit-envelope-check` | PreToolUse Bash | Blocks `git commit` unless `.claude/gates/last-gate.json` is PASS/WARN AND its recorded `diff_sha` matches the staged diff. **This is the deterministic backstop for the "code review every commit" promise.** |
+| `pre-commit-envelope-check` | PreToolUse Bash | Blocks `git commit` unless `.claude/gates/last-gate.json` is PASS/WARN AND its recorded `diff_sha` matches the staged diff. **This is the deterministic backstop for the "code review every commit" promise.** Narrow it with `review_gate.exempt_paths` (or `ENGINE_REVIEW_EXEMPT_PATHS`) — an **exempt** regex, so anything unlisted is still gated and a forgotten path fails closed. Per-commit, not per-file: docs + source in one commit is still gated. Unset by default, so upgrading never narrows an installed gate. |
 | `ponytail-preflight` | PreToolUse Edit/Write/MultiEdit | Advisory reminder of the simplicity ladder before a large write. Never fails the tool call. |
 | `post-edit-lint` | PostToolUse Edit/Write/MultiEdit | Best-effort lints the touched file (ruff/black for Python, eslint for JS/TS, shellcheck for shell, JSON/YAML validity). Advisory. |
 | `claude-md-size` | PostToolUse + pre-commit | Warns above 12000 bytes and **blocks** above 20000. Thresholds resolve env (`ENGINE_CLAUDE_MD_WARN`/`_FAIL`) → `claude_md.warn_bytes`/`fail_bytes` in `.process-engine.yaml` → default. Raise the limit in the **yaml**, not on the pre-commit entry line: an `env VAR=…` there reaches only the git-side mode, and the two modes then return opposite verdicts on the same file. |
