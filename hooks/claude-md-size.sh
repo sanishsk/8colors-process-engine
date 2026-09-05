@@ -14,9 +14,25 @@
 #      thresholds. Warnings go to stderr so Claude sees them in the
 #      turn's tool feedback.
 #
-# Thresholds (bytes):
-#   WARN — ENGINE_CLAUDE_MD_WARN, default 12000 (~12 KB, ~3k tokens)
-#   FAIL — ENGINE_CLAUDE_MD_FAIL, default 20000 (~20 KB, ~5k tokens)
+# Thresholds (bytes), highest precedence first:
+#   1. ENGINE_CLAUDE_MD_WARN / ENGINE_CLAUDE_MD_FAIL (environment)
+#   2. claude_md.warn_bytes / claude_md.fail_bytes in .process-engine.yaml
+#   3. defaults — 12000 warn (~3k tokens), 20000 fail (~5k tokens)
+#
+# Layer 2 exists because layer 1 could not reach both modes. An adopter
+# raising the limit writes it into the pre-commit entry line:
+#
+#     entry: env ENGINE_CLAUDE_MD_WARN=30000 ENGINE_CLAUDE_MD_FAIL=45000
+#            scripts/hooks/engine.sh claude-md-size.sh
+#
+# — which exists only for the pre-commit invocation. The PostToolUse copy is
+# launched by Claude Code, never sees it, and falls back to the defaults. On
+# a project at 40,693 bytes raised to 30k/45k, the two modes returned
+# OPPOSITE verdicts on the same file: git-side passed, Claude-side hard
+# failed. A hook whose header promises "the same thresholds" in both modes
+# has to have somewhere to put them that both modes can read.
+#
+# Env still wins, because the entry line above is already in the field.
 #
 # Rationale: CLAUDE.md is re-loaded into every session turn. A 74KB
 # CLAUDE.md (the incident that motivated this hook) burns ~19k input
@@ -31,6 +47,33 @@ set -euo pipefail
 # var), map it to FAIL. Deprecated but respected for one release cycle.
 if [ -n "${ENGINE_CLAUDE_MD_LIMIT:-}" ] && [ -z "${ENGINE_CLAUDE_MD_FAIL:-}" ]; then
     ENGINE_CLAUDE_MD_FAIL="$ENGINE_CLAUDE_MD_LIMIT"
+fi
+
+# Project config, consulted only where the environment is silent. Anything
+# that is not a plain positive integer is ignored rather than trusted — a
+# typo'd threshold must not become a disarmed gate, and this hook runs on
+# every commit and every edit, so it may not crash on a malformed file.
+_yaml_bytes() {   # $1=key — echoes a validated integer, or nothing
+    local v
+    v=$(yaml_get "$1" "$_PE_CONFIG" 2>/dev/null || true)
+    case "$v" in
+        ''|*[!0-9]*) return 0 ;;
+        *) [ "$v" -gt 0 ] && printf '%s' "$v" ;;
+    esac
+    return 0
+}
+
+_PE_CONFIG="${CLAUDE_PROJECT_DIR:-$PWD}/.process-engine.yaml"
+if [ -f "$_PE_CONFIG" ]; then
+    _ENGINE_DIR="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)" || _ENGINE_DIR=""
+    if [ -n "$_ENGINE_DIR" ] && [ -f "$_ENGINE_DIR/scripts/_yaml.sh" ]; then
+        # shellcheck source=../scripts/_yaml.sh
+        . "$_ENGINE_DIR/scripts/_yaml.sh"
+    fi
+    if declare -F yaml_get >/dev/null 2>&1; then
+        : "${ENGINE_CLAUDE_MD_WARN:=$(_yaml_bytes claude_md.warn_bytes)}"
+        : "${ENGINE_CLAUDE_MD_FAIL:=$(_yaml_bytes claude_md.fail_bytes)}"
+    fi
 fi
 
 WARN="${ENGINE_CLAUDE_MD_WARN:-12000}"

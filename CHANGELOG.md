@@ -7,6 +7,38 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.53.1] — 2026-09-05
+
+### Fixed — `claude-md-size` could not honour a raised limit in both its modes
+
+The hook is dual-mode and its own header promised the two modes run "with
+the same thresholds". They could not. Thresholds came only from
+`ENGINE_CLAUDE_MD_WARN` / `_FAIL`, and the place an adopter naturally sets
+them is the pre-commit entry line:
+
+```yaml
+entry: env ENGINE_CLAUDE_MD_WARN=30000 ENGINE_CLAUDE_MD_FAIL=45000
+       scripts/hooks/engine.sh claude-md-size.sh
+```
+
+That assignment exists only for the pre-commit invocation. The PostToolUse
+copy is launched by Claude Code, never sees it, and silently falls back to
+12000/20000. Found in a live adopter mid-split at 40,693 bytes with the
+limit raised to 30k/45k: **the two modes returned opposite verdicts on the
+same file** — git-side passed, Claude-side hard-failed — and the operator
+would have had no way to tell which mechanism was speaking.
+
+Thresholds now resolve env → `claude_md.warn_bytes` / `claude_md.fail_bytes`
+in `.process-engine.yaml` → default. Env stays highest because the entry
+line above is already in the field. A non-integer or non-positive value in
+the yaml is ignored rather than trusted, so a typo cannot disarm the gate,
+and an unparseable config falls back to the default still gating.
+
+Same shape as the rest of this release cycle: a documented control with no
+mechanism behind it.
+
+---
+
 ## [0.53.0] — 2026-09-05
 
 ### Added — `session-cost-warn`: the compaction advisory

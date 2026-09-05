@@ -106,6 +106,20 @@ hooks:
   # false in projects where per-turn hooks would be too noisy (rare).
   claude_hooks_enabled: true
 
+# CLAUDE.md size guard. Set these ONLY to raise the limit temporarily while
+# a split is in progress, and lower them as the file shrinks — the engine's
+# standard is 12 KB warn / 20 KB fail, and CLAUDE.md is re-read on every
+# turn, so the cost is per-turn forever.
+#
+# Set it HERE rather than in the .pre-commit-config.yaml entry line.
+# claude-md-size runs in two modes — git-side pre-commit and Claude-side
+# PostToolUse — and an `env VAR=...` on the pre-commit entry reaches only
+# the first, so the two modes end up disagreeing about the same file.
+# Both read this.
+# claude_md:
+#   warn_bytes: 12000
+#   fail_bytes: 20000
+
 # Project-specific session.yaml (start-session / end-session customization)
 # Lives at <project>/.claude/session.yaml — engine doesn't manage it,
 # but documents the contract here so adopters know it exists.
