@@ -442,6 +442,39 @@ else
     fail=$((fail + 1))
 fi
 
+echo "=== 11. every pe_orchestrator subcommand is reachable through \`pe\` ==="
+# `reset` shipped in pe_orchestrator's argparse in P2.11 and the pe dispatcher
+# routed only decide|reconcile, so it was unreachable through the CLI for
+# eleven releases — a subcommand nobody could run. Derive the check from the
+# argparse definition rather than from a list kept here.
+PE_BIN="$(cd "$(dirname "$ORCH")/.." && pwd)/scripts/pe"
+subs=$("$PY" - "$ORCH" <<'PYEOF'
+import ast, sys
+tree = ast.parse(open(sys.argv[1]).read())
+names = set()
+for node in ast.walk(tree):
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_parser" and node.args
+            and isinstance(node.args[0], ast.Constant)):
+        names.add(node.args[0].value)
+print(" ".join(sorted(names)))
+PYEOF
+)
+# The dispatcher lives in a sourced command file, not in `pe` itself.
+OPS="$(dirname "$PE_BIN")/_cmd_ops.sh"
+unreachable=""
+for sub in $subs; do
+    grep -qE "^[[:space:]]*([a-z]+\|)*$sub(\|[a-z]+)*\)" "$OPS" \
+        || unreachable="$unreachable $sub"
+done
+if [ -z "$unreachable" ]; then
+    echo "  ✓ all subcommands ($subs) are routed by cmd_shadow"
+    pass=$((pass + 1))
+else
+    echo "  ✗ pe_orchestrator defines subcommand(s) \`pe shadow\` cannot reach:$unreachable"
+    fail=$((fail + 1))
+fi
+
 # ─── summary ───────────────────────────────────────────────────────────────
 
 echo ""

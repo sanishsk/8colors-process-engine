@@ -197,12 +197,27 @@ while IFS='|' read -r status msg; do
     esac
 done <<< "$REPORT"
 
-# The script must actually use the schema it inlines, on every gate call —
-# an inline schema nothing passes to agent() is decoration.
+# The script must actually use the schema it inlines — an inline schema
+# nothing passes to agent() is decoration.
+#
+# This asked for two bindings when there were two call sites, the gate fan-out
+# and an aggregating agent. The aggregator is gone: merging is deterministic
+# and now runs in the script, so the gate fan-out is the only place an agent
+# is asked for an envelope. One binding is the correct number, and the
+# assertion below is the property that actually mattered — that the schema
+# reaches a call site at all.
 n_uses=$(grep -c 'schema: ENVELOPE_SCHEMA' "$WF" || true)
-[ "${n_uses:-0}" -ge 2 ] \
-    && ok "ENVELOPE_SCHEMA is bound to $n_uses agent() calls" \
-    || bad "ENVELOPE_SCHEMA is inlined but bound to only ${n_uses:-0} agent() call(s)"
+[ "${n_uses:-0}" -ge 1 ] \
+    && ok "ENVELOPE_SCHEMA is bound to $n_uses agent() call site(s)" \
+    || bad "ENVELOPE_SCHEMA is inlined but bound to no agent() call"
+
+# Every agent that is asked for an envelope must be schema-bound. Counting
+# bindings does not catch a NEW envelope-producing agent added without one,
+# so check the fan-out itself: the gate map is the only such call site.
+gate_calls=$(grep -c "{ label: gate, phase: 'Review', schema: ENVELOPE_SCHEMA }" "$WF" || true)
+[ "${gate_calls:-0}" -eq 1 ] \
+    && ok "the gate fan-out is schema-bound at its call site" \
+    || bad "the gate fan-out call site changed shape — check it still passes ENVELOPE_SCHEMA"
 
 echo "  ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

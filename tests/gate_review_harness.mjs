@@ -10,8 +10,15 @@
 // agent is skipped or dies, and the documented .filter(Boolean) idiom FAILS
 // OPEN here — drop a dead security-reviewer, see two clean envelopes, report
 // PASS, and a payment-path change is committed having never been
-// security-reviewed. `aggregator-lies` is its twin: it proves the floor is
-// enforced by the script and not by asking the aggregating agent nicely.
+// security-reviewed.
+//
+// There were two more, `aggregator-lies` and `aggregator-dies`, covering an
+// aggregating agent that ignored the floor or never answered. Both are gone
+// because the agent is: aggregation is deterministic and now runs in the
+// script, so there is nothing left to lie or die. What replaced them is
+// `duplicate-findings`, which tests the merge logic that inherited the job —
+// the failure mode moved from "an agent dropped a finding" to "the dedupe
+// key is too coarse and dropped one", and that needs its own scenario.
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -48,7 +55,7 @@ async function runWorkflow(respond) {
 
   const agent = async (prompt, opts = {}) => {
     const label = opts.label || '(unlabelled)'
-    calls.push({ label, phase: opts.phase, hasSchema: Boolean(opts.schema) })
+    calls.push({ label, phase: opts.phase, hasSchema: Boolean(opts.schema), prompt })
     return respond(label, prompt)
   }
   const parallel = thunks => Promise.all(thunks.map(t => t()))
@@ -67,7 +74,11 @@ async function runWorkflow(respond) {
 
 // ─── scenarios ───────────────────────────────────────────────────────────
 
-const STAGED = { files: ['modules/billing/charges.py', 'models/charge.py'] }
+const DIFF_SHA = '1111111111111111111111111111111111111111'
+const STAGED = {
+  files: ['modules/billing/charges.py', 'models/charge.py'],
+  diff_sha: DIFF_SHA,
+}
 const RECORD_OK = {
   recorded: true,
   exit_code: 0,
@@ -83,7 +94,6 @@ const scenarios = {
 
   'all-clean': label => {
     if (label === 'staged diff') return STAGED
-    if (label === 'aggregate') return envelope('merge-gate')
     if (label === 'record') return RECORD_OK
     return envelope(label)
   },
@@ -91,7 +101,6 @@ const scenarios = {
   'one-high': label => {
     if (label === 'staged diff') return STAGED
     if (label === 'database-reviewer') return envelope(label, [HIGH], 'WARN')
-    if (label === 'aggregate') return envelope('merge-gate', [HIGH], 'WARN')
     if (label === 'record') return RECORD_OK
     return envelope(label)
   },
@@ -99,7 +108,6 @@ const scenarios = {
   'one-critical': label => {
     if (label === 'staged diff') return STAGED
     if (label === 'security-reviewer') return envelope(label, [CRITICAL], 'FAIL')
-    if (label === 'aggregate') return envelope('merge-gate', [CRITICAL], 'FAIL')
     if (label === 'record') return RECORD_OK
     return envelope(label)
   },
@@ -108,17 +116,6 @@ const scenarios = {
   'gate-dies': label => {
     if (label === 'staged diff') return STAGED
     if (label === 'security-reviewer') return null
-    if (label === 'aggregate') return envelope('merge-gate')
-    if (label === 'record') return RECORD_OK
-    return envelope(label)
-  },
-
-  // The aggregating agent ignores its instructions and reports a clean PASS
-  // while a gate is missing. The script must not believe it.
-  'aggregator-lies': label => {
-    if (label === 'staged diff') return STAGED
-    if (label === 'database-reviewer') return null
-    if (label === 'aggregate') return envelope('merge-gate', [], 'PASS')
     if (label === 'record') return RECORD_OK
     return envelope(label)
   },
@@ -126,9 +123,37 @@ const scenarios = {
   'all-gates-die': label =>
     label === 'staged diff' ? STAGED : null,
 
-  'aggregator-dies': label => {
+  // Aggregation used to be an agent asked to "deduplicate findings that
+  // describe the same problem at the same file and line ... do not drop a
+  // finding just because it resembles another at a different location".
+  // That instruction is now a dedupe key, and a key is exactly the kind of
+  // thing that is one field too coarse and silently eats a real finding.
+  //
+  // Three gates, deliberately overlapping:
+  //   * security and database both flag missing-tenant-filter at
+  //     charges.py:42 — one problem, seen twice, and database rates it
+  //     CRITICAL where security says HIGH. One finding must survive, at
+  //     CRITICAL: dedupe must not be able to downgrade.
+  //   * security also flags the SAME RULE at charges.py:88. Different line,
+  //     different problem, must survive on its own.
+  //   * code-reviewer flags a different rule at the same file and line as
+  //     the first. Same location, different problem, must also survive.
+  'duplicate-findings': label => {
     if (label === 'staged diff') return STAGED
-    if (label === 'aggregate') return null
+    if (label === 'record') return RECORD_OK
+    const dup = s => ({ severity: s, rule: 'missing-tenant-filter', message: `seen by a gate as ${s}`, file: 'charges.py', line: 42 })
+    if (label === 'security-reviewer') {
+      return envelope(label, [
+        dup('HIGH'),
+        { severity: 'HIGH', rule: 'missing-tenant-filter', message: 'a second, distinct occurrence', file: 'charges.py', line: 88 },
+      ], 'WARN')
+    }
+    if (label === 'database-reviewer') return envelope(label, [dup('CRITICAL')], 'FAIL')
+    if (label === 'code-reviewer') {
+      return envelope(label, [
+        { severity: 'LOW', rule: 'unused-import', message: 'different rule, same line', file: 'charges.py', line: 42 },
+      ], 'WARN')
+    }
     return envelope(label)
   },
 
@@ -139,19 +164,18 @@ const scenarios = {
   // the commit gate saw no verdict at all.
   'overlong-message': label => {
     if (label === 'staged diff') return STAGED
-    if (label === 'aggregate') {
-      return envelope('merge-gate', [
+    if (label === 'record') return RECORD_OK
+    if (label === 'code-reviewer') {
+      return envelope(label, [
         { severity: 'HIGH', rule: 'long-message', message: 'x'.repeat(578) },
         { severity: 'LOW', rule: 'long-suggestion', message: 'short', suggestion: 'y'.repeat(1400) },
       ], 'WARN')
     }
-    if (label === 'record') return RECORD_OK
     return envelope(label)
   },
 
   'record-fails': label => {
     if (label === 'staged diff') return STAGED
-    if (label === 'aggregate') return envelope('merge-gate')
     if (label === 'record') return {
       recorded: false,
       exit_code: 4,
@@ -230,30 +254,64 @@ console.log('gate_review_harness')
 }
 
 {
-  const { result } = await run('aggregator-lies')
-  result.verdict !== 'PASS'
-    ? ok(`the script overrides an aggregator that claims PASS (got ${result.verdict})`)
-    : bad('FAIL-OPEN: the script believed an aggregator that ignored a missing gate')
-  has(result.envelope, 'gate-did-not-run')
-    ? ok('the missing gate is in the envelope even when the aggregator omitted it')
-    : bad('the aggregator dropped the missing gate and the script let it')
-}
-
-{
   const { result } = await run('all-gates-die')
   result.verdict === 'FAIL' && result.recorded === false
     ? ok('every gate dead → FAIL, nothing recorded')
     : bad(`every gate dead → ${JSON.stringify(result.verdict)}`)
 }
 
+// ── aggregation is the script's job now; prove it does it, and does it alone ──
 {
-  const { result } = await run('aggregator-dies')
-  result.verdict === 'FAIL' && result.recorded === false
-    ? ok('a dead aggregator → FAIL, nothing recorded')
-    : bad(`dead aggregator → ${result.verdict}, recorded=${result.recorded}`)
-  Array.isArray(result.envelopes) && result.envelopes.length === 3
-    ? ok('a dead aggregator still surfaces the raw envelopes')
-    : bad('the raw envelopes were lost when aggregation failed')
+  const { result, calls } = await run('duplicate-findings')
+  const f = result.envelope.findings
+
+  calls.every(c => c.phase !== 'Aggregate')
+    ? ok('no agent is spawned to aggregate — the script merges')
+    : bad('an agent ran in the Aggregate phase; the round-trip is back')
+
+  const at42 = f.filter(x => x.rule === 'missing-tenant-filter' && x.line === 42)
+  at42.length === 1
+    ? ok('the same rule at the same line from two gates collapses to one finding')
+    : bad(`same rule+line survived ${at42.length} times`)
+  at42[0] && at42[0].severity === 'CRITICAL'
+    ? ok('the surviving duplicate keeps the HIGHER severity, not the first seen')
+    : bad(`dedupe downgraded a CRITICAL to ${at42[0] && at42[0].severity}`)
+
+  f.some(x => x.rule === 'missing-tenant-filter' && x.line === 88)
+    ? ok('the same rule at a DIFFERENT line survives — not a duplicate')
+    : bad('dedupe swallowed a second, genuine occurrence of the same rule')
+  f.some(x => x.rule === 'unused-import' && x.line === 42)
+    ? ok('a different rule at the same line survives')
+    : bad('dedupe keyed on location alone and ate an unrelated finding')
+
+  f.length === 3
+    ? ok('four gate findings, one true duplicate → three survive')
+    : bad(`expected 3 findings after dedupe, got ${f.length}`)
+  result.verdict === 'FAIL'
+    ? ok('the verdict follows the merged findings (CRITICAL → FAIL)')
+    : bad(`merged CRITICAL did not produce FAIL: ${result.verdict}`)
+
+  f.map(x => x.severity).join() === 'CRITICAL,HIGH,LOW'
+    ? ok('findings are ordered by severity')
+    : bad(`findings out of order: ${f.map(x => x.severity).join()}`)
+
+  // The clock. The script has no Date; the envelope must still be dated.
+  result.envelope.timestamp === '2026-09-04T12:00:00Z'
+    ? ok('the merged envelope is dated from the gates, not from a clock the script lacks')
+    : bad(`merged timestamp = ${result.envelope.timestamp}`)
+}
+
+// The diff the gates reviewed must be the diff the record points at.
+{
+  const { calls } = await run('all-clean')
+  const record = calls.find(c => c.label === 'record')
+  record && record.prompt.includes(`--diff-sha ${DIFF_SHA}`)
+    ? ok('Record is told the sha sampled before the review, not asked to recompute one')
+    : bad('the Record prompt does not carry the sha collected up front')
+  const recomputes = /git hash-object/.test(record ? record.prompt : '')
+  recomputes
+    ? bad('Record still recomputes the sha — it can drift from what was reviewed')
+    : ok('Record does not recompute the sha')
 }
 
 {

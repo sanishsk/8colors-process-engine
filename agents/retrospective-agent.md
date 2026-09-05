@@ -34,6 +34,7 @@ pe collect --window 7      # weekly retro
 pe collect                 # daily retro (window=1)
 pe telemetry collect       # L4: ingest Claude Code session transcripts
 pe telemetry summary       # per-session cost + token totals for the window
+pe telemetry context       # T1: what is re-read every turn vs loaded on use
 ```
 
 `pe collect` is the P7.3 portable git-derived collector — zero Claude
@@ -109,10 +110,39 @@ docs/dev-log/monthly/<YYYY-MM>.md
 Work through these checks in order. Every section must cite specific numbers from the JSON.
 
 ### 1. Token Efficiency
+
+Read the **"Where the tokens go"** block from `pe telemetry summary` FIRST
+and rank by it, because the intuitive levers are usually the wrong ones. On
+the engine's own 2,231-turn ledger:
+
+| | share of input-side billed-equivalent |
+|---|---|
+| context replayed (cache read) | 73.1% |
+| context written (cache create) | 24.7% |
+| output — everything that was generated | 2.0% |
+| new input | 0.2% |
+
+**Generation was 2%.** Effort spent making the model write terser code is
+effort spent on the 2%. 356,681 tokens were replayed per turn against 968
+generated.
+
 - Total tokens this week vs previous 4 weeks — trending up/down/flat?
-- Cache hit ratio (`cache_read / total_input`) — higher is better (> 90% = excellent)
-- Tokens-per-prompt — rising or falling?
-- Any session burned >500k tokens? What did it accomplish? Worth it?
+- **Cache hit ratio is not a score to maximise.** A ratio near 100% only
+  says the context is stable, not that it is small — and it reads best
+  exactly when the context is largest, because you are paying 10% of a huge
+  number instead of 100% of it. Report `cache_read / turns` (tokens replayed
+  per turn) instead: that is the number the bill actually follows.
+- From `pe telemetry context`: how much of the replay is the CLAUDE.md chain
+  (per-turn, trimmable by editing) versus conversation history (grows with
+  session length, not trimmable by editing anything)? On the engine it was
+  2% files, 98% conversation. If yours is the same, **the action is shorter
+  sessions, earlier compaction, and pushing bounded work into subagents** —
+  not rewriting prose.
+- Any session burned >500k tokens? What did it accomplish? Worth it? A long
+  session costs superlinearly: every turn re-reads every previous turn.
+- **Red flag:** any model showing `$0.00` with a non-zero turn count is
+  UNPRICED, not free — `pe telemetry summary` flags these with `*`. The
+  totals understate the bill until the price table is updated.
 - **Red flag:** tokens grew but commits didn't → investigate bloat
 
 ### 2. Agent Health

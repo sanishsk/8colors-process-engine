@@ -7,6 +7,140 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.52.0] — 2026-09-05
+
+### Changed — the suite runs in 25s instead of 105s
+
+`tests/run-all.sh` was a serial for-loop: 105s of wall clock at 57% of ONE
+core on an 8-core box. Almost none of that was computation — these tests fork
+git, python and bash and then wait — so the machine sat idle while the loop
+queued. Under `xargs -P` it takes 25s. The suite is what you run before every
+commit, and a two-minute suite is one people skip.
+
+Tests were already safe to run concurrently: every test needing a mutable tree
+builds one under `mktemp -d`. That was a property, not a rule, so the runner
+now samples `git status --porcelain` either side of the run and reports a test
+that writes into the repo — caught the first time it happens rather than the
+first time it loses a race. `PE_TEST_JOBS=1` forces serial.
+
+### Changed — `/gate-review` drops an agent from its critical path
+
+The aggregating agent was handed every envelope as JSON, but only three of its
+fields survived: verdict, failure_class, gate_name and schema_version were all
+recomputed straight after, because they are the floor and the floor is not
+delegated. A full serial round-trip bought a sort and a clock reading. Dedupe,
+severity ordering and the verdict are deterministic and now run in the script —
+a round-trip cheaper, and the merge can no longer be talked out of a finding.
+
+Collect now also samples the staged-diff sha and Record uses it instead of
+recomputing. Two separate readings of "the staged diff" meant a verdict could
+be recorded against a diff no gate had seen if anything was staged mid-review.
+
+### Added — `/parallel-fix`: many issues at once, isolated
+
+The engine had one parallel mechanism, `/gate-review`: one diff, three agents.
+Nothing covered the opposite shape — several unrelated issues, one repo, which
+is the shape a backlog has. Each fix now runs in its own git worktree on its
+own branch, so two agents cannot interleave edits or sweep up each other's
+half-finished work.
+
+Isolation does not stop two fixes being correct alone and wrong together, so
+the script cross-references the files every branch touched and reports overlaps
+as a sequencing requirement — independent branches first, colliding ones last.
+Three floors are applied by the script, not asked of the agent that did the
+work: a null result is an UNFIXED issue named in the report, a test never seen
+to fail proves nothing, and a red suite or unreviewed branch is not landable.
+It merges nothing.
+
+### Fixed — `pe install` never delivered `workflows/`
+
+Zero mentions of "workflows" in the installer, so `.claude/workflows/` was
+never created and the only route into a project was a `cp` buried in
+docs/RUNNING_AGENTS.md. Every adopter who ran the installer got the agents, the
+commands and the hooks, and silently no `/gate-review`. Now copied (not
+symlinked — 2.1.216+ will not write through a symlink there), with a locally
+modified workflow backed up to `*.local-backup` rather than clobbered.
+
+### Fixed — `pe shadow reset` was unreachable for eleven releases
+
+It shipped in `pe_orchestrator.py`'s argparse in P2.11; `cmd_shadow` routed
+only `decide|reconcile`. Wired, documented, and the test now derives the
+roster from the argparse definitions rather than a hand-kept list.
+
+### Fixed — nine python files were outside the integrity manifest
+
+`pe verify`'s SURFACE_GLOBS said `scripts/pe_*.py`, narrow enough to look
+deliberate, excluding `research_index.py` — which `pe install` SYMLINKS into
+adopter projects — and `agent_runner.py`, which spawns agents. Widened to
+`scripts/*.py`. Manifest 85 → 94 entries.
+
+### Added — verdict tests for the eight hooks that only ever ran
+
+`test_hook_smoke.sh` asserts that every hook terminates and speaks when it
+refuses, and says of itself: "It asserts nothing about VERDICT." For eight
+hooks there was no other test, so one that ran cleanly and blocked the wrong
+thing passed everything the engine had. Each now gets an input it must accept
+and an input it must refuse (`tests/test_hook_verdicts.sh`).
+
+Writing them found two green-but-vacuous assertions of exactly the kind being
+hunted: a helper whose exit code never escaped its command-substitution
+subshell, and a stdin payload built with `$(...)`, which strips the trailing
+newline so `stacking-rule-check`'s `while read` loop never executed.
+
+### Changed — the engine now meets its own size budget
+
+`pe_orchestrator.py` (1202 lines) and `research_index.py` (1027) were exempted
+by name from the 800-line budget the engine holds adopters to. Split into
+`pe_routing` (decisions), `pe_escalation` (the A4 loop), `research_embed`
+(chunking + providers), and the ten pre-existing functions over the 50-line
+limit — `route` at 173, `_run_a4_loop` at 221 — are all under it. KNOWN_OVER
+is empty.
+
+The split surfaced a real coupling bug: `_INVOKER_OVERRIDE` was a module global
+the tests set on one module and the loop read from another's namespace, which
+fails silently across a file boundary. The loop now takes `invoker=`.
+
+### Added — the audit trail's first step: gate verdicts that survive
+
+`--record` writes one fixed filename, so every review overwrote the last.
+Right for the commit hook, useless for every other question — yesterday's
+verdicts were gone, and `dev-log-collect.sh` reported "0 gate verdicts" for a
+day with three reviews. `.claude/gates/history.jsonl` now takes one line per
+verdict: when, which gate, what verdict, which diff sha, findings by
+severity, model, failure class.
+
+This was logged in ADOPTION_AUDIT.md as deliberately not fixed, because the
+engine "had nowhere to express" whether records are tracked or ignored. It
+did: `pe install` has gitignored `.claude/gates/` since v0.13. What hid that
+was the engine's own .gitignore carrying `.pe/` and not `.claude/gates/`,
+while `install.sh` had the mirror image — so the engine's runtime writes were
+already dirtying every adopter tree. Both now ignore both, and `--record`
+additionally drops a self-ignoring `.gitignore` into the gates directory so
+it holds without `pe install` having run.
+
+### Added — `pe telemetry context`, and cache tokens made visible
+
+Measured on this project's own 2,231-turn ledger: 356,681 tokens of context
+replayed per turn against 968 generated. Context replay plus cache writes is
+97.8% of input-side billed-equivalent tokens; generation is 2.0%.
+
+The per-model table computed `cache_read` and printed input, output and cost
+— hiding 97% of the bill. It now shows both cache columns and ends with a
+weighted "Where the tokens go" ranking. An unpriced model no longer reads as
+free: `$0.00` printed beside 1,390 turns of the most expensive model in the
+ledger, so unpriced models are flagged, named, and the totals declared
+understated.
+
+`pe telemetry context` inventories what is paid per turn (the CLAUDE.md
+chain) versus on demand (agents, commands, skills, workflows) — and
+reconciles it against the ledger, because the files are only 2% of the
+replay. The other 98% is conversation history, which no file edit touches.
+Wired into the retrospective agent's mandatory Step 0, whose Token Efficiency
+section had been treating cache hit ratio as a score to maximise — a metric
+that reads best exactly when the context is largest.
+
+---
+
 ## [0.51.16] — 2026-09-04
 
 ### Added — CI runs `pe verify`, advisory

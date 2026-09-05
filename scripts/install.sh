@@ -140,6 +140,8 @@ declare -a INSTALLED_AGENTS=()
 declare -a SKIPPED_AGENTS=()
 declare -a REMOVED_BROKEN=()
 declare -a PRESERVED_FORKS=()
+declare -a WORKFLOWS_INSTALLED=()
+declare -a WORKFLOWS_REPLACED=()
 
 # install_link ENGINE_SRC DST LABEL — symlink DST at ENGINE_SRC, but NEVER
 # clobber a regular file that differs from the engine (an operator fork).
@@ -209,6 +211,35 @@ for link in "$TARGET/.claude/commands"/*.md; do
   REMOVED_BROKEN+=("commands/$(basename "$link")")
 done
 
+# Copy workflows. NOT symlinked, and not optional.
+#
+# workflows/*.js is executable gate logic — /gate-review decides what reaches
+# .claude/gates/last-gate.json, which is what the commit hook enforces — and
+# until now `pe install` did not deliver it at all. The only route into a
+# project was a `cp` buried in docs/RUNNING_AGENTS.md, so every adopter who
+# read the agent list and ran the installer got the agents, the commands, the
+# hooks and the skills, and silently no workflows. The engine's recurring
+# defect is a capability that exists with nothing to deliver it; this was one.
+#
+# Copied rather than symlinked because Claude Code 2.1.216+ refuses to write
+# through a symlink in .claude/workflows/, and whether it discovers through
+# one is unverified. The cost of copying is that an engine upgrade does not
+# propagate on its own, so the installer overwrites on every run and says
+# which files it changed. A modified copy is backed up rather than clobbered
+# — the operator gets told, and gets the old bytes back.
+mkdir -p "$TARGET/.claude/workflows"
+for f in "$ENGINE_DIR"/workflows/*.js; do
+  [ -f "$f" ] || continue
+  wf_name="$(basename "$f")"
+  wf_dst="$TARGET/.claude/workflows/$wf_name"
+  if [ -e "$wf_dst" ] && ! cmp -s "$f" "$wf_dst"; then
+    cp "$wf_dst" "$wf_dst.local-backup"
+    WORKFLOWS_REPLACED+=("workflows/$wf_name")
+  fi
+  cp "$f" "$wf_dst"
+  WORKFLOWS_INSTALLED+=("$wf_name")
+done
+
 # Symlink skills (user-global — start-session / end-session apply across all
 # projects and discover the current project's CLAUDE.md / MEMORY / quality
 # calendar at runtime).
@@ -233,7 +264,13 @@ done
 if [ ! -f "$TARGET/.gitignore" ]; then
     touch "$TARGET/.gitignore"
 fi
-for pattern in "*.research-index.sqlite" ".process-engine.local.yaml" ".claude/gates/"; do
+# .pe/ holds everything the engine writes at runtime — decisions.jsonl,
+# telemetry.jsonl, traces/, a4-runs/, gate-review transcripts. The engine
+# gitignores it in its OWN repo and did not add it here, so every adopter
+# who ran `pe shadow decide` or `pe telemetry collect` got a permanently
+# dirty working tree — and stop-uncommitted-reminder, shipped by this same
+# engine, then nagged about it every turn.
+for pattern in "*.research-index.sqlite" ".process-engine.local.yaml" ".claude/gates/" ".pe/"; do
     if ! grep -qF -- "$pattern" "$TARGET/.gitignore" 2>/dev/null; then
         echo "$pattern" >> "$TARGET/.gitignore"
     fi
@@ -501,6 +538,14 @@ fi
 if [ "${#PRESERVED_FORKS[@]}" -gt 0 ]; then
   echo "  Preserved: ${#PRESERVED_FORKS[@]} customized file(s) NOT overwritten (${PRESERVED_FORKS[*]})"
   echo "             Run 'pe sync $TARGET' to review them against the engine versions."
+fi
+if [ "${#WORKFLOWS_INSTALLED[@]}" -gt 0 ]; then
+  echo "  Workflows: ${#WORKFLOWS_INSTALLED[@]} copied → $TARGET/.claude/workflows/ (${WORKFLOWS_INSTALLED[*]})"
+  echo "             Copies, not symlinks — re-run 'pe install' after an engine upgrade."
+fi
+if [ "${#WORKFLOWS_REPLACED[@]}" -gt 0 ]; then
+  echo "  Replaced:  ${#WORKFLOWS_REPLACED[@]} modified workflow(s) overwritten (${WORKFLOWS_REPLACED[*]})"
+  echo "             Previous contents saved alongside as *.local-backup."
 fi
 SKILL_COUNT=$(ls "$HOME/.claude/skills" 2>/dev/null | grep -cE '^(start|end)-session$' || true)
 echo "  Skills:    ${SKILL_COUNT} symlinked → ~/.claude/skills/ (user-global)"

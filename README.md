@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.51.17-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.52.0-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -362,7 +362,17 @@ See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
 - v0.6 — `hooks/` directory (5 generalized pre-commit hooks) + `pe eject` + Linux systemd / cron / Windows Task Scheduler templates ✅
 - v0.7 — Domain agents (data-model-auditor, build-error-resolver, e2e-runner, retrospective-agent) + memory-consolidator agent + `/memory-consolidate` command + CI gate template + stacking-rule pre-push hook ✅
 - v0.8 — Distribution bundle: `pe sync` (diff-before-clobber), `pe install --subset`, version-aware `pe doctor`, PATH check ✅
-- **v0.9 (current)** — Reconciling `pe install` (silent broken-symlink cleanup) ✅
+- v0.9 — Reconciling `pe install` (silent broken-symlink cleanup) ✅
+- v0.10–v0.51 — E1 gate envelopes, the Phase 3 shadow router + circuit
+  breaker, A4 auto-escalation, S3–S5 security gates, PF perf gates, D
+  design gates, `pe verify` supply-chain checksums, A7 cross-session
+  recall, A8 plugin manifest + version pinning ✅ — see
+  [`CHANGELOG.md`](CHANGELOG.md), which is the maintained record. This
+  line is a summary written in 0.52.0; the roadmap below it had said
+  "v0.9 (current)" for forty-two releases.
+- **v0.52.0 (current)** — Parallel test suite (105s → 25s), `/parallel-fix`,
+  agentless aggregation in `/gate-review`, verdict tests for the last eight
+  untested hooks, and the engine finally meeting its own size budget ✅
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
 ---

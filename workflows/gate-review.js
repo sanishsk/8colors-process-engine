@@ -2,9 +2,9 @@ export const meta = {
   name: 'gate-review',
   description: 'Parallel gate review of the staged diff (security + database + code), schema-validated envelopes, one aggregated merge-gate verdict recorded where the commit hook reads it',
   phases: [
-    { title: 'Collect', detail: 'read the staged diff' },
+    { title: 'Collect', detail: 'read the staged diff and its sha' },
     { title: 'Review', detail: 'three gate agents in parallel' },
-    { title: 'Aggregate', detail: 'dedupe, rank, one merge-gate envelope' },
+    { title: 'Aggregate', detail: 'dedupe, rank, verdict — in-script, no agent' },
     { title: 'Record', detail: 'persist via pe gate parse --record' },
   ],
 }
@@ -130,17 +130,36 @@ function clampFinding(f) {
 // ─── Collect ─────────────────────────────────────────────────────────────
 phase('Collect')
 
+// Two commands and no judgement, so it runs on the cheapest tier at the
+// lowest effort — this is one of four serial round-trips and the only one
+// whose whole job is to read a file list.
+//
+// It takes the diff sha here rather than in Record, where it used to be
+// computed. The gates review the diff as it stands NOW; the commit hook
+// checks the recorded sha against the diff as it stands at commit time. Two
+// separate readings of "the staged diff" meant a verdict could be recorded
+// against a diff no gate had seen, if anything was staged while the review
+// was running. Sampling once, before the review, closes that: stage more
+// afterwards and the hook's sha check fails, which is the correct outcome.
 const staged = await agent(
-  'Run `git diff --cached --name-only` in the repository root and return the ' +
-  'staged file paths. Return an empty array if nothing is staged. Do not ' +
-  'modify anything.',
+  'In the repository root, run exactly these two commands and report their ' +
+  'output. Do not modify anything.\n' +
+  '1. `git diff --cached --name-only` — the staged file paths (empty array ' +
+  'if nothing is staged).\n' +
+  '2. `git diff --cached | git hash-object --stdin` — the sha of the staged ' +
+  'diff.',
   {
     label: 'staged diff',
     phase: 'Collect',
+    model: 'haiku',
+    effort: 'low',
     schema: {
       type: 'object',
-      required: ['files'],
-      properties: { files: { type: 'array', items: { type: 'string' } } },
+      required: ['files', 'diff_sha'],
+      properties: {
+        files: { type: 'array', items: { type: 'string' } },
+        diff_sha: { type: 'string', pattern: '^[0-9a-f]{40}$' },
+      },
     },
   },
 )
@@ -221,45 +240,68 @@ if (envelopes.length === 0) {
 }
 
 // ─── Aggregate ───────────────────────────────────────────────────────────
+// No agent runs here, and that is the point.
+//
+// There used to be one. It was handed every envelope as JSON and asked to
+// merge them — but grep the code that consumed its answer and only three
+// fields survived: findings, model_used, timestamp. verdict, failure_class,
+// gate_name and schema_version were all recomputed immediately below,
+// because they are the floor and the floor is not delegated. So a full
+// serial round-trip, with the entire review pasted into its prompt, bought
+// a sort and a clock reading.
+//
+// Every rule it was given is deterministic — dedupe on location, order by
+// severity, derive the verdict from the worst finding. Deterministic work
+// belongs in the script: it is a round-trip cheaper, it cannot be talked
+// out of a finding, and it cannot quietly drop one on the way through.
+// The clock it supplied is replaced by the latest gate timestamp, which is
+// a truer answer anyway — it dates the review, not the bookkeeping.
 phase('Aggregate')
 
-const merged = await agent(
-  `Merge these ${envelopes.length} gate envelopes into ONE envelope.\n\n` +
-  `${JSON.stringify(envelopes, null, 2)}\n\n` +
-  `Rules:\n` +
-  `- gate_name MUST be "merge-gate".\n` +
-  `- Deduplicate findings that describe the same problem at the same ` +
-  `file and line, keeping the highest severity and the clearest message. ` +
-  `Do not drop a finding just because it resembles another at a different ` +
-  `location.\n` +
-  `- Order findings by severity: CRITICAL, then HIGH, then MEDIUM, then LOW.\n` +
-  `- verdict is FAIL if any finding is CRITICAL, WARN if any is HIGH, ` +
-  `otherwise PASS.\n` +
-  `- failure_class is "worker_quality" when verdict is FAIL, else "none".\n` +
-  `- schema_version "1.0.0". Set timestamp to the current UTC time in ` +
-  `ISO-8601 (\`date -u +%Y-%m-%dT%H:%M:%SZ\`). model_used is the model you ` +
-  `are running as.\n` +
-  `- Every rule is kebab-case, at most 60 characters.\n\n` +
-  `Report what the gates found. Do not soften it, and do not add findings ` +
-  `of your own.`,
-  { label: 'aggregate', phase: 'Aggregate', schema: ENVELOPE_SCHEMA },
-)
-
-if (!merged) {
-  log('Aggregation failed. Reporting the raw envelopes without a verdict.')
-  return {
-    verdict: 'FAIL',
-    reason: 'aggregation agent did not return an envelope',
-    gates_ran: GATES.filter(g => !gatesMissing.includes(g)),
-    gates_missing: gatesMissing,
-    envelopes,
-    recorded: false,
-  }
+const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+const rank = f => {
+  const i = SEVERITY_ORDER.indexOf(f.severity)
+  return i === -1 ? SEVERITY_ORDER.length : i
 }
 
-// Re-apply the floor to the aggregate. The agent was told the rules; this
-// is the part that does not depend on it having followed them.
-const findings = missingFindings.concat(merged.findings || []).map(clampFinding)
+// Same rule, same file, same line = the same problem seen by two gates.
+// A different line is a different problem, however similar it reads —
+// collapsing those is how a real second occurrence disappears.
+function dedupe(all) {
+  const byKey = new Map()
+  for (const f of all) {
+    const key = `${f.rule} ${f.file || ''} ${f.line ?? ''}`
+    const prev = byKey.get(key)
+    if (!prev || rank(f) < rank(prev)) byKey.set(key, f)
+  }
+  return [...byKey.values()]
+}
+
+const gateFindings = envelopes.flatMap(e => e.findings || [])
+// missingFindings are never deduped away — one per absent gate, by construction.
+const findings = missingFindings
+  .concat(dedupe(gateFindings).sort((a, b) => rank(a) - rank(b)))
+  .map(clampFinding)
+
+const duplicatesDropped = gateFindings.length - (findings.length - missingFindings.length)
+if (duplicatesDropped > 0) {
+  log(`${duplicatesDropped} duplicate finding(s) merged across gates.`)
+}
+
+// ISO-8601 sorts lexicographically when the offset is uniform, which it is
+// here: every gate is told to emit UTC. The script has no clock of its own
+// — Date is unavailable — and dating the merge by the last gate to finish
+// is the honest answer regardless.
+const timestamp = envelopes
+  .map(e => e.timestamp)
+  .filter(Boolean)
+  .sort()
+  .pop()
+
+// No model produced this envelope; the script did. Name the models whose
+// findings are in it, rather than claiming one wrote the merge.
+const modelsUsed = [...new Set(envelopes.map(e => e.model_used).filter(Boolean))]
+const model_used = modelsUsed.length ? modelsUsed.join(' + ') : 'unknown'
 const overlong = findings.filter(f => /…\[truncated\]$/.test(f.message)).length
 if (overlong > 0) {
   log(`${overlong} finding message(s) exceeded ${MAX_MESSAGE} chars and were truncated to keep the envelope recordable.`)
@@ -279,8 +321,8 @@ const envelope = {
   verdict,
   failure_class: verdict === 'FAIL' ? 'worker_quality' : 'none',
   findings,
-  model_used: merged.model_used,
-  timestamp: merged.timestamp,
+  model_used,
+  timestamp,
 }
 
 log(`Aggregate: ${verdict} — ${findings.length} finding(s) across ${envelopes.length} gate(s)`)
@@ -314,11 +356,12 @@ const recorded = await agent(
   `\`\`\`json gate-envelope\n<the envelope above, verbatim>\n\`\`\`\n\n` +
   `Both blocks are required by pe gate parse in transcript mode, and the ` +
   `six values must match the envelope exactly.\n` +
-  `2. Compute the staged-diff sha: ` +
-  `\`git diff --cached | git hash-object --stdin\`\n` +
-  `3. Run: pe gate parse --record .claude/gates/last-gate.json ` +
-  `--diff-sha <sha> .pe/gate-review-transcript.md\n` +
-  `4. Report its exit code and its stderr line VERBATIM. That line says ` +
+  // The sha is passed in, not recomputed. It was sampled before the gates
+  // ran, so it identifies the diff that was actually reviewed. Recomputing
+  // it here would silently re-point the record at whatever is staged now.
+  `2. Run: pe gate parse --record .claude/gates/last-gate.json ` +
+  `--diff-sha ${staged.diff_sha} .pe/gate-review-transcript.md\n` +
+  `3. Report its exit code and its stderr line VERBATIM. That line says ` +
   `either "gate: recorded ..." or "gate: NOT recorded ...". Do not ` +
   `paraphrase it and do not claim success if the exit code is non-zero.\n\n` +
   `Change nothing else.`,
