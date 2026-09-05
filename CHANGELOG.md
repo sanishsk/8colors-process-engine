@@ -18,16 +18,23 @@ since the collector shipped; `install.sh` propagates four ignore patterns to
 adopters and this was not among them — the same mirror-image gap fixed for
 `.claude/gates/` in v0.52.0, one directory over.
 
-**Why it is not cosmetic.** `pre-commit` stashes unstaged tracked changes
-before running hooks and restores them after. A writer that appends inside
-that window makes the restore conflict, and pre-commit rolls the whole commit
-back. The operator sees a failed commit immediately after `lint ok / tests ok
-/ secrets ok` — it reads as a gate failure and is not one. Because this
-collector is on a timer, it fires at a moment nobody chose, including during
-a commit.
+**Why it is not cosmetic.** Every `pe collect` leaves `?? docs/` in the
+adopter's `git status` — reproduced from a clean repo before the fix. And
+once an adopter commits those digests (the natural reaction to a persistent
+untracked directory), the collector is modifying **tracked** files on a
+timer, which is the input `pre-commit` cannot tolerate: it stashes unstaged
+tracked changes before running hooks and restores them after, and a write
+landing inside that window conflicts the restore and rolls the whole commit
+back — reading as a gate failure when every gate passed.
 
-Diagnosed in a live adopter against a subagent-completion log with exactly
-this signature; the engine's own collector is the same shape, scheduled.
+**Correction, same day.** This entry originally claimed the mechanism had
+been diagnosed in a live adopter against a subagent-completion log. That
+diagnosis was later retracted by the adopter: their rollback was the
+engine's `security-review-trailer` hook blocking, correctly, on an
+authorization change without a `Security-reviewed:` trailer — misread
+because the block printed after pre-commit's `Restored changes` line. The
+defect fixed here stands on its own reproduction; the story that prompted
+looking for it was wrong, and is recorded here so nobody builds on it.
 
 Two independent guarantees, since either alone has a hole: `install.sh` now
 propagates `docs/dev-log/`, and the collector drops a self-ignoring
