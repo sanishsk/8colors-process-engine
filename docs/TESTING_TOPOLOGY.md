@@ -158,6 +158,44 @@ original plan recorded there: the module→suite map lives in
 `tests/journeys/coverage-map.json` (product-owned sidecar), not
 `.process-engine.yaml`.
 
+## Snapshot testing for native UI (added 2026-09-05, from a live adopter)
+
+The **code is app-level and stays there** — a Swift package dependency, a
+test target and a scheme split have no cross-project abstraction, the same
+way the engine does not own a project's unit tests. What generalizes is the
+set of things the first adopter got wrong, so the next one need not:
+
+- **`pointfreeco/swift-snapshot-testing`** (MIT) is the tool. Commit the
+  baselines: a baseline that is not in git is not a baseline, it is a local
+  file that regenerates itself on the next run and catches nothing. Same
+  doctrine as D3's `docs/design/reference/`.
+- **It catches regressions, not first builds.** A Finish button that shipped
+  as a bare capsule and an edge surge that animated 0→0 were both *first*
+  appearances — there was no correct baseline to diff against. Snapshots stop
+  those recurring; they cannot catch them arriving. Do not let their presence
+  read as coverage of "does this look right".
+- **Record deliberately, then look at the PNG.** The library will
+  auto-record a missing baseline, which means an unreviewed bug can be
+  locked in as "expected" and a green suite will then actively confirm it.
+  A green suite is not a looked-at screen.
+- **The same simulator, or false failures.** Baselines must be compared on
+  the exact simulator that recorded them; a different Xcode/iOS pairing
+  differs in anti-aliasing and font hinting. Keep them in their own test
+  plan, out of the blocking pre-commit/CI path, until CI is confirmed to run
+  a macOS runner pinned to that simulator. Record the device model and iOS
+  version in a README beside the PNGs.
+- **Pin Dynamic Type and avoid non-deterministic input.** Text styles scale
+  with the user's content-size setting, so pin it in the test rather than
+  inheriting the simulator default. Skip screens carrying live photos or
+  avatars, or use a fixed fixture. On material/blur surfaces use the
+  library's `precision:` parameter so GPU noise does not produce perpetual
+  false failures.
+- **Pick screens with a corrected-in-production history.** A locked snapshot
+  earns its keep on the *second* accidental regression, not on the first.
+
+Where this sits on the two axes: **runtime execution, app side** — the
+engine ships the doctrine, the project ships the tests.
+
 ## The one-line policy
 
 > **Static & commit-time & judgment → engine. Dynamic & runtime & execution →

@@ -7,6 +7,65 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.55.0] — 2026-09-05
+
+### Added — `measure_screenshot.py`: the number is measured, not reasoned about
+
+Promoted from a live adopter, which wrote it under a recorded mistake: a feed
+title was set to 22pt by reasoning from the surrounding layout, the reference
+app's was ~17pt, and it only read wrong when the two screens sat side by
+side. Two correction rounds in one day. **A promoted size is a guess until it
+sits beside the reference.**
+
+Four commands, Pillow and argparse and nothing else: `colour` (one pixel, not
+a cluster average — the difference between "the mood of this image" and "is
+this fill exactly `#0c0c0e`"), `rules` (flat-row scan for borders and
+dividers, merging adjacent rows so a 3px rule is one rule), `ink` (bounding
+box of everything that is not the background), `gap` (distance in both axes).
+
+**What it refuses to do is the load-bearing half.** Without `--device-width`
+every result stays in pixels and the point field is `null` rather than
+silently wrong by a factor of two or three. It reports `ink_height`, never
+`font_size`, because cap-height-to-point depends on the typeface and the
+typeface is not in the image. An empty region returns `found: false`, not a
+zero-size box. Font family, easing, duration and pressed states are absent
+from a still frame entirely, and it does not pretend otherwise — a guess
+printed in the same shape as a measurement is worse than no tool, because
+the guess gets acted on.
+
+Lands at `docs/templates/tools/` via `pe install` (copy-once, `chmod +x`, so
+adopter edits survive an upgrade). `design-critic` Step 4 now shells out to
+it before citing drift, using the `Bash` tool it already declares — no new
+agent, no new mode, no new tool grant.
+
+13 assertions against synthetic images with known answers. Pillow is not an
+engine dependency, so the test skips loudly without it **and CI installs
+Pillow for the suite job** — a promoted script whose test never runs is the
+defect shape this repo keeps finding.
+
+### Fixed — `pe install` never created `docs/design/reference/`
+
+The engine has documented `docs/design/reference/<page>.png` as the home for
+locked reference screenshots since D3, and never created the directory. So an
+adopter put theirs in `docs/reference/<vendor>/` and nothing objected — and
+tooling that keys off the documented path would have missed them. A
+convention that lives only in prose is not a convention. `pe install` now
+scaffolds the directory and lands the reference README in it.
+`visual-baseline-guard` stays inert until an actual PNG is locked, so
+scaffolding activates nothing.
+
+### Added — snapshot-testing doctrine for native UI
+
+`docs/TESTING_TOPOLOGY.md` gains the pattern from the same adopter's
+`swift-snapshot-testing` adoption. The code stays app-level — a Swift package
+and a test target have no cross-project abstraction — but the caveats
+generalize: snapshots catch regressions and **not first builds** (a button
+that shipped as a bare capsule had no correct baseline to diff against), an
+auto-recorded baseline can lock a bug in as expected, and comparing on a
+different simulator produces false failures from font hinting.
+
+---
+
 ## [0.54.2] — 2026-09-05
 
 ### Fixed — the security gate fired on a workout, and on its own templates

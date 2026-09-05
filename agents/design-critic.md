@@ -311,6 +311,39 @@ Does `docs/design/reference/<page>.png` exist? If yes, judge the
 diff against it. If no and the page is new: flag a **MEDIUM**
 finding asking the operator to lock a reference screen before merge.
 
+**Measure before you cite drift.** If
+`docs/templates/tools/measure_screenshot.py` exists, use it via `Bash`
+for exact colours, distances, rule positions and ink extents instead of
+estimating them:
+
+```bash
+python3 docs/templates/tools/measure_screenshot.py colour ref.png 120 340
+python3 docs/templates/tools/measure_screenshot.py rules  ref.png --x0 40 --x1 1160
+python3 docs/templates/tools/measure_screenshot.py ink    ref.png 40 300 380 340 --device-width 402
+python3 docs/templates/tools/measure_screenshot.py gap    ref.png 40 300 380 340 --device-width 402
+```
+
+Cite the measured figure in the finding — "locked reference: rule at
+y=340, `#0c0c0e`, 24px gap; this diff: y=362, `#0d0d10`, 31px" — not an
+impression. This exists because a title was set to 22pt against a
+reference's 17pt by reasoning from the surrounding layout, and cost two
+correction rounds in one day. **A promoted size is a guess until it sits
+beside the reference.**
+
+Two limits the tool states about itself, and you must not paper over:
+
+- Without `--device-width` (the device's *logical* width in points) every
+  result stays in pixels and the point field is `null`. Do not convert
+  it yourself — report pixels, or pass the width.
+- It measures `ink_height`, never `font_size`. Cap-height-to-point
+  depends on the typeface, and the typeface is not in the image.
+  Comparing the same ink measurement between two screenshots is the
+  honest use.
+
+Font family, easing, duration and pressed/disabled states are not in a
+still frame at all. Say `unknown` rather than estimating them — a guess
+printed beside a measurement gets acted on as if it were one.
+
 ### Step 5 — Emit the envelope
 
 Use the standard gate envelope shape (see

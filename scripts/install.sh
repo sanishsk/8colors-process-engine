@@ -342,6 +342,43 @@ if [ -d "$ENGINE_DIR/templates/design" ]; then
     done
 fi
 
+# Copy executable design tooling (v0.55.0). Unlike everything else under
+# docs/templates/, these are RUN in place — measure_screenshot.py is what
+# design-critic shells out to in Step 4 rather than estimating drift it
+# could measure. Copy-once like the rest, so an adopter's edits survive an
+# upgrade, and chmod +x because a tool that is not executable is a tool
+# nobody runs.
+if [ -d "$ENGINE_DIR/templates/tools" ]; then
+    mkdir -p "$TARGET/docs/templates/tools"
+    for f in "$ENGINE_DIR"/templates/tools/*; do
+        [ -f "$f" ] || continue
+        dst="$TARGET/docs/templates/tools/$(basename "$f")"
+        if [ ! -f "$dst" ]; then
+            cp "$f" "$dst"
+            chmod +x "$dst" 2>/dev/null || true
+        fi
+    done
+fi
+
+# Scaffold the reference-screenshot directory (v0.55.0). The engine has
+# documented docs/design/reference/<page>.png as the home for locked
+# reference shots since D3, and never created it — so adopters invented
+# their own locations (one put them in docs/reference/<vendor>/) and nothing
+# objected. A convention that lives only in prose is not a convention; the
+# tooling that keys off this path needs the path to exist.
+#
+# The README lands as the real file, not a .template: its presence is what
+# tells an operator where shots go. visual-baseline-guard stays inert until
+# an actual PNG is locked, so scaffolding the directory activates nothing.
+if [ ! -d "$TARGET/docs/design/reference" ]; then
+    mkdir -p "$TARGET/docs/design/reference"
+fi
+if [ ! -f "$TARGET/docs/design/reference/README.md" ] \
+   && [ -f "$ENGINE_DIR/templates/design/reference-README.md.template" ]; then
+    cp "$ENGINE_DIR/templates/design/reference-README.md.template" \
+       "$TARGET/docs/design/reference/README.md"
+fi
+
 # Copy security templates (v0.17.0 — S1). semgrep allowlist starter +
 # README explaining the SAST tool ladder.
 if [ -d "$ENGINE_DIR/templates/security" ]; then
