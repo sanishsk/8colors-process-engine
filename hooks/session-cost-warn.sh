@@ -40,14 +40,20 @@
 #                  the message, and none of it needs re-reading for the next
 #                  piece of work.
 #
-#                  This one is unconditional on purpose. Compaction is a
-#                  PRACTICE, and a practice that only gets mentioned once it
-#                  is already expensive is a practice nobody forms — by then
-#                  the session has spent the tokens the habit existed to
+#                  The MEASUREMENT is unconditional on purpose. Compaction is
+#                  a PRACTICE, and a practice that only gets mentioned once
+#                  it is already expensive is a practice nobody forms — by
+#                  then the session has spent the tokens the habit existed to
 #                  save. Commits are rare (a handful a session) where turns
-#                  are not, so the cost of saying it every time is a line,
-#                  and the cost of not saying it is measured below. Under the
-#                  bar it is one line; over the bar it makes the case.
+#                  are not, so saying it every time costs one line.
+#
+#                  The REASONING is said once a session, at the first commit
+#                  over the bar, and never again. It used to repeat verbatim
+#                  at every commit; an operator watching three identical
+#                  paragraphs scroll past on a docs commit asked what was
+#                  wrong with the tool, which is the question that precedes
+#                  muting it — and muting takes the one line worth keeping
+#                  with it.
 #
 # What this hook CANNOT do is compact for you. A hook returns a decision or a
 # message; there is no action that resets a session's context, and inventing
@@ -211,28 +217,41 @@ if per_turn < fire_at:
 # band 2 is twice it, and so on — a session that keeps growing is told again,
 # a session that merely sits above the line is not told every turn.
 #
-# The commit trigger skips this entirely and touches no state: it is meant to
-# fire at every commit, and it must not consume a Stop band either, or one
-# commit would silence the per-turn path for the rest of the session.
-if not at_commit:
-    band = max(1, int(per_turn // warn))
-    state_dir = project / ".pe"
-    state_file = state_dir / "session-cost.state"
-    key = transcript.stem
-    seen = {}
+# The commit trigger never touches the BAND: it is meant to fire at every
+# commit, and consuming a band would silence the per-turn path for the rest
+# of the session. It keeps its own entry in the same file under a distinct
+# key (`<session>:explained`), so the two cannot interfere and a state file
+# written before that key existed still parses — every value under `key`
+# itself is still the int the band logic expects.
+state_dir = project / ".pe"
+state_file = state_dir / "session-cost.state"
+key = transcript.stem
+
+
+def read_state():
     if state_file.exists():
         try:
-            seen = json.loads(state_file.read_text())
+            return json.loads(state_file.read_text())
         except Exception:
-            seen = {}
-    if seen.get(key, 0) >= band:
-        sys.exit(0)
-    seen[key] = band
+            return {}
+    return {}
+
+
+def write_state(seen):
     try:
         state_dir.mkdir(parents=True, exist_ok=True)
         state_file.write_text(json.dumps(seen))
     except OSError:
         pass                  # advisory; a lost state file only costs a repeat
+
+
+if not at_commit:
+    band = max(1, int(per_turn // warn))
+    seen = read_state()
+    if seen.get(key, 0) >= band:
+        sys.exit(0)
+    seen[key] = band
+    write_state(seen)
 
 opening = sum(replays[:WINDOW]) / max(len(replays[:WINDOW]), 1)
 ratio = per_turn / opening if opening else 0
@@ -254,18 +273,25 @@ evidence = (
 
 if at_commit:
     msg = (
-        f"Commit landed. The last {len(recent)} turns each replayed about "
-        f"{per_turn:,.0f} tokens of context{growth}. That work is now in the "
-        f"diff and the message — the next piece does not need to re-read it, "
-        f"so this is the cheapest moment to /compact."
+        f"Commit landed — the cheapest moment to /compact. The last "
+        f"{len(recent)} turns each replayed about {per_turn:,.0f} tokens of "
+        f"context{growth}; that work is in the diff and the message now, so "
+        f"the next piece does not need to re-read it."
     )
-    if per_turn >= warn:
-        msg += f"\n{evidence}"
-    msg += (
-        "\nEvery commit says this, on purpose: compacting is a habit, not an "
-        "alarm. `pe telemetry context` shows the split; "
-        "session_cost.enabled=false in .process-engine.yaml silences it."
-    )
+    # The argument, once a session. After it has been made, the line above
+    # stands on its own: an operator who has read the case does not need it
+    # re-made to act on it, and re-making it is how the case stops landing.
+    seen = read_state()
+    if not seen.get(f"{key}:explained"):
+        if per_turn >= warn:
+            msg += f"\n{evidence}"
+        msg += (
+            "\nThat line will appear at every commit; this reasoning appears "
+            "once a session. `pe telemetry context` shows the split; "
+            "session_cost.enabled=false in .process-engine.yaml silences it."
+        )
+        seen[f"{key}:explained"] = 1
+        write_state(seen)
 else:
     msg = (
         f"Session cost: the last {len(recent)} turns each replayed about "
