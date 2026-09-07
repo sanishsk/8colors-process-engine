@@ -182,6 +182,26 @@ said '531k' \
     && ok "over the bar, the commit reminder makes the case as well" \
     || bad "an expensive commit gave the bare reminder with no evidence"
 
+# ...but it makes that case ONCE. The measurement is the habit and repeats;
+# the argument for it is read once and then only takes room. Three identical
+# paragraphs per commit is what an operator asks about before muting the
+# hook, and muting costs the line above, which was the part worth keeping.
+run_hook "$PROJ2C" "$(commit_event "$T")" PE_SESSION_COST_WARN=300000
+if said 'Commit landed' && ! said '531k'; then
+    ok "the second commit keeps the measurement and drops the argument"
+else
+    bad "the second commit repeated the case verbatim: $(cat "$OUT")"
+fi
+
+# A fresh session hears it again — the state is per-transcript, not global,
+# or a new session would inherit an argument it has never been given.
+T2="$TMP/other-session.jsonl"
+make_transcript "$T2" 600000 30
+run_hook "$PROJ2C" "$(commit_event "$T2")" PE_SESSION_COST_WARN=300000
+said '531k' \
+    && ok "a new session is given the case once of its own" \
+    || bad "a new session inherited another session's silence"
+
 run_hook "$PROJ2C" "$(stop_event "$T")" PE_SESSION_COST_WARN=300000
 said 'Session cost' \
     && ok "a commit does not silence the Stop trigger — separate budgets" \
