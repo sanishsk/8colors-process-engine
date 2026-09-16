@@ -6,7 +6,7 @@
 > semantic search over prior research, and a weekly retro cadence —
 > into any project, in one install.
 
-[![version](https://img.shields.io/badge/version-0.58.0-blue)](VERSION)
+[![version](https://img.shields.io/badge/version-0.58.1-blue)](VERSION)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#platform-support)
 
@@ -381,7 +381,7 @@ See [`INSTALL.md`](INSTALL.md) for the full uninstall walkthrough.
 - v0.54.x — four defaults corrected by a live adopter rather than a test: `claude-md-size` thresholds readable by both its launchers (0.53.1); the review gate takes an opt-in `review_gate.exempt_paths` so narrowing it no longer means a local wrapper (0.54.0); the scheduled dev-log collector no longer dirties the adopter's tree (0.54.1); and the security gate stops firing on a workout "session" or its own shipped templates, via the same fail-closed exempt mechanism, now shared in `hooks/_exempt-paths.sh` (0.54.2) ✅
 - v0.56.0 — the engine looks outward before it builds: `docs/OSS_SEARCH_ORDER.md` and CONTRIBUTING send agent-behaviour work to skills.sh first; `docs/SKILLS.md` records where every core skill comes from and how to keep it fresh; `grilling` joins the core set, wired into `/brainstorm` and `planner` ✅
 - v0.57.0 — `pe skills-audit --upstream`: each skill's `SKILL.md` compared with its source by git blob hash, so a stale skill is found by the monthly audit rather than by accident ✅
-- **v0.58.0 (current)** — `design-critic`'s floor recalibrated to 2026: tells 1, 4, 7 and 8 now catch the cream-and-terracotta palette, the identical-card kit, all-caps eyebrows and template chrome that used to pass all nine. Same nine tells, same threshold ✅
+- **v0.58.x (current)** — `design-critic`'s floor recalibrated to 2026: tells 1, 4, 7 and 8 now catch the cream-and-terracotta palette, the identical-card kit, all-caps eyebrows and template chrome that used to pass all nine. Same nine tells, same threshold (0.58.0); `pe doctor` asks git where the pre-commit hook is, so a linked worktree or `core.hooksPath` no longer reads as "hook missing" (0.58.1) ✅
 - v1.0 — Plugin marketplace publication + Anthropic Skills marketplace listing
 
 ---
