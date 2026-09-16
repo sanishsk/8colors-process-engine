@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.58.1] — 2026-09-16
+
+### Fixed — `pe doctor` said the hook was missing in every git worktree
+
+**The gap.** Check 1 read `<project>/.git/hooks/pre-commit`. In a linked
+worktree `.git` is a *file* pointing at the main repository, and the hook
+lives in the common git dir, so doctor reported "`.git/hooks/pre-commit`
+does not exist — run `pre-commit install`" and exited 1 for a hook that ran
+on every commit. Seen in Origyn on 2026-09-16, where every session works in a
+worktree: a check that fails on a correct install teaches people to ignore
+it, which is the failure doctor exists to prevent.
+
+**The fix.** The path now comes from `git rev-parse --git-path
+hooks/pre-commit` — the hook git itself runs. That covers the worktree's
+common dir and `core.hooksPath` too; outside a git repository it falls back
+to the old path. Messages name the resolved path instead of a fixed one.
+
+`tests/test_pe_doctor_hooks.sh` gains two cases: a linked worktree and a
+`core.hooksPath` hook, both expected to pass.
+
+---
+
 ## [0.58.0] — 2026-09-16
 
 ### Changed — `design-critic` tells recalibrated to what generated design looks like now

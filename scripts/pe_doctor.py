@@ -27,9 +27,10 @@ that runs never mentions the one that doesn't.
 
 Checks
 ------
-  1  .git/hooks/pre-commit exists at all
+  1  the pre-commit hook git runs exists at all (resolved by git, so a
+     linked worktree's common dir and core.hooksPath are honoured)
   2  if .pre-commit-config.yaml lists engine hooks, the framework's
-     dispatcher is what .git/hooks/pre-commit actually invokes
+     dispatcher is what that hook actually invokes
   3  .pre-commit-config.yaml is tracked by git (untracked config is
      config nobody reviews, shares, or gets on a fresh clone)
   4  every engine hook path referenced from .claude/settings.json and
@@ -82,6 +83,14 @@ def _git(project: Path, *args: str) -> str:
         return ""
 
 
+def _hook_path(project: Path) -> Path:
+    """The pre-commit hook git will actually run. In a linked worktree `.git`
+    is a file and the hook lives in the common git dir; `core.hooksPath` moves
+    it anywhere. `--git-path` answers both, relative to the project."""
+    rel = _git(project, "rev-parse", "--git-path", "hooks/pre-commit")
+    return project / rel if rel else project / ".git" / "hooks" / "pre-commit"
+
+
 def _read(p: Path) -> str:
     try:
         return p.read_text(errors="replace")
@@ -97,10 +106,10 @@ def _check_git_hook(r: Result, githooks: Path, cfg_hooks: list[str]) -> None:
     elif cfg_hooks:
         r.add("FAIL", "git hook present",
               f".pre-commit-config.yaml lists {len(cfg_hooks)} engine hook(s) "
-              "but .git/hooks/pre-commit does not exist — run `pre-commit install`")
+              f"but {githooks} does not exist — run `pre-commit install`")
     else:
         r.add("WARN", "git hook present",
-              "no .git/hooks/pre-commit; nothing gates commits in this project")
+              f"no {githooks}; nothing gates commits in this project")
 
 
 def _check_bypass(r: Result, githooks: Path, cfg_hooks: list[str]) -> None:
@@ -121,7 +130,7 @@ def _check_bypass(r: Result, githooks: Path, cfg_hooks: list[str]) -> None:
     shown = ", ".join(cfg_hooks[:4]) + ("…" if len(cfg_hooks) > 4 else "")
     r.add("FAIL", "engine hooks reachable",
           f".pre-commit-config.yaml configures {len(cfg_hooks)} engine hook(s) "
-          f"({shown}) but .git/hooks/pre-commit is a project script"
+          f"({shown}) but {githooks} is a project script"
           + (f" -> {target}" if target else "")
           + " and never invokes them. They are decoration. "
             "Either run `pre-commit install` (and fold the project script in as a "
@@ -297,7 +306,7 @@ def _check_engine(r: Result, engine: Path | None) -> None:
 
 def check_project(project: Path, engine: Path | None) -> Result:
     r = Result()
-    githooks = project / ".git" / "hooks" / "pre-commit"
+    githooks = _hook_path(project)
     cfg = project / ".pre-commit-config.yaml"
     cfg_text = _read(cfg)
     entries = _entries(cfg_text)
