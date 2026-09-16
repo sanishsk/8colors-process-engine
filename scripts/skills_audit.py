@@ -14,7 +14,7 @@ path via --home). Reports:
      (--project <path>): any skill/command name that ALSO lives in
      <project>/.claude/skills/ or <project>/.claude/commands/.
   4. Stocktake recommendation: the engine's opinion of a curated
-     "core-20" (documented in docs/SKILLS.md); everything outside
+     core set (documented in docs/SKILLS.md, with each skill's source); everything outside
      that list is candidate-for-review.
 
 Zero mutation. This tool never deletes or moves files. It surfaces the
@@ -33,7 +33,7 @@ ENGINE_DIR = Path(__file__).resolve().parent.parent
 # Skills the engine ships to ~/.claude/skills/ (user-global).
 ENGINE_SHIPPED_SKILLS = {"start-session", "end-session"}
 
-# The engine's curated "core-20" — the opinionated shortlist. Adopters
+# The engine's curated core set — the opinionated shortlist. Adopters
 # may keep more, but anything OUTSIDE this list should have a clear
 # reason to stay. See docs/SKILLS.md for the rationale per row.
 CORE_SKILLS = {
@@ -59,8 +59,10 @@ CORE_SKILLS = {
     "deployment-patterns",
     "docker-patterns",
     "e2e-testing",
-    # Frontend design polish
+    # Frontend design generator (anthropics/skills; design-critic is the gate)
     "frontend-design",
+    # Decision rounds before planning (mattpocock/skills; v0.56.0)
+    "grilling",
 }
 
 
@@ -88,42 +90,8 @@ def classify(name: str, engine_commands: set[str]) -> str:
     return "external"
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Audit ~/.claude/skills/ + ~/.claude/commands/ sprawl (P7.4).",
-    )
-    parser.add_argument(
-        "--home",
-        default=os.environ.get("HOME"),
-        help="Home dir (default: $HOME)",
-    )
-    parser.add_argument(
-        "--project",
-        default=None,
-        help="Adopter project path. Flags project-local duplicates.",
-    )
-    args = parser.parse_args()
-
-    home = Path(args.home).expanduser().resolve()
-    skills_dir = home / ".claude" / "skills"
-    cmds_dir = home / ".claude" / "commands"
-
-    skills = list_dir(skills_dir)
-    cmds = list_dir(cmds_dir)
-
-    engine_commands = {
-        f.stem for f in (ENGINE_DIR / "commands").glob("*.md")
-    }
-
-    # ─── report ────────────────────────────────────────────────────
-    print("skills-audit — Claude Code skill/command sprawl report")
-    print(f"  home:            {home}")
-    print(f"  skills dir:      {skills_dir}  ({len(skills)} entries)")
-    print(f"  commands dir:    {cmds_dir}  ({len(cmds)} entries)")
-    print(f"  engine commands: {len(engine_commands)} in {ENGINE_DIR}/commands/")
-    print()
-
-    # 1. skill/command name overlap = strongest consolidation signal
+def report_collisions(skills: list[str], cmds: list[str]) -> list[str]:
+    """[1] A name that is both a skill and a command: strongest consolidation signal."""
     overlap = sorted(set(skills) & set(cmds))
     if overlap:
         print(
@@ -138,63 +106,60 @@ def main() -> int:
         )
     else:
         print("[1] ✓ No skill/command name collisions.\n")
+    return overlap
 
-    # 2. classify skills
-    core_present, ext_skills, engine_shipped_present, engine_cmd_shadowed = [], [], [], []
+
+def report_classification(skills: list[str], engine_commands: set[str]) -> dict[str, list[str]]:
+    """[2] Bucket every skill; returns the buckets for the recommendation."""
+    buckets: dict[str, list[str]] = {
+        "engine-shipped": [], "engine-command": [], "core-recommended": [], "external": [],
+    }
     for name in skills:
-        cat = classify(name, engine_commands)
-        if cat == "engine-shipped":
-            engine_shipped_present.append(name)
-        elif cat == "engine-command":
-            engine_cmd_shadowed.append(name)
-        elif cat == "core-recommended":
-            core_present.append(name)
-        else:
-            ext_skills.append(name)
+        buckets[classify(name, engine_commands)].append(name)
+
+    def section(label: str, names: list[str], suffix: str = "") -> None:
+        print(f"    {label}{len(names)}")
+        for n in names:
+            print(f"      · {n}{suffix.format(n=n)}")
 
     print(f"[2] SKILLS CLASSIFICATION ({len(skills)} total):")
-    print(f"    engine-shipped (~/.claude/skills):  {len(engine_shipped_present)}")
-    for n in engine_shipped_present:
-        print(f"      · {n}")
-    print(f"    core-recommended (docs/SKILLS.md):  {len(core_present)}")
-    for n in core_present:
-        print(f"      · {n}")
-    print(f"    engine-command shadowed as a skill: {len(engine_cmd_shadowed)}")
-    for n in engine_cmd_shadowed:
-        print(f"      · {n}  (engine ships this as commands/{n}.md)")
-    print(f"    external / uncurated:                {len(ext_skills)}")
-    for n in ext_skills:
-        print(f"      · {n}")
+    section("engine-shipped (~/.claude/skills):  ", buckets["engine-shipped"])
+    section("core-recommended (docs/SKILLS.md):  ", buckets["core-recommended"])
+    section("engine-command shadowed as a skill: ", buckets["engine-command"],
+            "  (engine ships this as commands/{n}.md)")
+    section("external / uncurated:                ", buckets["external"])
     print()
+    return buckets
 
-    # 3. project-local duplicates
-    if args.project:
-        project = Path(args.project).expanduser().resolve()
-        proj_skills = list_dir(project / ".claude" / "skills")
-        proj_cmds = list_dir(project / ".claude" / "commands")
-        dup_skills = sorted(set(skills) & set(proj_skills))
-        dup_cmds = sorted(set(cmds) & set(proj_cmds))
-        print(f"[3] PROJECT-LOCAL DUPLICATES ({project}):")
-        if dup_skills:
-            print(f"    Skills present at BOTH user-global AND project-local ({len(dup_skills)}):")
-            for n in dup_skills:
-                print(f"      · {n}")
-            print(
-                "    Project-local shadows the user-global for that project only. "
-                "If the intent is engine-owned, delete the user-global copy or "
-                "wire it via `pe install` symlinks.\n"
-            )
-        if dup_cmds:
-            print(f"    Commands present at BOTH user-global AND project-local ({len(dup_cmds)}):")
-            for n in dup_cmds:
-                print(f"      · {n}")
-            print()
-        if not dup_skills and not dup_cmds:
-            print("    ✓ No project/user-global duplicates.\n")
 
-    # 4. recommendation
-    keep = len(engine_shipped_present) + len(core_present)
-    review = len(engine_cmd_shadowed) + len(ext_skills)
+def report_project_duplicates(project_arg: str, skills: list[str], cmds: list[str]) -> None:
+    """[3] Names present both user-global and in the adopter project."""
+    project = Path(project_arg).expanduser().resolve()
+    dup_skills = sorted(set(skills) & set(list_dir(project / ".claude" / "skills")))
+    dup_cmds = sorted(set(cmds) & set(list_dir(project / ".claude" / "commands")))
+    print(f"[3] PROJECT-LOCAL DUPLICATES ({project}):")
+    if dup_skills:
+        print(f"    Skills present at BOTH user-global AND project-local ({len(dup_skills)}):")
+        for n in dup_skills:
+            print(f"      · {n}")
+        print(
+            "    Project-local shadows the user-global for that project only. "
+            "If the intent is engine-owned, delete the user-global copy or "
+            "wire it via `pe install` symlinks.\n"
+        )
+    if dup_cmds:
+        print(f"    Commands present at BOTH user-global AND project-local ({len(dup_cmds)}):")
+        for n in dup_cmds:
+            print(f"      · {n}")
+        print()
+    if not dup_skills and not dup_cmds:
+        print("    ✓ No project/user-global duplicates.\n")
+
+
+def report_recommendation(buckets: dict[str, list[str]]) -> None:
+    """[4] Keep vs review counts, with the reasoning when there is anything to review."""
+    keep = len(buckets["engine-shipped"]) + len(buckets["core-recommended"])
+    review = len(buckets["engine-command"]) + len(buckets["external"])
     print("[4] STOCKTAKE RECOMMENDATION:")
     print(f"    keep as-is (engine-shipped + core):  {keep}")
     print(f"    candidates for review/removal:       {review}")
@@ -209,10 +174,38 @@ def main() -> int:
         )
     print()
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Audit ~/.claude/skills/ + ~/.claude/commands/ sprawl (P7.4).",
+    )
+    parser.add_argument("--home", default=os.environ.get("HOME"), help="Home dir (default: $HOME)")
+    parser.add_argument("--project", default=None,
+                        help="Adopter project path. Flags project-local duplicates.")
+    args = parser.parse_args()
+
+    home = Path(args.home).expanduser().resolve()
+    skills_dir = home / ".claude" / "skills"
+    cmds_dir = home / ".claude" / "commands"
+    skills = list_dir(skills_dir)
+    cmds = list_dir(cmds_dir)
+    engine_commands = {f.stem for f in (ENGINE_DIR / "commands").glob("*.md")}
+
+    print("skills-audit — Claude Code skill/command sprawl report")
+    print(f"  home:            {home}")
+    print(f"  skills dir:      {skills_dir}  ({len(skills)} entries)")
+    print(f"  commands dir:    {cmds_dir}  ({len(cmds)} entries)")
+    print(f"  engine commands: {len(engine_commands)} in {ENGINE_DIR}/commands/")
+    print()
+
+    overlap = report_collisions(skills, cmds)
+    buckets = report_classification(skills, engine_commands)
+    if args.project:
+        report_project_duplicates(args.project, skills, cmds)
+    report_recommendation(buckets)
+
     # Exit non-zero if anything worth action.
-    if overlap or engine_cmd_shadowed:
-        return 1
-    return 0
+    return 1 if overlap or buckets["engine-command"] else 0
 
 
 if __name__ == "__main__":
