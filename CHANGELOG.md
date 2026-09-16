@@ -7,6 +7,61 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.57.0] — 2026-09-16
+
+### Added — `pe skills-audit --upstream`: staleness found by a check, not by accident
+
+v0.56.0 recorded a source for every core skill. This reads those sources.
+
+On this machine the first run reported what the manual check that prompted
+v0.56.0 found: **sixteen stale, two fresh**. Every ECC copy dated from March,
+and the two fresh ones were the skills re-installed that morning. The
+check now finds in one command what took a conference talk and an
+afternoon to find the first time.
+
+- **`scripts/skills_audit.py --upstream`.** Section [5] FRESHNESS reports
+  every skill with a source as `fresh`, `STALE`, `unknown` (upstream
+  unreachable) or `not installed`, and the audit exits 1 when anything is
+  stale. The local `SKILL.md` is hashed the way git hashes a file and
+  compared with the sha the GitHub contents API reports (`gh api`).
+- **The doc is the map.** Sources are read from the Source column of
+  `docs/SKILLS.md`, which `tests/test_skill_discovery_reachable.sh` already
+  keeps in sync with `CORE_SKILLS`. There is no second list to drift.
+  Engine-shipped skills are skipped because `pe install` symlinks them.
+- **Adopter skills** go in `~/.claude/skills/.upstream.json`. A malformed
+  file (bad JSON, a missing folder, a non-string value) is named in the
+  report and ignored, rather than crashing the audit.
+- **Unknown is not stale.** No `gh`, no network, a moved path, an
+  unreadable local file, or upstream output that is not a 40-hex sha
+  (`--jq .sha` prints `null` for a directory) never fails the run.
+- **Sources are validated** before they go into a `gh api` path under the
+  operator's token: `owner/repo`, a plain folder, no `..`.
+- **The stale message says what actually works.** A plugin or hand copy
+  has no lock entry, so `npx skills update` cannot refresh it. The report
+  says to re-install once through the CLI.
+- **`tests/test_skills_audit_upstream.sh`** (21 assertions). Upstream shas
+  are injected through `PE_SKILLS_UPSTREAM_SHAS`, so the test never touches
+  the network. RED 3/13 before the change. A hash without git's blob
+  header, an ignored adopter map, a stale skill not affecting the exit code,
+  and engine-shipped skills leaking into the report were each broken
+  deliberately and seen to fail.
+- **Review.** code-reviewer returned WARN with two HIGH findings, both
+  reproduced and fixed test-first: a `null` from `gh` was reported STALE
+  and failed the run, and a malformed injected-shas file crashed with a
+  traceback. The two MEDIUM (unvalidated adopter paths, an unreadable local
+  file aborting the whole audit) and two LOW (test greps not scoped to
+  section [5], an overstated doc claim) are fixed too.
+- Docs: `docs/SKILLS.md` Freshness and exit-code contract, `docs/RHYTHM.md`
+  monthly command, `pe help`.
+
+Limit, marked in code: only `SKILL.md` is compared, not a skill's
+supporting files.
+
+The engine's SAST gate blocked SHA-1 on first commit. It is suppressed on that
+one line only, with the rule id: git object ids are SHA-1, the result has to
+equal what GitHub reports, and it identifies content rather than protecting
+it. A repo-wide allowlist entry would have hidden any real misuse elsewhere.
+
 ## [0.56.0] — 2026-09-16
 
 ### Added — check for an existing skill first, and grill before planning
