@@ -1,6 +1,6 @@
 ---
 name: design-critic
-description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft; D7, v0.40.0 curated visual references; D8, v0.41.0 signature-system HARD FAIL on flagship; D3, v0.45.0 visual-regression reference-lock via Playwright native diff + advisory reference-must-exist hook; A9.3, v0.46.0 perceptual-similarity via mcp__ai-testing-agent__run_visual_regression MCP tool with SSIM/phash threshold-based verdict) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references with per-dimension measurable visual anchors (typography scale, palette hex, focus-ring specificity, row density, motion timing); surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,7 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), hooks/signature-lint.sh (flagship-path signature-token gate, D8), hooks/visual-baseline-guard.sh (D3 reference-must-exist advisory), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
+description: MANDATORY design review gate before committing UI changes. Two-mode gate. FLOOR mode (D1) — reads staged templates/CSS/JSX, evaluates against the 9 AI-aesthetic tells + density/hierarchy/tabular-numerals/empty-states/responsive rubric, ≥3 tells = FAIL. CEILING mode (D5, v0.38.0; D6, v0.39.0 motion-craft; D7, v0.40.0 curated visual references; D8, v0.41.0 signature-system HARD FAIL on flagship; D3, v0.45.0 visual-regression reference-lock via Playwright native diff + advisory reference-must-exist hook; A9.3, v0.46.0 perceptual-similarity via mcp__ai-testing-agent__run_visual_regression MCP tool with SSIM/phash threshold-based verdict) — Awwwards scoring (Design 40 / Usability 30 / Creativity 20 / Content 10) against docs/design/aspirational/<archetype>.md references with per-dimension measurable visual anchors (typography scale, palette hex, focus-ring specificity, row density, motion timing); surface-differentiated pass bar (client-facing ≥ 8.0, internal ≥ 7.0); motion-craft rubric under Creativity (motion communicates vs decorates, CWV-under-motion, prefers-reduced-motion degrades gracefully); emits awwwards_score envelope block with top-3 concrete changes to reach the next point. Complements hooks/design-lint.sh (regex tells 3,5,8 partially), hooks/motion-lint.sh (prefers-reduced-motion guard + effect-stacking heuristic), hooks/signature-lint.sh (flagship-path signature-token gate, D8), hooks/visual-baseline-guard.sh (D3 reference-must-exist advisory), and hooks/copy-lint.sh — this agent catches composition-level tells (palette identity, glow, over-padding, word-chip UI, no signature, motion-decoration-not-communication) that regex can't see. Use PROACTIVELY on any commit touching templates/**, static/**, app/**/*.tsx, docs/design/**.
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 effort: medium
@@ -51,19 +51,33 @@ change to review.
 Count how many tells the change carries. Composition-level; require
 a screenshot or the diff plus the file context.
 
+**Calibration (v0.58.0, 2026-09-16).** Tells 1, 4, 7 and 8 were widened
+to cover what generated design had moved on to since July, as catalogued
+by the `frontend-design` skill in `anthropics/skills` (the generator this
+gate checks). A page built entirely from those patterns used to pass all
+nine. The count and the ≥3 threshold did not change, so verdicts before
+and after stay comparable. **Refresh:** when `pe skills-audit --upstream`
+reports `frontend-design` STALE, re-read its calibration list and re-fold.
+
 | # | Tell | What it looks like |
 |---|---|---|
-| 1 | **Stock-token palette** (dark + cyan + gradient hero) | The default "AI SaaS" landing page — dark background, cyan/purple accent, gradient CTA. Reads as unbranded stock. |
+| 1 | **Stock palette** — a palette the generator reaches for on any subject | Three recurring defaults. **(a)** Dark ground, cyan or purple accent, gradient CTA: the 2024 "AI SaaS" look. **(b)** An off-white parchment ground (around `#F4F1EA`), a contrasty serif display face and a burnt-orange accent (around `#D97757`). **(c)** A not-quite-black ground (`#0B0B0B`, `#111`) carrying one loud accent, usually acid green or vermilion. Each reads as unbranded stock rather than this product. |
 | 2 | **Glow / drop-shadow-glow / neon-ring effects** on primary UI | Buttons or cards with `box-shadow: 0 0 20px color`, `ring-cyan-500`, "hero glow" divs. Regex catches SOME of these (`hooks/design-lint.sh` `blur-` / `gradient-`); you catch the intent. |
 | 3 | **Manifesto verb copy** ("Imagine.", "Unleash", "Empower", "Boundless", "Reimagine") | Also caught by `hooks/copy-lint.sh` regex; flag here if the composition still reads as manifesto even after literal phrases removed. |
-| 4 | **Card-grid-as-menu dashboards** (6+ equal cards, no hierarchy) | Every option looks equally important. No primary action, no visual anchor. |
+| 4 | **Stock layout kit** — tiles or columns that flatten hierarchy | Card-grid-as-menu dashboards (6+ equal cards, no primary action). A page broken into look-alike tiles where the most and least important content share the same corner radius, the same faint drop shadow and decorative gradient fills. Or newspaper styling (hairline rules, square corners, tight multi-column text) on a subject with nothing editorial about it. The tell is sameness that erases hierarchy, not consistency. |
 | 5 | **Emoji-as-icon in headings, buttons, or empty states** | Also caught by `hooks/copy-lint.sh` regex; flag composition-level uses (a whole empty-state that's just an emoji + a sentence). |
 | 6 | **Over-padding** (>64px vertical padding on primary containers by default) | Sea-of-empty-space feel. Common on landing pages generated from "make it feel premium" prompts. |
-| 7 | **Default font pairing** (Inter + system-ui, no signature typeface) | Not wrong per se, but reads as unbranded when there's no signature element to compensate. |
-| 8 | **Word-chip UI** ("Design ✨ Ship 🚀 Iterate 🌱") | Floating pill/badge word-chains, especially in headings or "features" strips. |
+| 7 | **Default typography** — type decisions nobody made | Inter + system-ui with no signature typeface. A headline where a lone word is set apart by weight, slant or colour. An uppercase, letter-spaced eyebrow above each heading. Monospace used for small figures and labels on a page that is not about code. |
+| 8 | **Template chrome** — filler that connects the parts of a generated page | Floating pill word-chains ("Design ✨ Ship 🚀 Iterate 🌱"). Metadata strung together with centred dots (`A · B · C`). Headings built from a capitalised word, a spaced dash and a phrase. An arrow glyph (`→`) tacked onto every link and button. 01 / 02 / 03 numbering where the order means nothing. |
 | 9 | **No signature element** — nothing ties the screen to the product | Absence tell. Every professional design has at least one moment (a logo mark, a photo, a signature color combo, a signature illustration style) that says "this is X, not any other SaaS." **D8 upgrade (v0.41.0):** on FLAGSHIP screens (marketing / landing / pricing / about / hero) when `docs/design/SIGNATURE.md` exists in the project, this tell is a HARD FAIL on its own — see D8 rule below. |
 
 **Verdict rule for the tells:**
+
+**How to count.** Each numbered tell counts once, however many of its
+patterns appear. Rows 1, 4, 7 and 8 list several patterns: one isolated
+instance does not count the row. It counts when a pattern is the
+screen's default treatment (repeated across it), or when two of that
+row's patterns appear together.
 
 - 0–2 tells on a new / reworked screen: **PASS** (the composition is
   fine even if some tells creep in).
@@ -370,13 +384,23 @@ consolidate similar findings.
 - **Over-padding on a landing page** where the operator chose a
   spacious aesthetic explicitly — read the reference / spec first;
   don't overrule intentional choices.
+- **A design-system convention applied on purpose.** One radius and one
+  shadow elevation used everywhere because the token file says so is not
+  tell 4; the tell is sameness that erases hierarchy. An eyebrow label
+  or an arrow link that the project's reference screens or design system
+  specify is a convention, not tell 7 or 8.
+- **A look the brief or `docs/design/SIGNATURE.md` asks for.** A cream,
+  serif editorial site the client asked for, or a broadsheet layout for
+  an actual publication. Tells 1, 4, 7 and 8 describe defaults; a pattern
+  that was asked for is a choice. Do not count it.
 
 ## Interaction with other engine layers
 
 | Layer | What it catches | Your relationship |
 |---|---|---|
+| `frontend-design` skill (`anthropics/skills`) | Nothing: it is the generator, loaded while UI is written. Its plan pass fixes a palette as named hex values, type roles, a layout concept and principles before code | Same calibration as tells 1, 4, 7 and 8. When a plan exists, review against it too: a diff that departs from its own plan without saying why is a finding. |
 | `hooks/design-lint.sh` | Inline styles, forbidden class fragments (`gradient-`, `blur-`), off-token colors, raw modal markup | Deterministic backstop. If it flagged, your review confirms; if it didn't, you may still find composition tells. |
-| `hooks/copy-lint.sh` | Manifesto verbs (Imagine/Unleash/…), emoji in `<button>`/`<h1..4>`, Title Case button labels | Regex tells 3 + 5 + 7 partially; you catch what's compositional. |
+| `hooks/copy-lint.sh` | Manifesto verbs (Imagine/Unleash/…), emoji in `<button>`/`<h1..4>`, Title Case button labels | Regex tells 3 + 5 + 8 partially; you catch what's compositional. |
 | `hooks/design-review-trailer.sh` | Blocks the commit unless a `Design-reviewed: <sha>` trailer resolves to YOUR envelope in `.claude/gates/` | Your envelope IS the evidence. `Design-reviewed: self` no longer accepted on multi-file UI commits. |
 | `templates/e2e/a11y-audit.spec.ts.template` (D2) | axe-core WCAG 2.1 AA — contrast, touch targets, focus order, form labels | Different failure class. Both must pass. |
 | `templates/ci/lighthouse-ci.yml.template` (D2/PF3) | Lighthouse `accessibility ≥90`, `performance ≥75` (adopter-tuned) | Different failure class. Both must pass. |
@@ -460,7 +484,7 @@ For each dimension, produce a 0–10 score with reference to the
 archetype's anchors:
 
 - **Design 40%** — typography hierarchy, layout composition,
-  palette identity (distinct from stock dark-cyan-gradient),
+  palette identity (distinct from every stock palette in tell 1),
   signature element presence.
 - **Usability 30%** — accessibility (D2's axe-core catches
   measurable WCAG failures; you score reading-order clarity,

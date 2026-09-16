@@ -11,7 +11,8 @@ a prospect sees before signing in.
 
 - **Design 40:** ≥ 8.0 required. Typography hierarchy carries the
   page; layout has an obvious first-glance anchor; palette identity
-  is distinct from the stock dark-cyan-gradient template.
+  is distinct from every stock palette in `design-critic` tell 1
+  (dark-cyan-gradient, cream-and-terracotta, near-black-and-acid).
 - **Usability 30:** ≥ 8.5 required (usability is CHEAP to get right
   on marketing; anything under is neglect). Nav ≤ 5 items;
   above-the-fold CTA within one glance; no mystery-meat icons.
@@ -87,8 +88,8 @@ change; the anchor description is the durable contract.
 
 - Type is default (Space Grotesk + Inter, the AI-era pairing) OR
   the site uses only one weight of one font family.
-- Palette is on-token but IS the stock dark-cyan-gradient — reads
-  as "AI SaaS landing #3007."
+- Palette is on-token but IS one of the stock palettes in
+  `design-critic` tell 1 — reads as "AI SaaS landing #3007."
 - Motion is either absent OR CSS-transitions-only with no
   intentional choreograph.
 - Copy uses manifesto verbs OR emoji-in-buttons OR both.

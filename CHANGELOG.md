@@ -7,6 +7,75 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.58.0] — 2026-09-16
+
+### Changed — `design-critic` tells recalibrated to what generated design looks like now
+
+**The gap.** The nine tells were written in July 2026 against the slop of
+that moment: dark + cyan + gradient, glow, manifesto copy, emoji icons,
+Inter. By September the `frontend-design` skill in `anthropics/skills`
+catalogued where generated pages had moved: a warm cream ground with a
+terracotta accent, near-black with a single acid accent, the broadsheet
+layout, the identical-card kit, and template chrome (all-caps eyebrows,
+middle-dot meta strings, arrows on every link). A page built entirely from
+those passed all nine tells. The generator and the gate were calibrated to
+different years.
+
+**Folded, not added** (operator decision): the count stays nine and the
+FAIL threshold stays at three, so verdicts before and after are comparable.
+
+- **Counting rule stated:** each tell counts once however many of its
+  patterns appear, and a multi-pattern row needs the pattern to be the
+  screen's default treatment or two of its patterns together. Without it,
+  the widened rows would reach ≥3 on legitimate designs.
+- **Tell 1, Stock palette:** now three named defaults with approximate hex
+  values, not just dark-cyan-gradient.
+- **Tell 4, Stock layout kit:** card-grid-as-menu, plus the identical-card
+  kit (one radius, one shadow) and an unearned broadsheet.
+- **Tell 7, Default typography:** Inter + system-ui, plus the single
+  accented headline word, all-caps eyebrows and monospace data labels.
+- **Tell 8, Template chrome:** word chips, plus middle-dot meta strings,
+  `WORD — fragment` labels, appended arrows and numbering on non-sequences.
+- **Tell 6, Over-padding, stays.** The proposal approved for this change
+  (in the session, not in the repo) would have replaced it on the grounds
+  that `design-lint` already caught it. It does not: design-lint
+  checks that spacing values are on-token, and `p-16` can be on-token and
+  still be a sea of empty space. The eval fixture also expects the rule.
+- **Two new false positives:** a look the brief or SIGNATURE.md asks for,
+  and a design-system convention applied on purpose (one radius and shadow
+  from the token file; an eyebrow or arrow link the reference specifies).
+- **copy-lint mapping corrected:** it catches parts of tells 3, 5 and 8
+  (word chips are tell 8), not 3, 5 and 7.
+- **The layers table names the generator.** When the skill's plan pass
+  exists, a diff that departs from its own plan is a finding.
+- **Refresh rule:** when `pe skills-audit --upstream` reports
+  `frontend-design` STALE, re-read its calibration and re-fold.
+- **`agents/code-reviewer.md` no longer carries a copy of the table.** The
+  copy had already drifted (a different finding rule name) and would have
+  missed this change too. It now points at design-critic.
+- **E7 output shape** (`docs/DESIGN_TOOLING_PLAN.md`): the same four
+  sections as the skill's plan pass, plus provenance labels, so generator
+  and gate share one vocabulary.
+- **Anchors updated:** design-critic ceiling mode and
+  `docs/design/aspirational/marketing-site.md` now refer to every stock
+  palette in tell 1, not only dark-cyan-gradient.
+- **Fixture fix:** `fail-escalate-ai-aesthetic-drift` called word-chip UI
+  "Tell #4" and emoji "Tell #7"; they are 8 and 5.
+- **`tests/test_design_tells_2026.sh`** (20 assertions): the count, the
+  threshold, over-padding and the D8 note did not move; each pattern
+  landed in its row; the source is cited; code-reviewer has no copy.
+  RED 5/18 before the change (the five were the invariants). The layers
+  row, the threshold, a tenth tell and a reintroduced copy were each
+  broken deliberately and seen to fail.
+
+The patterns are described in the engine's own words and cite the skill as
+the source. The first draft followed the skill's phrasing too closely in
+tells 4 and 8; review caught it and those rows were rewritten. Approximate
+hex values are kept, as facts.
+- **Review.** code-reviewer returned WARN with three HIGH findings (the
+  phrasing above, over-triggering on deliberate design systems, and no
+  counting rule for multi-pattern rows) and four MEDIUM. All seven fixed.
+
 ## [0.57.0] — 2026-09-16
 
 ### Added — `pe skills-audit --upstream`: staleness found by a check, not by accident
