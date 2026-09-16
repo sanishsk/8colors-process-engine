@@ -82,9 +82,27 @@ npx skills update -g
 ## Freshness — staleness is found by a ritual, not by accident
 
 Monthly, per `docs/RHYTHM.md`: run `npx skills update -g`, then
-`pe skills-audit`. The Source column above is the map a freshness check
-reads; the upstream comparison itself (`pe skills-audit --upstream`,
-local git blob hash against the source's) is the next release.
+`pe skills-audit --upstream`. For every skill with a source, section [5]
+reports `fresh`, `STALE`, `unknown` (upstream unreachable) or `not
+installed`, and the audit exits 1 when anything is stale.
+
+- **How it compares.** The local `SKILL.md` is hashed the way git hashes a
+  file and compared with the sha the GitHub contents API reports for the
+  same path (via `gh api`). Only `SKILL.md` is compared, not a skill's
+  supporting files.
+- **Where sources come from.** The Source column above, so the doc is the
+  map. Engine-shipped skills are skipped: `pe install` symlinks them.
+- **Your own skills.** Add them in `~/.claude/skills/.upstream.json`:
+  `{"my-skill": "owner/repo skills/my-skill"}`. A malformed file is named
+  in the report and ignored.
+- **Unknown is not stale.** No `gh`, no network, a moved path, an
+  unreadable local file, or any upstream answer that is not a 40-hex sha
+  reports `unknown` and does not fail the run.
+- **Sources are validated** before they reach `gh api`: `owner/repo` and a
+  plain folder path, no `..`. An entry that fails is reported as malformed.
+
+On 2026-09-16 the first run reported sixteen stale and two fresh: every
+ECC copy from March, and the two skills re-installed that morning.
 
 ## What's candidate for stocktake
 
@@ -118,12 +136,14 @@ operator's machine. It surfaces the sprawl; the operator prunes.
 pe skills-audit                            # inventory + classification
 pe skills-audit --project /path/to/8CStudio  # + flag project-local duplicates
 pe skills-audit --home /some/other/home     # audit a different profile
+pe skills-audit --upstream                  # + compare each skill with its source (needs gh)
 ```
 
 Exit code:
 - `0` — no consolidations needed
-- `1` — at least one name collision OR at least one engine-command
-  shadowed by a same-named skill
+- `1` — at least one name collision, OR at least one engine-command
+  shadowed by a same-named skill, OR (with `--upstream`) at least one
+  stale skill. `unknown` never sets it: a flaky network is not drift.
 
 ## Rationale — why we're opinionated
 

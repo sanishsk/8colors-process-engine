@@ -33,7 +33,7 @@ double-margin gate, etc.) stay in the target project's docs.
 - User reads retro (10 min)
 
 ## Monthly — first Monday
-- `npx skills update -g`, then `pe skills-audit`. Every external skill the
+- `npx skills update -g`, then `pe skills-audit --upstream`. Every external skill the
   engine's agents lean on has an upstream that keeps moving; on 2026-09-16
   sixteen of sixteen were found stale by accident. See `docs/SKILLS.md`
   § Freshness.

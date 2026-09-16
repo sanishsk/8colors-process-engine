@@ -36,9 +36,10 @@ SUBCOMMANDS
     collect [<project>] [--window N] [--date YYYY-MM-DD]
                           Portable git-derived dev-log digest for retrospective-agent
                           (P7.3: replaces the ambient collector that went stale)
-    skills-audit [--project <path>]
+    skills-audit [--project <path>] [--upstream]
                           Inventory ~/.claude/skills/ + ~/.claude/commands/ sprawl;
-                          flag duplicates + classify against engine core-20 (P7.4)
+                          flag duplicates + classify against the core set (P7.4);
+                          --upstream: compare each skill with its source, exit 1 on stale
     telemetry <sub>       Parse Claude Code transcripts → structured usage
                           records + OTel spans + cost (A1/L1/L4). Subs:
                           collect, summary.

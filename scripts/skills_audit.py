@@ -17,6 +17,11 @@ path via --home). Reports:
      core set (documented in docs/SKILLS.md, with each skill's source); everything outside
      that list is candidate-for-review.
 
+  5. With --upstream: freshness. Each core skill's source comes from the
+     Source column of docs/SKILLS.md (adopters add their own in
+     ~/.claude/skills/.upstream.json); the local SKILL.md's git blob hash
+     is compared with the sha GitHub reports for the same path.
+
 Zero mutation. This tool never deletes or moves files. It surfaces the
 sprawl; the operator prunes on their own machine.
 """
@@ -24,8 +29,13 @@ sprawl; the operator prunes on their own machine.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import re
+import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 ENGINE_DIR = Path(__file__).resolve().parent.parent
@@ -175,6 +185,141 @@ def report_recommendation(buckets: dict[str, list[str]]) -> None:
     print()
 
 
+SOURCE_RE = re.compile(r"`([\w.-]+/[\w.-]+)`\s+(\S+)")
+REPO_RE = re.compile(r"[\w.-]+/[\w.-]+")
+FOLDER_RE = re.compile(r"[\w.-]+(/[\w.-]+)*")
+SHA_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def valid_source(repo: str, folder: str) -> bool:
+    """Both parts go into a `gh api` path under the operator's own token."""
+    return bool(REPO_RE.fullmatch(repo) and FOLDER_RE.fullmatch(folder)
+                and ".." not in folder.split("/"))
+
+
+def core_sources() -> dict[str, tuple[str, str]]:
+    """name -> (owner/repo, folder), read from the Source column of docs/SKILLS.md.
+
+    Engine-shipped skills are skipped: pe install symlinks them into the
+    engine, so they are as current as the engine checkout.
+    """
+    sources = {}
+    for line in (ENGINE_DIR / "docs" / "SKILLS.md").read_text().splitlines():
+        cells = line.split("|")
+        if len(cells) != 6 or not cells[1].strip().isdigit():
+            continue
+        name = cells[2].strip().strip("`")
+        match = SOURCE_RE.search(cells[4])
+        if match and name not in ENGINE_SHIPPED_SKILLS and valid_source(*match.groups()):
+            sources[name] = (match.group(1), match.group(2))
+    return sources
+
+
+def adopter_sources(skills_dir: Path) -> tuple[dict[str, tuple[str, str]], str]:
+    """Adopter additions from .upstream.json: {"name": "owner/repo folder"}."""
+    path = skills_dir / ".upstream.json"
+    if not path.is_file():
+        return {}, ""
+    try:
+        raw = json.loads(path.read_text())
+        sources = {n: tuple(v.split(None, 1)) for n, v in raw.items()}
+        malformed = sorted(n for n, parts in sources.items()
+                           if len(parts) != 2 or not valid_source(*parts))
+        if malformed:
+            raise ValueError(f'expected "owner/repo folder" for {", ".join(malformed)}')
+        return sources, ""
+    except (ValueError, AttributeError, TypeError) as exc:
+        return {}, f"    ! {path} ignored: {exc}"
+
+
+def blob_sha(path: Path) -> str:
+    """The sha git (and the GitHub contents API) gives this file's bytes. Raises OSError.
+
+    SHA-1 because that is git's object id, and the result must equal the sha
+    GitHub reports. It identifies content; it protects nothing.
+    """
+    data = path.read_bytes()
+    # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+    return hashlib.sha1(b"blob %d\0" % len(data) + data, usedforsecurity=False).hexdigest()
+
+
+@lru_cache(maxsize=1)
+def injected_shas() -> tuple[dict[str, str] | None, str]:
+    """PE_SKILLS_UPSTREAM_SHAS: a JSON file of "repo:path" -> sha, for tests.
+
+    A broken file injects nothing rather than falling through to the network:
+    whoever set the variable asked for no network.
+    """
+    path = os.environ.get("PE_SKILLS_UPSTREAM_SHAS")
+    if not path:
+        return None, ""
+    try:
+        return dict(json.loads(Path(path).read_text())), ""
+    except (OSError, ValueError, TypeError) as exc:
+        return {}, f"    ! PE_SKILLS_UPSTREAM_SHAS={path} unreadable, nothing fetched: {exc}"
+
+
+def upstream_sha(repo: str, file_path: str) -> str | None:
+    """None when the upstream cannot be read: no gh, no network, no such path."""
+    injected, _ = injected_shas()
+    if injected is not None:
+        sha = injected.get(f"{repo}:{file_path}")
+        return sha if isinstance(sha, str) and SHA_RE.fullmatch(sha) else None
+    try:
+        done = subprocess.run(
+            ["gh", "api", f"repos/{repo}/contents/{file_path}", "--jq", ".sha"],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    sha = done.stdout.strip()
+    # `--jq .sha` prints "null" for a directory or a moved path: not a sha, so not drift.
+    return sha if done.returncode == 0 and SHA_RE.fullmatch(sha) else None
+
+
+def freshness(local: Path, repo: str, file_path: str) -> str:
+    """One skill's status. Only a readable file with a real upstream sha can be STALE."""
+    if not local.is_file():
+        return "not installed"
+    try:
+        local_sha = blob_sha(local)
+    except OSError:
+        return "unknown (local SKILL.md unreadable)"
+    remote = upstream_sha(repo, file_path)
+    if remote is None:
+        return "unknown (upstream unreachable)"
+    return "fresh" if remote == local_sha else "STALE"
+
+
+def report_freshness(skills_dir: Path) -> int:
+    """[5] Local SKILL.md vs its source. Returns the number of stale skills.
+
+    ponytail: compares SKILL.md only, not supporting files in the folder;
+    compare the folder's tree sha if a skill's other files start to matter.
+    """
+    extra, warning = adopter_sources(skills_dir)
+    sources = {**core_sources(), **extra}
+    print(f"[5] FRESHNESS ({len(sources)} skills with a known source):")
+    for note in (warning, injected_shas()[1]):
+        if note:
+            print(note)
+    stale = 0
+    for name in sorted(sources):
+        repo, folder = sources[name]
+        local = skills_dir / name / "SKILL.md"
+        file_path = f"{folder.rstrip('/')}/SKILL.md"
+        status = freshness(local, repo, file_path)
+        stale += status == "STALE"
+        print(f"      · {name}  {status}  ({repo} {folder})")
+    if stale:
+        print(f"\n    {stale} stale. Skills installed with the skills CLI: "
+              "`npx skills update -g`. Anything else (plugin or hand copy) has no\n"
+              "    lock entry to update from; re-install it once through the CLI:\n"
+              "      npx skills add <repo> --skill <name> -g -a claude-code")
+    print()
+    return stale
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Audit ~/.claude/skills/ + ~/.claude/commands/ sprawl (P7.4).",
@@ -182,6 +327,8 @@ def main() -> int:
     parser.add_argument("--home", default=os.environ.get("HOME"), help="Home dir (default: $HOME)")
     parser.add_argument("--project", default=None,
                         help="Adopter project path. Flags project-local duplicates.")
+    parser.add_argument("--upstream", action="store_true",
+                        help="Compare each skill with its source (needs gh; exits 1 on stale).")
     args = parser.parse_args()
 
     home = Path(args.home).expanduser().resolve()
@@ -203,9 +350,10 @@ def main() -> int:
     if args.project:
         report_project_duplicates(args.project, skills, cmds)
     report_recommendation(buckets)
+    stale = report_freshness(skills_dir) if args.upstream else 0
 
     # Exit non-zero if anything worth action.
-    return 1 if overlap or buckets["engine-command"] else 0
+    return 1 if overlap or buckets["engine-command"] or stale else 0
 
 
 if __name__ == "__main__":
