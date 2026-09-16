@@ -30,7 +30,7 @@
       "rule": "chip-pills-for-filters",
       "file": "templates/dashboards/invoice_list.html",
       "line": 13,
-      "message": "rounded-full status chips for All/Paid/Pending/Overdue is Tell #4 (word-chip UI).",
+      "message": "rounded-full status chips for All/Paid/Pending/Overdue is Tell #8 (word-chip UI).",
       "suggestion": "Text tabs with a bottom-border for active state."
     },
     {
@@ -38,7 +38,7 @@
       "rule": "emoji-decoration",
       "file": "templates/dashboards/invoice_list.html",
       "line": 7,
-      "message": "✨ and 💰 as decoration is Tell #7 (decorative emoji signaling AI-generated content).",
+      "message": "✨ and 💰 as decoration is Tell #5 (decorative emoji signaling AI-generated content).",
       "suggestion": "Remove; the number itself is the primary information."
     },
     {
