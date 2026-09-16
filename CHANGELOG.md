@@ -7,6 +7,66 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.56.0] — 2026-09-16
+
+### Added — check for an existing skill first, and grill before planning
+
+**The incident.** An operator saw the skills.sh leaderboard at a conference
+and asked whether the engine used any of it. Checking found that the
+`frontend-design` skill on their machine was the December 2025 text,
+rewritten upstream on 2026-06-09 and 2026-09-03. The old text told the model
+to reach for "grain overlays, dramatic shadows, custom cursors, gradient
+meshes", which is what `design-critic` tells 1 and 2 fail. The generator and
+the gate had been pulling in opposite directions. Checking the rest of the
+core set found **all sixteen ECC-sourced skills stale** as well. Nothing in
+the engine said to look, and nothing recorded where a skill came from.
+
+The same research showed the engine had no interview step. `brief-writer`
+lists one to three open questions after the brief is drafted, and `planner`
+said "ask clarifying questions if needed" with no procedure, while running
+as a subagent that cannot wait for an answer.
+
+- **Discovery rule.** `docs/OSS_SEARCH_ORDER.md` step 1b and a new
+  CONTRIBUTING section, "Before adding an agent, command or skill": search
+  skills.sh (`npx skills find`) and the core set, then adopt, extend, or
+  write, in that order.
+- **`docs/SKILLS.md`.** Every core skill now names its source repo and path.
+  New sections on discovery (the install channel is the skills CLI, the only
+  one with a lockfile; plugin copies proved unrefreshable) and freshness.
+  `grilling` (mattpocock/skills) joins the core set; `frontend-design` is
+  re-sourced to `anthropics/skills`.
+- **`scripts/skills_audit.py`.** `CORE_SKILLS` gains `grilling`. `main` was
+  125 lines, and touching the file brought it under the per-function size
+  gate, so it is split into one function per report section. Output is
+  byte-identical in four modes, exit codes included: this machine, with
+  `--project`, an empty home, and a fixture exercising every branch.
+- **`commands/brainstorm.md`.** New step 5 runs a grilling round before
+  `brief-writer` when the notes leave an operator decision, a rule's polarity
+  or a schema/gate unsettled, and appends `## Decisions settled` to the notes.
+  Skipped, in one line, when nothing is open.
+- **`agents/planner.md`.** The "ask if needed" line is replaced: facts are
+  looked up, operator decisions are never guessed but emitted as a
+  `## Decisions needed` round in grilling format, with dependent steps marked
+  `BLOCKED on Qn` for the invoking session to resolve.
+- **`docs/RHYTHM.md`.** Monthly: `npx skills update -g`, `pe skills-audit`,
+  and a skim of skills.sh trending. Quarterly: `/design-scan`.
+- **`tests/test_skill_discovery_reachable.sh`** (10 assertions): each rule is
+  reached from where the decision is made, every core row has a source, and
+  SKILLS.md and `CORE_SKILLS` cannot drift. Verified RED 1/9 before the
+  change; the drift, missing-source, planner and row-shape checks were each
+  broken deliberately and seen to fail.
+- **Review.** code-reviewer returned WARN with two HIGH findings on
+  `planner`, both fixed: the new section now appears in the plan template
+  and the worked example (one money decision, one step `BLOCKED on Q1`), and
+  "what the client experiences" was narrowed to client-facing behaviour the
+  brief and existing conventions do not settle, with examples of choices the
+  planner makes itself.
+
+Not in this release: `pe skills-audit --upstream` (hash comparison against
+the source, next), the design-critic recalibration to the 2026 AI-design
+clusters, and wiring grilling into `brief-writer`, which carries another
+session's uncommitted work.
+
 ## [0.55.1] — 2026-09-05
 
 ### Added — `docs/PROMOTION_BOUNDARY.md`: where a thing lives, decided once

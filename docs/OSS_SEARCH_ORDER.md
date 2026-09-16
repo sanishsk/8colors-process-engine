@@ -3,11 +3,16 @@
 Before proposing custom-built code for ANY feature, ANY component, ANY module:
 
 1. Check `docs/INTEGRATIONS.md` in the calling project — what's already in this stack?
+1b. **Agent behaviour** (a review, a workflow, a discipline, a way of
+    working): check https://skills.sh and `npx skills find <topic>` before
+    writing an agent, command or skill. Adopt, extend or leave out per
+    `docs/SKILLS.md` § Discovery; an external skill that overlaps an engine
+    agent is not adopted.
 2. Check https://github.com/punkpeye/awesome-mcp-servers — community-curated MCP list
 3. Check https://glama.ai/mcp/servers — 23,968+ indexed MCP servers (as of 2026-05-21)
 4. Check PyPI (pypi.org) or npm (npmjs.com) for libraries
 5. Build custom ONLY if:
-   - Nothing in 1–4 fits the need
+   - Nothing in 1–4 (including 1b) fits the need
    - Licensing blocks commercial use
    - Integration cost demonstrably exceeds rebuild cost
 

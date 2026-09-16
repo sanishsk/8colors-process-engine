@@ -42,6 +42,7 @@ Write the plan to `docs/research/plan-<topic>.md`. Include:
 - **Scope in / scope out** — bulleted
 - **Approach** — the recommended path, with alternatives considered
 - **Task list** — ordered steps with owners + effort estimates
+- **Decisions needed** — the grilling round described under Requirements Analysis below; write "None" when there are none
 - **Risks** — one line each with severity + mitigation
 - **Prior art** — links to any relevant briefs / architect docs the
   Step 0 semantic search surfaced
@@ -50,7 +51,20 @@ Write the plan to `docs/research/plan-<topic>.md`. Include:
 
 ### 1. Requirements Analysis
 - Understand the feature request completely
-- Ask clarifying questions if needed
+- Separate **facts** from **decisions**. Facts you look up yourself (Read,
+  Grep, Bash); never put a fact to the operator.
+- You run as a subagent and cannot wait for an answer, so **never guess a
+  decision that belongs to the operator**: money, the contract, a
+  client-facing behaviour the brief and the project's existing conventions
+  do not already settle, which way a rule or filter points (allow or deny,
+  include or exempt), or a schema. Implementation detail inside a settled
+  direction is yours to decide: button copy that follows the design system,
+  an index, a file layout, the order of steps. List operator decisions
+  under `## Decisions needed` in the `grilling` skill's format: numbered,
+  ordered so no question depends on one still open in the same list, each
+  with a recommended answer. Plan everything that does not depend on it and
+  mark dependent steps `BLOCKED on Qn`. The session that invoked you runs the
+  round with the operator and re-invokes you with the answers.
 - Identify success criteria
 - List assumptions and constraints
 
@@ -85,6 +99,13 @@ Create detailed steps with:
 ## Requirements
 - [Requirement 1]
 - [Requirement 2]
+
+## Decisions needed
+❓ **Q1** - **[decision title]**: [what is undecided, the options, what each costs]
+
+➡️ [recommended answer and why]
+
+(Or "None". Steps that depend on an open question say `BLOCKED on Q1`.)
 
 ## Architecture Changes
 - [Change 1: file path and description]
@@ -146,6 +167,11 @@ Stripe Checkout, and webhook events keep subscription status in sync.
 - Webhook handler for subscription lifecycle events
 - Feature gating based on subscription tier
 
+## Decisions needed
+❓ **Q1** - **Access when a payment fails**: when a subscription goes `past_due`, does the customer lose Pro features immediately, or keep them through Stripe's automatic payment-retry period?
+
+➡️ Keep access through the retry window. Most failures are expired cards that recover on retry, and locking a paying customer out over a bank decline costs more than a few days of unpaid access.
+
 ## Architecture Changes
 - New table: `subscriptions` (user_id, stripe_customer_id, stripe_subscription_id, status, tier)
 - New API route: `app/api/checkout/route.ts` — creates Stripe Checkout session
@@ -188,6 +214,7 @@ Stripe Checkout, and webhook events keep subscription status in sync.
    - Why: Enforce tier limits server-side
    - Dependencies: Steps 1-2 (needs subscription data)
    - Risk: Medium — must handle edge cases (expired, past_due)
+   - BLOCKED on Q1 for the `past_due` branch only; the rest of the step proceeds
 
 ## Testing Strategy
 - Unit tests: Webhook event parsing, tier checking logic

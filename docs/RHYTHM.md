@@ -32,6 +32,19 @@ double-margin gate, etc.) stay in the target project's docs.
 - ceo produces weekly retro + next week's plan
 - User reads retro (10 min)
 
+## Monthly — first Monday
+- `npx skills update -g`, then `pe skills-audit`. Every external skill the
+  engine's agents lean on has an upstream that keeps moving; on 2026-09-16
+  sixteen of sixteen were found stale by accident. See `docs/SKILLS.md`
+  § Freshness.
+- Skim the [skills.sh](https://skills.sh) trending list for anything that
+  replaces work the engine does by hand; file a candidate against the
+  value bar in `CONTRIBUTING.md`.
+
+## Quarterly
+- `/design-scan` refreshes the aspirational design references
+  (`docs/design/aspirational/`).
+
 ## Total user time: ~4 hours/week
 
 ---

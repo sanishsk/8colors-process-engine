@@ -94,6 +94,21 @@ pe doctor .          # does this project actually RUN the engine's hooks?
 pe verify            # are the engine's files unmodified? (a different question)
 ```
 
+## Before adding an agent, command or skill
+
+**Check for one that already exists.** Search [skills.sh](https://skills.sh)
+(`npx skills find <topic>`) and the core set in
+[`docs/SKILLS.md`](docs/SKILLS.md). Then choose, in this order:
+
+1. **Adopt** it as an external skill: add a row with its source to the
+   core set, and wire it into the agent or command that should use it.
+2. **Extend** an engine agent's prompt when the external skill overlaps
+   one, citing the skill as prior art.
+3. **Write** a new one only when neither fits, and say in the PR what you
+   searched and why each candidate was rejected.
+
+`frontend-design` and `grilling` were adopted this way on 2026-09-16.
+
 ## Adding a new agent
 
 1. Create `agents/<name>.md` with frontmatter:
