@@ -42,8 +42,28 @@ RC=0
 
 if [ "$want_python" = "1" ]; then
     if command -v pip-audit >/dev/null 2>&1; then
-        echo "deps-audit(python): pip-audit"
-        pip-audit || RC=$?
+        # Bare `pip-audit` audits the interpreter it runs in — under pipx, its
+        # own venv — and reports that clean. Audit the project instead: its
+        # venv's site-packages, else the staged requirements files.
+        PROJECT_PY=""
+        for py in "${VIRTUAL_ENV:+$VIRTUAL_ENV/bin/python}" .venv/bin/python venv/bin/python; do
+            if [ -n "$py" ] && [ -x "$py" ]; then PROJECT_PY="$py"; break; fi
+        done
+        if [ -n "$PROJECT_PY" ]; then
+            SITE=$("$PROJECT_PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+            echo "deps-audit(python): pip-audit --path $SITE"
+            pip-audit --path "$SITE" || RC=$?
+        else
+            REQS=$(printf '%s\n' "$STAGED" | grep -E '(^|/)requirements[^/]*\.txt$' || true)
+            if [ -z "$REQS" ]; then
+                echo "deps-audit(python): no project venv and no staged requirements file — nothing to audit" >&2
+            fi
+            while IFS= read -r req; do
+                [ -n "$req" ] || continue
+                echo "deps-audit(python): pip-audit -r $req"
+                pip-audit -r "$req" || RC=$?
+            done <<< "$REQS"
+        fi
     else
         echo "deps-audit(python): pip-audit not installed — pipx install pip-audit" >&2
     fi

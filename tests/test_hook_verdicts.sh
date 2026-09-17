@@ -257,6 +257,27 @@ else
     bad "documented bypass was silent or ineffective (rc=$RC): $(hook_out)"
 fi
 
+# pip-audit with no target audits the interpreter pip-audit runs in — under
+# pipx, its own private venv — so it reported "No known vulnerabilities" for a
+# project whose pins had 16 (Origyn, 2026-09-17). A stub records what the
+# hook actually asked it to audit.
+STUB="$TMP/stub-bin"; mkdir -p "$STUB"
+printf '#!/bin/sh\necho "$@" > "%s/pip-audit-args"\n' "$TMP" > "$STUB/pip-audit"; chmod +x "$STUB/pip-audit"
+mkdir -p "$R/.venv/bin"; ln -sf "$(command -v python3)" "$R/.venv/bin/python"
+run_hook "$R" deps-audit PATH="$STUB:$PATH"; RC=$?
+if grep -q -- '--path' "$TMP/pip-audit-args" 2>/dev/null; then
+    ok "a project .venv is what gets audited (--path its site-packages)"
+else
+    bad "pip-audit was not pointed at the project venv: $(cat "$TMP/pip-audit-args" 2>/dev/null)"
+fi
+rm -rf "$R/.venv" "$TMP/pip-audit-args"
+run_hook "$R" deps-audit PATH="$STUB:$PATH"; RC=$?
+if grep -q -- '-r requirements.txt' "$TMP/pip-audit-args" 2>/dev/null; then
+    ok "no venv → the staged requirements file is audited (-r)"
+else
+    bad "without a venv the manifest was not audited: $(cat "$TMP/pip-audit-args" 2>/dev/null)"
+fi
+
 # ─── 6. research-index-rebuild — must never block a commit ──────────────
 echo "research-index-rebuild"
 R=$(new_repo research)

@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.58.2] — 2026-09-17
+
+### Fixed — `deps-audit` audited pip-audit's own environment, never the project's
+
+**The gap.** The python branch ran bare `pip-audit`, which audits the
+interpreter it runs in. Installed the documented way (`pipx install
+pip-audit`), that is pip-audit's private venv, so the hook printed "No known
+vulnerabilities found" and exited 0 on every manifest change. Seen in Origyn
+on 2026-09-17: its pins carried 16 known vulnerabilities, ten of them in
+`authlib`, while the gate stayed green.
+
+**The fix.** The hook audits the project: `pip-audit --path` on the
+site-packages of `$VIRTUAL_ENV`, `.venv` or `venv`, whichever exists first.
+With no venv it audits each staged `requirements*.txt` with `-r`, and says so
+when there is nothing to audit. Against Origyn's venv the hook now exits 1.
+
+**Adopters:** a project with vulnerable pins will see this gate block its
+next commit that touches a manifest. That is the gate working.
+
+`tests/test_hook_verdicts.sh` gains two cases (venv → `--path`; no venv →
+`-r`), recorded through a stub `pip-audit`.
+
+---
+
 ## [0.58.1] — 2026-09-16
 
 ### Fixed — `pe doctor` said the hook was missing in every git worktree
