@@ -63,7 +63,7 @@ semgrep --config=p/security-audit --config=p/owasp-top-ten --config=p/flask --co
 bandit -rq --severity-level medium <staged .py files>
 
 # Dependency vuln
-pip-audit -r requirements.txt  # or: pip-audit
+pip-audit --path .venv/lib/python3.*/site-packages  # or -r requirements.txt; bare `pip-audit` audits its own env
 ```
 
 **Go:**
